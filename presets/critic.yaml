@@ -1,0 +1,43 @@
+## Preset: critic
+##
+## Reads an artifact, emits a verdict. Deterministic — no model call.
+##
+## This is why the critic is worth having: its verdict is cheap, repeatable, and
+## trustworthy in a way a model's judgement is not. Does it parse. Do the tests
+## pass. Does the output match the declared schema. Is the diff inside bounds.
+## A failing critic means something is actually wrong, every time.
+##
+## It reads. A critic with no read capability cannot critique anything.
+
+name: critic
+preset: critic
+provenance: human
+
+data:
+  inbox:
+    capacity: 64
+    overflow: block          # a critic that silently drops work is worse than
+                             # a critic that stalls and says so
+  state:
+    shape: verdict_log
+    initial: '{"seen":0,"rejected":0}'
+  budget:
+    wall_ms: 5000
+    mem_bytes: 134217728
+    msg_quota: 200
+    gigs_per_hr: 240
+
+capabilities:
+  - name: fs_read
+    scope: "/srv/gigwerk/work"     # a directory handle, not a glob. The actor
+                                   # receives a root it cannot walk out of.
+  - name: sqlite_query
+    scope: "read:gigwerk.db"       # reads the ledger to compare against history
+
+policies:
+  - predicate: bookable/2
+    module: elpi
+    role: booking
+  - predicate: disposition/3
+    module: elpi
+    role: disposition

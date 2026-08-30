@@ -1,0 +1,46 @@
+## Preset: fileworker
+##
+## Side-effecting. The expensive end of the permission axis.
+##
+## Every capability here is `requires_booking = 1`, so each gig needs a human
+## verdict row before it runs. That is not paranoia about the tools -- it is
+## the thing that keeps your review queue meaningful. If everything auto-books,
+## the queue is noise; if only this books, the queue is signal.
+
+name: fileworker
+preset: fileworker
+provenance: human
+
+data:
+  inbox:
+    capacity: 32
+    overflow: block          # never silently drop side-effecting work
+  state:
+    shape: work_order
+    initial: '{"applied":[],"reverted":[]}'
+  budget:
+    wall_ms: 120000
+    mem_bytes: 268435456
+    msg_quota: 1000
+    gigs_per_hr: 6           # low by design; side effects deserve friction
+
+capabilities:
+  # Directory handles, not globs. Constructed rooted here, no parent reference.
+  - name: fs_read
+    scope: "/srv/gigwerk/work"
+  - name: fs_write
+    scope: "/srv/gigwerk/work"    # Landlock is belt-and-braces, not the
+                                  # enforcement — the handle is
+  - name: shell
+    scope: "/srv/gigwerk/work"    # requires_booking=1: a human per gig
+
+policies:
+  - predicate: bookable/2
+    module: elpi
+    role: booking
+  - predicate: disposition/3
+    module: elpi
+    role: disposition
+  - predicate: require_human/2
+    module: elpi
+    role: booking            # hard gate: no human verdict, no gig

@@ -1,0 +1,4 @@
+(library
+ (name gigwerk)
+ (libraries unix)
+ (foreign_stubs (language c) (names caps_stubs)))

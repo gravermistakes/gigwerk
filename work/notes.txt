@@ -1,0 +1,3 @@
+a notes file
+(with balanced groups)
+three lines

@@ -1,0 +1,32 @@
+% Hand-written stand-in for sql/export_facts.sql output.
+capability "fs_read"      "Caps.fs_read"  ["srv","gigwerk"] ff ff.
+capability "fs_write"     "Caps.fs_write" ["srv","gigwerk"] tt tt.
+capability "sqlite_query" "Caps.sqlite_ro" ["read"]         ff ff.
+
+% clean: scope strictly beneath the envelope
+claim "good" "fs_read" ["srv","gigwerk","work"].
+provenance "good" "human".  tier "good" "in_process".  state_shape "good" tunit.
+
+% THE classic bug: /srv/gigwerk-evil passes a string-prefix test on /srv/gigwerk
+claim "sneaky" "fs_read" ["srv","gigwerk-evil"].
+provenance "sneaky" "human". tier "sneaky" "in_process". state_shape "sneaky" tunit.
+
+% claims a capability that does not exist
+claim "ghost" "shell" ["srv"].
+provenance "ghost" "human". tier "ghost" "in_process". state_shape "ghost" tunit.
+
+% agent provenance running in-process
+claim "misplaced" "fs_read" ["srv","gigwerk","w"].
+provenance "misplaced" "agent". tier "misplaced" "in_process". state_shape "misplaced" tunit.
+
+% side-effecting, no human verdict
+claim "effectful" "fs_write" ["srv","gigwerk","w"].
+provenance "effectful" "human". tier "effectful" "in_process". state_shape "effectful" tunit.
+
+% side-effecting WITH a human verdict
+claim "approved" "fs_write" ["srv","gigwerk","w"].
+provenance "approved" "human". tier "approved" "in_process". state_shape "approved" tunit.
+human_verdict "approved".
+
+system_owns "c_state" "step".
+system_owns "c_inbox" "delivery".

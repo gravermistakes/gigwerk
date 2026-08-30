@@ -1,0 +1,82 @@
+## GigWerk actor composition template.
+##
+## YAML is the SEED and EXPORT format. SQLite is runtime truth.
+## Import is one-way: `gigwerk import <file>` seeds the store.
+## Review is one-way out: `gigwerk export <entity>` emits this shape for diffing.
+## Never edit both sides. Two-way sync between files and a DB is a rot source,
+## and the human needs a reviewable artifact -- a YAML diff is reviewable, a
+## sqlite page diff is not.
+
+name: my-actor            # unique; becomes entity.name
+preset: null              # optional: which preset this was derived from
+provenance: human         # human | agent
+                          #   human     -> booked in-process
+                          #   agent     -> booked in a subprocess, always
+                          # The composer may only ever write `agent` here.
+
+## ---- kind 1: data components ------------------------------------------
+## Pure values. Runtime-writable. Restart disposition applies to these, and is
+## DERIVED by the Prolog layer from crash facts -- not declared here. A static
+## field cannot know whether this crash was corrupt-state or transient.
+data:
+  inbox:
+    capacity: 256
+    overflow: drop_oldest    # drop_oldest | drop_newest | block | crash
+  state:
+    shape: unit              # Elpi type name; checked at booking time
+    initial: '{}'
+  budget:
+    wall_ms: 30000
+    mem_bytes: 268435456
+    msg_quota: 1000
+    gigs_per_hr: 60
+
+## ---- kind 2: capability components ------------------------------------
+## BUILD INSTRUCTIONS, not permissions.
+##
+## At spawn the runtime constructs a capability record holding exactly these
+## tools and passes it to the actor's behavior function. A tool you don't list
+## is not a denied tool -- it is not a field. Calling it is a compile error, not
+## a runtime refusal. The actor cannot begin to call what it does not hold.
+##
+## `scope` is a constructor argument, not a pattern to match later. `fs_read`
+## is built around a directory handle rooted at the path below, with no parent
+## reference to walk up. The actor never holds a path that could be wrong.
+##
+## You may narrow the envelope; you can never widen it, and you can never
+## define a new capability here. That is the mutable-surface ceiling: the
+## harness composes, it does not create.
+capabilities:
+  - name: sqlite_query
+    scope: "read:gigwerk.db"
+  # - name: http_get
+  #   scope: "https://*.example.org/**"
+  # - name: shell
+  #   scope: "cwd:/tmp/gigwerk-scratch"   # requires_booking=1 -> human approves
+
+## ---- kind 3: policy components ----------------------------------------
+## Prolog predicate names, by role and engine.
+##   booking     -> may this gig be scheduled at all (the gate)
+##   disposition -> on crash, what happens to each component
+##   routing     -> which messages reach this inbox
+## Hot and structural goes to elpi. Relational and historical goes to swipl.
+policies:
+  - predicate: bookable/2
+    module: elpi
+    role: booking
+  - predicate: disposition/3
+    module: elpi
+    role: disposition
+  # - predicate: route_by_topic/3
+  #   module: swipl
+  #   role: routing
+
+## ---- what the gate will check before booking --------------------------
+## Listed for the reader; enforced in Elpi, not here.
+##  1. every claimed capability exists in `capability`
+##  2. every scope narrows (never widens) its capability's envelope
+##  3. state.shape resolves to a real Elpi type
+##  4. no two systems own write on the same component  [component_owner]
+##  5. provenance=agent implies tier=subprocess
+##  6. any capability with requires_booking=1 implies a human verdict row
+##  7. composition_sig is not in the refused set

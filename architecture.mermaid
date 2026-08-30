@@ -1,0 +1,67 @@
+---
+title: GigWerk — architecture as I understand it, with the two gaps marked
+---
+flowchart TB
+
+    subgraph HUMAN["HUMAN"]
+        Q["review queue<br/><i>approve · refuse</i><br/><b>not in your list</b>"]
+    end
+
+    subgraph HARNESS["HARNESS — authoring and learning"]
+        direction TB
+
+        AI["AI<br/><i>the only model in the system</i>"]
+        LOOP["agentic loop<br/>+ standard tools"]
+        DESIGN["actor design<br/>and review tools"]
+        SKILLS["agent skills module<br/><i>HOW to compose</i>"]
+        PLUGINS["plugins module<br/><i>WHAT can be claimed</i>"]
+        GATE["GATE — Elpi<br/><i>book / queue / refuse</i><br/><b>not in your list</b>"]
+        FEEDBACK["actor feedback module<br/><i>prediction vs outcome</i>"]
+        ALEPH["aleph / learning module"]
+        DB[("SQLite store<br/>components · ledger<br/>verdicts · crash facts")]
+    end
+
+    subgraph RUNTIME["ACTOR RUNTIME — inside or beside? ← the question"]
+        direction TB
+        BOOK["booker<br/><i>the agent that books gigs</i>"]
+        DELIVERY["delivery system<br/><i>writes c_inbox</i>"]
+        STEP["step system<br/><i>writes c_state</i>"]
+        LABOR["labor pool<br/><i>in-process / subprocess<br/>by provenance</i>"]
+        CRITIC["critics<br/><i>deterministic checks</i>"]
+    end
+
+    SKILLS --> AI
+    AI --> LOOP
+    LOOP --> DESIGN
+    DESIGN -->|proposal| GATE
+
+    PLUGINS -->|"seeds capability table<br/>only path to a new tool"| DB
+
+    GATE -->|book| DB
+    GATE -->|refuse<br/>logged as negative set| DB
+    GATE -->|"queue<br/>requires_booking"| Q
+    Q -->|approved| DB
+
+    DB -->|composition| BOOK
+    BOOK --> DELIVERY
+    DELIVERY --> STEP
+    STEP --> LABOR
+    LABOR --> CRITIC
+
+    LABOR -->|outcome| FEEDBACK
+    CRITIC -->|verdict| FEEDBACK
+    FEEDBACK --> DB
+
+    DB --> ALEPH
+    ALEPH -->|"induced rules<br/>never auto-applied"| Q
+    Q -->|"reviewed rules"| GATE
+
+    classDef gap fill:#3b1f1f,stroke:#e06c75,stroke-width:2px,stroke-dasharray:6 4,color:#f0f0f0
+    classDef model fill:#1f2d3b,stroke:#61afef,stroke-width:2px,color:#f0f0f0
+    classDef store fill:#1f3b2d,stroke:#98c379,stroke-width:2px,color:#f0f0f0
+    classDef frozen fill:#2d2333,stroke:#c678dd,stroke-width:2px,color:#f0f0f0
+
+    class GATE,Q gap
+    class AI model
+    class DB store
+    class PLUGINS,CRITIC frozen

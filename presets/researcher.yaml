@@ -1,0 +1,42 @@
+## Preset: researcher
+##
+## Read-only. Fetches and queries, writes nothing outside its own state.
+##
+## Together with `fileworker` this pair spans the permission axis, which is the
+## axis the gate actually cares about. Two presets on opposite ends teaches you
+## more than six presets clustered in the middle.
+
+name: researcher
+preset: researcher
+provenance: human
+
+data:
+  inbox:
+    capacity: 256
+    overflow: drop_oldest    # stale research requests are worth less than new
+  state:
+    shape: research_notes
+    initial: '{"queries":[],"findings":[]}'
+  budget:
+    wall_ms: 60000           # network waits
+    mem_bytes: 268435456
+    msg_quota: 1000
+    gigs_per_hr: 30
+
+capabilities:
+  - name: http_get
+    scope: "https://**"      # narrow this per deployment; '**' is a starting
+                             # point, not an endorsement
+  - name: sqlite_query
+    scope: "read:gigwerk.db"
+
+policies:
+  - predicate: bookable/2
+    module: elpi
+    role: booking
+  - predicate: disposition/3
+    module: elpi
+    role: disposition
+  - predicate: dedupe_by_url/3
+    module: swipl
+    role: routing            # relational + historical -> swipl, per the split

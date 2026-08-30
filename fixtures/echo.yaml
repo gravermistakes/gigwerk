@@ -1,0 +1,33 @@
+## Fixture: echo — NOT a preset.
+##
+## Zero capabilities, on purpose. Receives a message, writes it to state,
+## replies. This is the only actor for which an empty capability record is the
+## correct shape.
+##
+## Use it to answer one question: does delivery -> step -> reply work at all?
+## If echo fails, nothing is wrong with your tools; something is wrong with the
+## runtime. Keep it in fixtures/ so nobody mistakes it for something useful.
+
+name: echo
+preset: null
+provenance: human
+
+data:
+  inbox:
+    capacity: 8
+    overflow: crash          # in a fixture, loud failure is the point
+  state:
+    shape: last_message
+    initial: '{"last":null,"count":0}'
+  budget:
+    wall_ms: 250
+    mem_bytes: 16777216
+    msg_quota: 10
+    gigs_per_hr: 3600
+
+capabilities: []             # correct here and nowhere else
+
+policies:
+  - predicate: bookable/2
+    module: elpi
+    role: booking

@@ -1,0 +1,17 @@
+accumulate gate.
+pred demo i:list string.
+demo _ :-
+  % well-formed concrete shapes
+  ( wf (tpair tstring (tlist tint)), print "wf concrete: ok" ; print "wf FAILED" ),
+  % HOAS: a POLYMORPHIC shape is a function from types to types, checked under a
+  % fresh binder. pi introduces the fresh type; the `wf x =>` hypothesis makes it
+  % well-formed locally. Plain Prolog needs a gensym and a side table for this.
+  ( wf_scheme (t\ tpair t (tlist t)), print "wf_scheme (t\\ tpair t (tlist t)): ok"
+    ; print "wf_scheme FAILED" ),
+  ( wf_scheme (t\ tarrow t t), print "wf_scheme (t\\ tarrow t t): ok"
+    ; print "wf_scheme FAILED" ),
+  % narrowing, segment-wise
+  ( narrows ["srv","gigwerk","work"] ["srv","gigwerk"], print "beneath: accepted" ; print "BAD" ),
+  ( narrows ["srv","gigwerk-evil"] ["srv","gigwerk"], print "BAD: gigwerk-evil accepted"
+    ; print "sibling with shared prefix: REFUSED" ),
+  ( narrows ["srv"] ["srv","gigwerk"], print "BAD: parent accepted" ; print "parent: REFUSED" ).

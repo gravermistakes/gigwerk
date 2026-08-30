@@ -1,0 +1,15 @@
+capability "fs_read" "Caps.fs_read" ["srv","gigwerk"] ff ff.
+
+% check 3: a state shape that is not well formed (tarrow to nothing sensible)
+claim "badshape" "fs_read" ["srv","gigwerk","w"].
+provenance "badshape" "human". tier "badshape" "in_process".
+state_shape "badshape" (tarrow tunit (tlist (tarrow tstring tint))).
+
+% check 7: a composition already refused
+claim "deadsig" "fs_read" ["srv","gigwerk","w"].
+provenance "deadsig" "human". tier "deadsig" "in_process". state_shape "deadsig" tunit.
+refused "deadsig".
+
+% check 4: two systems writing one component
+system_owns "c_state" "step".
+system_owns "c_state" "composer".

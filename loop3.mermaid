@@ -1,0 +1,70 @@
+---
+title: Loop 3 corrected — gate inserted, ranking split, failure paths added
+---
+sequenceDiagram
+    autonumber
+    actor H as Human
+    participant AI as AI
+    participant G as Elpi gate
+    participant B as Booker
+    participant A as Actor
+    participant C as Critic
+    participant DB as SQLite
+    participant AL as Aleph / SWI
+
+    Note over H,AI: loop 1 runs CONCURRENTLY with loop 3,<br/>not around it — else the queue stalls between gigs
+
+    rect rgb(31,45,59)
+    Note over AI,DB: read before proposing
+    AI->>B: what needs doing
+    B->>DB: query archetypes, refused set, capability table
+    DB-->>AI: existing shapes + prior verdicts
+    end
+
+    rect rgb(59,31,31)
+    Note over AI,G: THE GAP IN YOUR LOOP 3 — nothing crossed this edge
+    AI->>G: actor schema + prediction + falsifiable_by
+    G->>DB: composition_sig in refused set?
+    alt refuse
+        G-->>DB: verdict refuse, reasons
+        G-->>AI: revise once, then escalate
+    else queue
+        G-->>H: requires_booking capability claimed
+        H-->>G: approve / deny
+    else book
+        G->>DB: verdict book
+    end
+    end
+
+    G->>B: approved composition only
+    B->>DB: construct capability record from claims
+    B->>A: gigStart, caps record passed by value
+
+    rect rgb(45,35,51)
+    Note over A,C: actors and critics are deterministic code.<br/>no model call below this line
+    alt onFinish
+        A-->>B: result
+        B->>C: verify
+        C-->>DB: mechanical verdict — parsed / tests / diff bounds
+    else crash
+        A-->>B: fault class
+        B->>DB: crash fact + retry_index
+        B->>AL: disposition/3 ?
+        AL-->>B: reset (closed-world default) / preserve / drain
+    else budget_exceeded or starved
+        A-->>B: budget signal
+        B->>DB: gig_outcome, no crash fact
+    end
+    end
+
+    B->>AI: ping, gig closed
+    AI->>DB: subjective rank — stored BESIDE the critic verdict,<br/>never instead of it
+
+    rect rgb(31,59,45)
+    Note over DB,AL: Aleph trains on the DETERMINISTIC label.<br/>the AI rank is a feature, not the target.<br/>disagreement between them routes to the human.
+    DB->>AL: outcomes, offline cadence
+    AL->>H: induced candidate rules
+    H->>G: approved rules only
+    end
+
+    Note over AI,DB: the proposer never grades its own work unopposed —<br/>otherwise the loop closes and it learns to feel good

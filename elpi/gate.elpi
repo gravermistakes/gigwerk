@@ -1,0 +1,152 @@
+% GigWerk booking gate.
+%
+% Decides book / queue / refuse for a proposed composition. Runs BEFORE the
+% capability record is constructed, because after construction there is nothing
+% left to widen -- the check would have no subject.
+%
+% Facts come from sql/export_facts.sql. This program never touches the store.
+
+% ---------------------------------------------------------------- fact shapes
+
+% Declared with `type ... -> prop`, NOT `pred` with i: modes.
+%
+% This bit me: `pred claim i:string, i:string, i:list string` makes the table
+% unqueryable with unbound arguments, because mode-directed indexing requires
+% input positions to be ground. `claim "sneaky" C S` silently matched nothing
+% and every composition came back "book". Fact tables get no modes.
+
+% capability Name Ctor EnvelopeSegments SideEffecting RequiresBooking
+type capability   string -> string -> list string -> bool -> bool -> prop.
+% claim Entity CapName ScopeSegments
+type claim        string -> string -> list string -> prop.
+type provenance   string -> string -> prop.
+type tier         string -> string -> prop.
+type state_shape  string -> ty -> prop.
+type system_owns  string -> string -> prop.   % Component, System
+type human_verdict string -> prop.            % sig with an approval row
+type refused      string -> prop.             % sig previously refused
+
+% ------------------------------------------------------- shapes, with binders
+%
+% This is where lambda-Prolog earns its place over plain Prolog: a shape is a
+% term with structure, and a polymorphic shape is a FUNCTION from types to
+% types, checked under a fresh binder with pi. No encoding, no gensym.
+
+kind ty type.
+type tunit    ty.
+type tstring  ty.
+type tint     ty.
+type tlist    ty -> ty.
+type tpair    ty -> ty -> ty.
+type tarrow   ty -> ty -> ty.
+
+pred wf i:ty.
+wf tunit.
+wf tstring.
+wf tint.
+wf (tlist T) :- wf T.
+wf (tpair A B) :- wf A, wf B.
+wf (tarrow A B) :- wf A, wf B.
+
+% A polymorphic shape is well formed if it is well formed for a FRESH type,
+% which is exactly what pi gives us. Plain Prolog would need a gensym and a
+% side table; here the binder is the mechanism.
+pred wf_scheme i:(ty -> ty).
+wf_scheme F :- pi x\ (wf x => wf (F x)).
+
+% ------------------------------------------------------------------ narrowing
+%
+% Segment lists, not strings. A string-prefix test accepts "/srv/workshop" for
+% an envelope of "/srv/work" -- same characters, different directory. Comparing
+% segments cannot make that mistake.
+
+pred prefix_of i:list string, i:list string.
+prefix_of [] _.
+prefix_of [X|Xs] [X|Ys] :- prefix_of Xs Ys.
+
+% narrows Inner Outer -- Inner must be at or below Outer.
+pred narrows i:list string, i:list string.
+narrows Inner Outer :- prefix_of Outer Inner.
+
+% ------------------------------------------------------------------ the seven
+
+type check string -> string -> prop.   % check Reason Entity (succeeds = VIOLATION)
+
+% 1. a claim naming a capability that does not exist
+check R E :-
+  claim E Cap _, not (capability Cap _ _ _ _),
+  R is "unknown capability: " ^ Cap.
+
+% 2. a scope that widens its envelope -- the one everything else rests on
+check R E :-
+  claim E Cap Scope, capability Cap _ Env _ _,
+  not (narrows Scope Env),
+  R is "scope widens envelope for " ^ Cap.
+
+% 3. a state shape that is not well formed.
+%
+% Weaker than it looks. `wf` accepts any nesting of DECLARED constructors, and an
+% UNdeclared constructor is rejected by Elpi's own typechecker before this runs.
+% So this catches almost nothing today. It earns its keep once shapes carry
+% constraints beyond structure (arity, or a required field), where wf_scheme's
+% binder does work no set-membership test can.
+check R E :-
+  state_shape E S, not (wf S),
+  R is "state shape is not well formed".
+
+% 4. two systems claiming write on one component.
+%
+% Store health, not composition health: it fires for every entity because it is
+% a property of the store. Kept in `check` so a booking cannot proceed while the
+% write-ownership table is broken, but ordered comparison stops it reporting the
+% same clash twice.
+check R _ :-
+  system_owns C S1, system_owns C S2, S1 < S2,
+  R is "component " ^ C ^ " has two writers: " ^ S1 ^ " and " ^ S2.
+
+% 5. agent-composed actors must run in a subprocess
+check R E :-
+  provenance E "agent", tier E T, not (T = "subprocess"),
+  R is "agent provenance requires subprocess tier, got " ^ T.
+
+% 6. a side-effecting capability needing booking, with no human verdict
+check R E :-
+  claim E Cap _, capability Cap _ _ _ tt,
+  not (human_verdict E),
+  R is "capability " ^ Cap ^ " requires a human verdict".
+
+% 7. a composition shape already refused
+check R E :-
+  refused E,
+  R is "composition previously refused".
+
+% Reasons 1-4 are hard refusals: the composition is malformed or unsafe.
+% Reasons 5-7 are queue-worthy: a human can resolve them.
+pred hard i:string.
+hard R :- rex_match "^unknown capability" R.
+hard R :- rex_match "^scope widens" R.
+hard R :- rex_match "^state shape" R.
+hard R :- rex_match "^component " R.
+
+% Extract the reason string from a collected solution. std.findall returns
+% copies of the goal, so we pattern-match the prop rather than fishing with sigma.
+pred reason_of i:prop, o:string.
+reason_of (check R _) R.
+
+% Elpi has no "->" if-then-else operator (that is SWI). Control flow here is
+% cut-based disjunction, which is the lambda-Prolog idiom. Getting this wrong
+% made every composition return "queue" with no reasons.
+pred decide i:string, o:string, o:list string.
+decide E D Rs :-
+  std.findall (check R_ E) Sols,
+  std.map Sols reason_of Rs0,
+  std.filter Rs0 (r\ true) Rs,
+  ( std.exists Rs hard, !, D = "refuse"
+  ; Rs = [], !,          D = "book"
+  ;                      D = "queue" ).
+
+pred main i:list string.
+main [E] :- decide E D Rs,
+  print "decision:" D,
+  std.forall Rs (r\ print "  reason:" r).
+main _ :- print "usage: elpi gate.elpi -exec main -- <entity>".
