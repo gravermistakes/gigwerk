@@ -138,7 +138,7 @@ novelty = 1/√(n+1) is IDF-shaped and the curve checks out: n=3 → 0.500, n=15
 
 ## The structural finding
 
-Five of six tones are non-negative, so any two non-flat vectors have a cosine at
+~~Five of six tones are non-negative, so any two non-flat vectors have a cosine at
 or above zero and usually a high one. **Valence's sign is doing most of the
 discriminating work** — measured: dread vs elation scores 0.396 with *identical
 magnitudes*, purely because the sign flips.
@@ -152,4 +152,4 @@ comparison. [CORRECTION BY HUMAN: if it were that pleasant in life, I'd say so.]
 The fix, when there is a populated store to compute it from: **centre the five
 unsigned tones** by subtracting each one's store-wide mean, so a below-average
 tone reads negative and can actively push a cosine down. Noted in `affect.ml`,
-not implemented, because a mean needs data that does not exist yet.
+not implemented, because a mean needs data that does not exist yet.~~
