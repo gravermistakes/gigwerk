@@ -45,26 +45,26 @@ are in `BOOKING.md`.
 
 | | state | what is missing |
 |---|---|---|
-| **Caps** | done | Landlock (L4); `exec` capability passing (SCM_RIGHTS) |
-| **Booking path** | **done, wired** | — |
-| **Conditions / Terms / Grants / Kit / Phases** | **done, wired** | — |
-| **Actor runtime** | minimal | two behaviours; no inbox delivery; no step loop |
-| **Confidence** | **wired** | soul_version never stamped, so bands are not yet soul-scoped |
-| **Elpi gate** | built, unwired | `Bridge.gate` works; `booking.ml` uses `Conditions` only, and the two **disagree** — see below |
-| **Persistence** | built, unwired | `Persist` round-trips; nothing in `main.ml` calls it |
-| **Trace** | built, unwired | `Actor.run_gig` opens no spans; `Trace.gig` is a string, `span.gig_id` an FK'd integer, and nothing converts |
-| **Fact store** | schema only | **not per-project**; **not 3 provenance columns**; specs not embedded/linked |
+| **Caps** | allegedly done | Landlock (L4); `exec` capability passing (SCM_RIGHTS) |
+| **Booking path** | **untested, wired** | untested, needs actors for confirmstion |
+| **Conditions / Terms / Grants / Kit / Phases** | **wired** | confirmation via actor test |
+| **Actor runtime** | minimal, insufficient | two behaviours; no inbox delivery; no step loop |
+| **Confidence** | **wired** but wrong | soul_version never stamped, so bands are not yet soul-scoped |
+| **Elpi gate** | part-built, unwired | `Bridge.gate` works; `booking.ml` uses `Conditions` only, and the two **disagree** — see below |
+| **Persistence** | half-built, unwired | `Persist` round-trips; nothing in `main.ml` calls it |
+| **Trace** | part-built, unwired | `Actor.run_gig` opens no spans; `Trace.gig` is a string, `span.gig_id` an FK'd integer, and nothing converts |
+| **Fact store** | partial schema only | **not per-project**; **not 3 provenance columns**; specs not embedded/linked |
 | **SARCASM** | built, persistable, unwired | not fed from working; contraction never invoked |
-| **Immediate 64k** | **not built** | `Working` is one band, not two |
+| **Immediate 64k** | **not built** | `Working` is a separate band |
 | **Working 128k** | partial | band exists; **no condensing process** |
-| **Introspection** | built, persistable, unwired | no CLI door; the AI cannot reach it from the running program |
+| **Introspection** | part-built, persistable, unwired | no CLI door; the AI cannot reach it from the running program |
 | **RAG (a tool)** | **not built** | no corpus, no ingest, no capability row |
-| **CLI** | 6 commands | `queue`, `import`, `export`, `introspect` |
+| **CLI** | 6 commands, no access | `queue`, `import`, `export`, `introspect` |
 | **Soul** | schema + v1 body | never loaded; `soul_version` never stamped on a gig or review |
 
 ---
 
-## Known disagreement, not yet resolved
+## Known disagreement, nearly resolved
 
 `gate.elpi` and `conditions.ml` do not agree, and the bridge deliberately does
 not paper over it:
@@ -78,6 +78,8 @@ not paper over it:
 Both are defensible. They cannot both be the gate. Resolving this is a decision,
 not a bug fix, and it is the thing standing between `Bridge.gate` and being
 wired.
+
+[They can actually both be different mechanisms on one gate]
 
 ---
 
