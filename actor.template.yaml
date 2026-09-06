@@ -9,10 +9,11 @@
 
 name: my-actor            # unique; becomes entity.name
 preset: null              # optional: which preset this was derived from
+producer: #   this is where the AI agent or Human's name would go. Note "Gemini" or "chatGPT" or "Claude", but a unique's name
 provenance: human         # human | agent
                           #   human     -> booked in-process
                           #   agent     -> booked in a subprocess, always
-                          # The composer may only ever write `agent` here.
+
 
 ## ---- kind 1: data components ------------------------------------------
 ## Pure values. Runtime-writable. Restart disposition applies to these, and is

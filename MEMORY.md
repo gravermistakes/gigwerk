@@ -8,7 +8,7 @@ axis and the one that makes a conversation exist.
 |---|---|---|---|
 | 1 | beyond the window | `Reconstruct` + `Affect` | strike, then walk |
 | 2 | immediate | `Working` | a floor, not a ceiling |
-| 3 | self-directed | (see below) | reads its own ledger; never introspects |
+| 3 | self-directed | (see below) | introspects |
 
 ---
 
@@ -90,18 +90,14 @@ already expected. Pinned material — soul, live rulings — never evicts.
 
 Not built yet, and it needs a constraint stated before it is:
 
-**The model does not introspect. It queries its own ledger.**
+**The model MUST introspect, not simply query a ledger. This is the source of understanding that makes the rest of this valuable.**
 
-Introspection is the closed loop this whole design exists to break — a model
+Introspection is the closed loop this whole design exists to enable safely — a model
 rating its own behaviour has no referent. Reading `span`, `gig_outcome`,
-`crash`, and `booking_verdict` about *itself* is analysis of recorded behaviour,
-which is a different thing with the same name. Output goes to `mem_reading`,
-attributed and decaying, and a self-reading contradicted by a record loses like
-any other.
+`crash`, and `booking_verdict` about *itself* is a judgment of recorded behaviour,
+which is a different thing.
 
-The affect tones give it something real to look for: *which of my proposals
-carried high dissonance*, *where does my cost run above prediction*, *which forms
-do I keep thrashing on*. All answerable from rows. None require a feeling.
+The affect tones give it something real to look for: *which of my proposals carried high dissonance*, *where does my cost run above prediction*, *which forms do I keep thrashing on*. All answerable with backing.
 
 ---
 
@@ -109,28 +105,24 @@ do I keep thrashing on*. All answerable from rows. None require a feeling.
 
 | tone | source | range |
 |---|---|---|
-| surprise | prediction vs outcome (`matched`) | 0..1 |
-| hazard | side-effecting caps, breaches, crashes | 0..1 |
-| novelty | prior run count — **not** surprise | 0..1 |
-| cost | budget and wall time consumed | 0..1 |
-| dissonance | contradicts a live belief | 0..1 |
-| **valence** | **a human approved or refused** | **−1..1** |
+| surprise | prediction vs outcome | 0..10 |
+| hazard | side-effecting caps, breaches, crashes | 0..10 |
+| novelty | prior isometric run count **not** surprise | 0..10 |
+| cost | budget and wall time consumed | 0..10 |
+| dissonance | contradicts my live belief | 0..10 |
+| **valence** | **a human approved or reprimanded** | **−1..1** |
 
 Novelty is not surprise: a first-ever run *cannot* violate an expectation because
 there was none. It is salient for the opposite reason.
 
-**The six tones are a vector, not a weight.** As a scalar, affect can only break
+**The six tones are dimensions, not a single value.** As a scalar, affect can only break
 ties on relevance. As a vector it becomes its own retrieval channel — two
 memories resonate when their signatures align, whether or not they are about
 anything similar. That is the smell case, and without it a walk can only ever
-continue on topic. Valence stays signed inside `resonance`, so a triumph does
-not remind you of a disaster merely because both were loud.
+continue on topic. Valence stays signed, but a triumph may remind you of a disaster merely because both were so loud your ears hurt.
 
 Valence is the only signed tone, and separating it is the whole reason this isn't
-one "importance" float. A catastrophe and a triumph are both high-magnitude; store
-only magnitude and you cannot tell them apart at retrieval. `magnitude` uses
-`abs_float valence` so a disaster is as *retrievable* as a triumph — while the
-sign survives, so they remain *distinguishable*.
+one "importance" float.
 
 Affect aggregates upward by **max, never mean**. A mean hides exactly what you
 needed: one hazardous moment inside an hour of routine work averages to routine,

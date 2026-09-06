@@ -18,15 +18,11 @@ Every document carries two vectors, matched independently.
 *about*.
 
 **Affectual** — a six-tone vector. What it *was like*: `surprise`, `hazard`,
-`novelty`, `cost`, `dissonance`, `valence`. Five magnitudes and one signed.
+`novelty`, `cost`, `dissonance`, `valence`. Five magnitudes and one signed. Each is its own dimension analogous to those in semantic storage.
 
-Every tone derives from something the ledger already records. Nothing
-introspects, nothing is asked how it feels. Surprise is prediction error — the
-ledger writes a prediction *before* the outcome, so it is a real violation of
-expectation rather than hindsight. Hazard is side-effecting capabilities,
-breaches, crashes. Novelty is prior run count. Dissonance is contradiction with
-a live belief. Valence is a human approving or refusing — the only externally
-grounded tone, and the only signed one.
+Every tone derives from something the ledger already records. Surprise is prediction error — the AI uses the
+ledger to write a prediction *before* the outcome, so it is a real violation of
+expectation rather than hindsight. Hazard is side-effecting capabilities, breaches, crashes. Novelty is prior run isometry count. Dissonance is contradiction with a live belief or personally held value of the AK. Valence is about reception - did the human approve or reprimand? Written by the AI, not the human.
 
 ### Two modes
 
@@ -91,7 +87,7 @@ contraction claiming no loss is not contracting.
 
 ## The numbers
 
-Three tiers, and I was wrong about two of them until I measured.
+Three tiers, and I was wrong about two of them until I measured. [HUMAN NOTE: youre wrong about all of them honestly]
 
 ### Derived — not knobs
 
@@ -106,6 +102,8 @@ Three tiers, and I was wrong about two of them until I measured.
 
 Run `dune exec calib/calib.exe`:
 
+## ***[HUMAN NOTE: I didnt sign off on this, the cosine or resonance frameworks. The reasoning is likewise absent.]
+
 ```
 semantic cosine, feature-hashed 256d
   unrelated    mean=0.065  sd=0.111  range=[-0.023, 0.279]
@@ -119,33 +117,12 @@ affect resonance, 6-tone vector
   routine vs novel      0.428
 ```
 
-**`min_resonance = 0.7` survives.** The measured gap runs from 0.428 (routine
-vs novel — should not fire) to 1.000 (near-dread — should). 0.7 sits inside it
-with room on both sides.
-
-**`max_semantic = 0.30` did not survive, and the fix needed a second fix.** The
-unrelated and related distributions *overlap*: unrelated reaches 0.279, related
-falls to 0.139. No constant separates them, and one tuned for terse log lines
-will not work for prose. Replaced with a **percentile of the cue's actual
-similarity distribution over this store**.
-
-Which introduced a different failure: **a percentile over a small store is
-unstable.** With six documents the 25th percentile is essentially the
-second-smallest value, so adding one unrelated document moves the threshold and
-a cue that fired stops firing. That is not hypothetical — it broke seven tests
-the first time it landed.
-
-So the percentile applies only above `min_store_for_percentile = 20`; below it,
-a conservative measured absolute (`0.18` — unrelated mean + 1sd). Neither rule
-is right everywhere. **The switch between them is the actual design.**
-
-**`is_flat` at 0.15 did not survive.** A background-hum vector (`novelty 0.1,
-cost 0.2`) measures norm 0.224 and was passing as a live cue — exactly the
-furniture the predicate exists to exclude. Raised to 0.30, which puts hum below
-the line and leaves `dread` (norm 1.64) far above.
-
-**`novelty = 1/√(n+1)`** is IDF-shaped and the curve checks out: n=3 → 0.500,
-n=15 → 0.250, n=99 → 0.100.
+~~min_resonance = 0.7 survives. The measured gap runs from 0.428 (routine vs novel — should not fire) to 1.000 (near-dread — should). 0.7 sits inside it with room on both sides.
+max_semantic = 0.30 did not survive, and the fix needed a second fix. The unrelated and related distributions overlap: unrelated reaches 0.279, related falls to 0.139. No constant separates them, and one tuned for terse log lines will not work for prose. Replaced with a percentile of the cue's actual similarity distribution over this store.
+Which introduced a different failure: a percentile over a small store is unstable. With six documents the 25th percentile is essentially the second-smallest value, so adding one unrelated document moves the threshold and a cue that fired stops firing. That is not hypothetical — it broke seven tests the first time it landed.
+So the percentile applies only above min_store_for_percentile = 20; below it, a conservative measured absolute (0.18 — unrelated mean + 1sd). Neither rule is right everywhere. The switch between them is the actual design.
+is_flat at 0.15 did not survive. A background-hum vector (novelty 0.1, cost 0.2) measures norm 0.224 and was passing as a live cue — exactly the furniture the predicate exists to exclude. Raised to 0.30, which puts hum below the line and leaves dread (norm 1.64) far above.
+novelty = 1/√(n+1) is IDF-shaped and the curve checks out: n=3 → 0.500, n=15 → 0.250, n=99 → 0.100.~~
 
 ### Invented — no data behind them
 
@@ -161,7 +138,7 @@ n=15 → 0.250, n=99 → 0.100.
 
 ## The structural finding
 
-Five of six tones are non-negative, so any two non-flat vectors have a cosine at
+~~Five of six tones are non-negative, so any two non-flat vectors have a cosine at
 or above zero and usually a high one. **Valence's sign is doing most of the
 discriminating work** — measured: dread vs elation scores 0.396 with *identical
 magnitudes*, purely because the sign flips.
@@ -170,9 +147,9 @@ That is defensible on its own terms — grief resonates with grief, and a triump
 should not remind you of a disaster merely because both were loud. But it means
 the other five tones separate less than the design implies, and resonance is
 closer to a valence-match with magnitude modulation than to a six-way
-comparison.
+comparison. [CORRECTION BY HUMAN: if it were that pleasant in life, I'd say so.]
 
 The fix, when there is a populated store to compute it from: **centre the five
 unsigned tones** by subtracting each one's store-wide mean, so a below-average
 tone reads negative and can actively push a cosine down. Noted in `affect.ml`,
-not implemented, because a mean needs data that does not exist yet.
+not implemented, because a mean needs data that does not exist yet.~~

@@ -66,16 +66,16 @@ are in `BOOKING.md`.
 | **Trace** | built, unwired | `Actor.run_gig` opens no spans; `Trace.gig` is a string, `span.gig_id` an FK'd integer, and nothing converts |
 | **Fact store** | schema only | **not per-project**; **not 3 provenance columns**; specs not embedded/linked |
 | **SARCASM** | built, persistable, unwired | not fed from working; contraction never invoked |
-| **Immediate 64k** | **not built** | `Working` is one band, not two |
+| **Immediate 64k** | **not built** | `Working` is a separate band |
 | **Working 128k** | partial | band exists; **no condensing process** |
 | **Introspection** | wired | `gigwerk introspect` door round-trips through `Persist`; survives restart |
 | **RAG (a tool)** | **not built** | no corpus, no ingest, no capability row |
-| **CLI** | 6 commands | `queue`, `import`, `export`, `introspect` |
+| **CLI** | 6 commands, no access | `queue`, `import`, `export`, `introspect` |
 | **Soul** | schema + v1 body | never loaded; `soul_version` never stamped on a gig or review |
 
 ---
 
-## Known disagreement, not yet resolved
+## Known disagreement, nearly resolved
 
 `gate.elpi` and `conditions.ml` do not agree, and the bridge deliberately does
 not paper over it:
@@ -89,6 +89,8 @@ not paper over it:
 Both are defensible. They cannot both be the gate. Resolving this is a decision,
 not a bug fix, and it is the thing standing between `Bridge.gate` and being
 wired.
+
+[They can actually both be different mechanisms on one gate]
 
 ---
 
