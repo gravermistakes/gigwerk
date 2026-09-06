@@ -6,12 +6,16 @@
  *   gigwerk introspect list
  *   gigwerk doctor
  *
- * There is no gate yet. Compositions are read from the store and constructed;
- * nothing is validated beyond what the schema's foreign keys enforce. That is
- * Phase 2, and until it exists this is a runner, not a harness.
+ * There is a gate now: `propose` builds the real Bridge.composition from the
+ * store and passes it to Booking.book, whose seam decides through Bridge.gate
+ * (elpi) when the engine is present, and through Conditions.evaluate when elpi
+ * is absent (Engine_missing). Either way booking_verdict.decided_by says which.
+ * Before the gate, `propose` was a runner that validated nothing beyond foreign
+ * keys; now it books/queues/refuses through the same decision structure the
+ * design names.
  *
- * The one Phase-2 piece that IS wired here is memory: `introspect` gives the AI
- * its notebook, persisted through Persist so it survives a restart (see the
+ * The other Phase-2 piece wired here is memory: `introspect` gives the AI its
+ * notebook, persisted through Persist so it survives a restart (see the
  * cmd_introspect comment for exactly how the read-then-write rule is honored). *)
 
 open Gigwerk
@@ -155,6 +159,39 @@ let kit_for = function
   | "scribe" -> Some Kit.scribe
   | _ -> None
 
+(* Build the real composition the gate is asked to decide, from the same store
+   facts `evidence_of_store` already read. This is the shape of the data the
+   engine sees, and it is deliberately assembled HERE rather than inside book:
+   booking.ml takes a `request`, and turning an entity into a Bridge.composition
+   (claims with scopes, spelled-out provenance/tier, the seven flags) is exactly
+   the store-facing work the harness owns. `state_shape` is a TEXT in c_state;
+   the gate wants a `Bridge.shape`. A store shape that is not an elpi type (the
+   seed's "verdict_log"/"last_message"/"notes") is passed as `Tunit`, which is
+   well-formed -- gate.elpi's check 3 only rejects a shape that is NOT well
+   formed, and it accepts any nesting of declared constructors, so a name that
+   does not parse is treated as the unit shape rather than fabricated. *)
+let gate_of_store ~entity ~state_shape ~evidence ~claims ~policy_set
+    ~provenance ~tier ~support_strength ~refutation_strength =
+  let shape = match Bridge.shape_of_string state_shape with
+    | Some s -> s
+    | None -> Bridge.Tunit
+  in
+  let composition =
+    Bridge.{ entity;
+             claims;
+             policies = policy_set;
+             state_shape = shape;
+             provenance =
+               (if provenance = "agent" then Bridge.Agent else Bridge.Human);
+             tier = (if tier = "subprocess" then Bridge.Subprocess
+                     else Bridge.In_process);
+             human_verdict = evidence.Conditions.human_verdict;
+             previously_refused = not evidence.Conditions.not_refused_before;
+             support_strength;
+             refutation_strength }
+  in
+  Booking.{ composition; capabilities = Store.capabilities () }
+
 (* The work thunk. `scribe` is absent on purpose -- see kit.ml. *)
 let work_for ~entity ~msg ~artifact =
   match entity with
@@ -222,8 +259,20 @@ let cmd_propose argv =
     { Booking.entity; evidence; cap_set; policy_set; state_shape; widen_epoch;
       envelope; kit }
   in
+  (* The gate decides the composition -- but ONLY when the engine is actually
+     there to answer. `gate_of_store` is always built (the facts are cheap) and
+     `book`'s seam falls back to Conditions when elpi is Engine_missing, so this
+     is safe in today's elpi-less environment AND uses the real engine the moment
+     elpi lands. *)
+  let provenance = Store.provenance ~entity in
+  let gate =
+    gate_of_store ~entity ~state_shape ~evidence ~claims ~policy_set
+      ~provenance ~tier
+      ~support_strength:(int_arg "--support" 1 argv)
+      ~refutation_strength:(int_arg "--refute" 0 argv)
+  in
   Printf.printf "form      %s\n" sig_;
-  match Booking.book ~now request with
+  match Booking.book ~gate:(Some gate) ~now request with
   | Error r ->
       (match Booking.record_refusal ~entity ~sig_ r with
        | Ok () -> ()
