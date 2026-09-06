@@ -5,3 +5,5 @@ ocaml/_build/
 
 # local scratch / analysis
 STATUS-ANALYSIS.md
+-version
+gigwerk.db

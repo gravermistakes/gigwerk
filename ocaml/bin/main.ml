@@ -3,11 +3,16 @@
  *   gigwerk run echo   --message "hello"
  *   gigwerk run critic --artifact notes.txt
  *   gigwerk caps
+ *   gigwerk introspect list
  *   gigwerk doctor
  *
  * There is no gate yet. Compositions are read from the store and constructed;
  * nothing is validated beyond what the schema's foreign keys enforce. That is
- * Phase 2, and until it exists this is a runner, not a harness. *)
+ * Phase 2, and until it exists this is a runner, not a harness.
+ *
+ * The one Phase-2 piece that IS wired here is memory: `introspect` gives the AI
+ * its notebook, persisted through Persist so it survives a restart (see the
+ * cmd_introspect comment for exactly how the read-then-write rule is honored). *)
 
 open Gigwerk
 
@@ -21,11 +26,17 @@ let usage () =
     \              [--judge clear|refuted]\n\
      gigwerk forms [--db FILE]\n\
      gigwerk caps [--entity NAME]\n\
+     gigwerk introspect list|read <id>|add|forget <id>|rewrite <id>\n\
+    \\              [--text S] [--tag a,b] [--link 1,2] [--db FILE]\n\
      gigwerk doctor\n\
    \n\
    propose runs the whole path -- conditions, terms, kit fit, then the gig.\n\
    run skips it and calls the behavior directly; it is the pre-gate runner and\n\
-   is kept only so the two can be compared.\n";
+   is kept only so the two can be compared.\n\
+   introspect is the AI's notebook. It is read and written ONLY by the AI and\n\
+   survives a restart because Persist round-trips it to the store. Every write\n\
+   is preceded by a read (the token rule in introspect.ml is the point, not\n\
+   boilerplate -- see that module for the drawer-vs-notebook argument).\n";
   exit 2
 
 let arg name default argv =
@@ -334,12 +345,151 @@ let cmd_caps argv =
     List.iter (fun (n, s) -> Printf.printf "%-14s scope=%s\n" n s)
       (Store.claims ~entity)
 
-let cmd_doctor () =
+(* ------------------------------------------------------------------ memory *)
+(* The AI's notebook. introspect.ml is the ONLY module that may read or write
+ * this space, and the CLI door is the harness handing the AI that access --
+ * which is precisely the "no CLI door; the AI cannot reach it" gap STATUS.md
+ * names. The round-trip to the store is Persist.load_introspect / save_introspect;
+ * nothing here re-implements the encoding (store.ml's `-separator '|'` is the
+ * reason entries must avoid embedded newlines and pipes -- see persist.ml).
+ *
+ * TOKEN DISCIPLINE, HONESTLY. A write needs a token, and only a read mints one.
+ * So `add`/`forget`/`rewrite` here begin by reading (Introspect.all), which is
+ * the "to write you must read" rule being obeyed rather than bypassed: the CLI
+ * does not manufacture a token out of thin air. `list`/`read` use `peek`, which
+ * earns nothing, because looking is not writing. *)
+
+let require_introspect_table () =
+  match Store.query "SELECT name FROM sqlite_master WHERE type='table' AND name='introspect_entry'" with
+  | [ [ _ ] ] -> ()
+  | _ ->
+      Printf.eprintf
+        "store %s has no introspect_entry table -- load sql/persist.sql:\\n\
+         \\  sqlite3 %s \".read sql/schema.sql\" \".read sql/persist.sql\"\n"
+        !Store.db_path !Store.db_path;
+      exit 3
+
+let fmt_entry (e : Introspect.entry) =
+  Printf.sprintf "%d  at=%.3f  tags=[%s]  links=[%s]  %s"
+    e.Introspect.id e.Introspect.at
+    (String.concat "," e.Introspect.tags)
+    (String.concat "," (List.map string_of_int e.Introspect.links))
+    e.Introspect.text
+
+(* The first non-flag argument. Flags in this door all take exactly one value
+   (--db PATH, --text S, --tag a,b, --link 1,2), so a bare token that is not a
+   known flag name and is not immediately after one is the positional operand.
+   This is separate from `arg` above because `arg` only finds named flags; here
+   the id is positional and flags may legally appear before or after it. *)
+let first_pos idx argv =
+  let flags = [ "--db"; "--text"; "--tag"; "--link" ] in
+  let is_flag = fun x -> List.mem x flags in
+  let rec go = function
+    | [] -> None
+    | a :: rest when is_flag a ->
+        (* skip the flag AND its value *)
+        (match rest with _ :: tl -> go tl | [] -> None)
+    | a :: rest when a <> "" && a.[0] <> '-' ->
+        if idx = 0 then Some a else go rest
+    | _ :: rest -> go rest
+  in
+  go argv
+
+(* argv[0] is the subcommand ("read"/"forget"/"rewrite"); the id is the first
+   non-flag token after it. Drop argv[0] so the subcommand is never taken as id. *)
+let int_id argv =
+  match argv with
+  | _ :: rest ->
+      (match first_pos 0 rest with
+       | None -> None
+       | Some s -> int_of_string_opt s)
+  | [] -> None
+
+let cmd_introspect argv =
+  Store.db_path := arg "--db" !Store.db_path argv;
+  require_introspect_table ();
+  let sub = match argv with s :: _ when s <> "" && s.[0] <> '-' -> s | _ -> usage () in
+  let notebook = Persist.load_introspect () in
+  let persist_then ok_msg code =
+    (* Save back so the entry survives this process. `save_introspect` runs
+       through Store and can itself fail; report rather than exit cleanly
+       pretending a memory was kept. *)
+    match (try Ok (Persist.save_introspect notebook) with exn -> Error (Printexc.to_string exn)) with
+    | Error msg -> Printf.eprintf "WARN could not persist notebook: %s\n" msg; exit 3
+    | Ok () -> (if ok_msg <> "" then Printf.printf "%s\n" ok_msg); exit code
+  in
+  match sub with
+  | "list" ->
+      let entries = Introspect.peek notebook in
+      if entries = [] then print_string "(notebook is empty)\n"
+      else
+        List.iter (fun e -> print_string (fmt_entry e ^ "\n")) entries;
+      exit 0
+  | "read" ->
+      (match int_id argv with
+       | None -> Printf.eprintf "introspect read needs a numeric id\n"; exit 2
+       | Some id ->
+           (match Introspect.peek_one notebook id with
+            | None -> Printf.eprintf "no entry %d\n" id; exit 3
+            | Some e -> print_string (fmt_entry e ^ "\n"); exit 0))
+  | "add" ->
+      let text = arg "--text" "" argv in
+      if text = "" then begin prerr_string "introspect add needs --text\n"; exit 2 end;
+      let tags =
+        String.split_on_char ',' (arg "--tag" "" argv)
+        |> List.map String.trim |> List.filter (fun x -> x <> "")
+      in
+      let links =
+        String.split_on_char ',' (arg "--link" "" argv)
+        |> List.filter_map int_of_string_opt
+      in
+      (* The read that mints the token -- see the discipline comment. *)
+      let _, tok = Introspect.all notebook in
+      (match Introspect.write notebook tok ~tags ~links ~now:(Unix.time ()) text with
+       | Error Introspect.Stale_token ->
+           Printf.eprintf "WARN write refused: stale token (unexpected here)\n"; exit 3
+       | Error Introspect.Token_spent ->
+           Printf.eprintf "WARN write refused: token already spent\n"; exit 3
+       | Ok e -> persist_then (Printf.sprintf "wrote entry %d" e.Introspect.id) 0)
+  | "forget" ->
+      (match int_id argv with
+       | None -> Printf.eprintf "introspect forget needs a numeric id\n"; exit 2
+       | Some id ->
+           let _, tok = Introspect.all notebook in
+           (match Introspect.forget notebook tok ~id with
+            | Error _ -> Printf.eprintf "WARN forget refused (bad token or unknown id %d)\n" id; exit 3
+            | Ok () -> persist_then (Printf.sprintf "forgot entry %d" id) 0))
+  | "rewrite" ->
+      (match int_id argv with
+       | None -> Printf.eprintf "introspect rewrite needs a numeric id\n"; exit 2
+       | Some id ->
+           let text = arg "--text" "" argv in
+           if text = "" then begin prerr_string "introspect rewrite needs --text\n"; exit 2 end;
+           let tags =
+             String.split_on_char ',' (arg "--tag" "" argv)
+             |> List.map String.trim |> List.filter (fun x -> x <> "")
+           in
+           let links =
+             String.split_on_char ',' (arg "--link" "" argv)
+             |> List.filter_map int_of_string_opt
+           in
+           let _, tok = Introspect.all notebook in
+           (match Introspect.rewrite notebook tok ~id ~tags ~links ~now:(Unix.time ()) text with
+            | Error _ -> Printf.eprintf "WARN rewrite refused (bad token or unknown id %d)\n" id; exit 3
+            | Ok () -> persist_then (Printf.sprintf "rewrote entry %d" id) 0))
+  | _ -> usage ()
+
+let cmd_doctor argv =
+  Store.db_path := arg "--db" !Store.db_path argv;
   Printf.printf "openat2 + RESOLVE_BENEATH : %s\n"
     (if Caps.have_openat2 () then "available" else "MISSING - capability roots are not enforced");
   Printf.printf "sqlite3 CLI               : %s\n"
     (if Sys.command "sqlite3 -version > /dev/null 2>&1" = 0 then "found" else "MISSING");
-  Printf.printf "store                     : %s\n" !Store.db_path
+  Printf.printf "store                     : %s\n" !Store.db_path;
+  Printf.printf "persist (introspect)       : %s\n"
+    (match Store.query "SELECT name FROM sqlite_master WHERE type='table' AND name='introspect_entry'" with
+     | [ [ _ ] ] -> "wired"
+     | _ -> "unwired (load sql/persist.sql)")
 
 let () =
   match Array.to_list Sys.argv with
@@ -348,5 +498,6 @@ let () =
   | _ :: "review" :: rest -> cmd_review rest
   | _ :: "forms" :: rest -> cmd_forms rest
   | _ :: "caps" :: rest -> cmd_caps rest
-  | _ :: "doctor" :: _ -> cmd_doctor ()
+  | _ :: "introspect" :: rest -> cmd_introspect rest
+  | _ :: "doctor" :: rest -> cmd_doctor rest
   | _ -> usage ()
