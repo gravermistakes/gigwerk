@@ -51,11 +51,16 @@
  * what to say and the parent chooses what counts. *)
 
 type refusal =
-  (* Conditions said so. Refuse is structural, Queue is a human's decision --
-     kept apart because collapsing them loses the only bit that says whether
-     asking a human would even help. *)
-  | Refused of { reasons : string list; attaches : Conditions.attachment }
-  | Queued of string list
+  (* The composition decider said so. Refuse is structural, Queue is a human's
+     decision -- kept apart because collapsing them loses the only bit that says
+     whether asking a human would even help. `decided_by` rides here because it
+     is a property of WHO decided the composition: 'conditions' (the in-process
+     OCaml evaluator) or 'elpi' (the real gate). It is not decided downstream --
+     see record_refusal for how the other (post-composition) refusals are
+     attributed. *)
+  | Refused of { reasons : string list; attaches : Conditions.attachment;
+                 decided_by : string }
+  | Queued of { reasons : string list; decided_by : string }
   (* An envelope carrying Retrieve would hand ranked retrieval to an actor the
      moment it is copied down. Kit.validate already refuses a kit that claims a
      composer-only grant, but nothing checked the ENVELOPE -- and the envelope
@@ -67,8 +72,12 @@ type refusal =
   | No_wall_left of { kit_ms : int; terms_ms : int }
 
 let refusal_to_string = function
-  | Refused { reasons; _ } -> "refused: " ^ String.concat ", " reasons
-  | Queued rs -> "queued: " ^ String.concat ", " rs
+  | Refused { reasons; decided_by; _ } ->
+      Printf.sprintf "refused: %s [decided_by=%s]"
+        (String.concat ", " reasons) decided_by
+  | Queued { reasons; decided_by; _ } ->
+      Printf.sprintf "queued: %s [decided_by=%s]"
+        (String.concat ", " reasons) decided_by
   | Envelope_carries_composer_grant a ->
       Printf.sprintf "envelope grants composer-only action %s"
         (Grants.action_to_string a)
@@ -88,6 +97,24 @@ let decision_of_refusal = function
   | Queued _ -> "queue"
   | Refused _ | Envelope_carries_composer_grant _ | Envelope_dead _
   | Kit_rejected _ | Kit_exceeds_envelope _ | No_wall_left _ -> "refuse"
+
+(* WHO decided the composition. The composition-level verdicts (Refused/Queued)
+   carry it because that is where 'conditions' vs 'elpi' actually diverges. The
+   refusals that happen AFTER elpi/conditions already said Book (an envelope
+   that carries a composer grant, a dead envelope, a rejected or oversized kit,
+   no wall clock) are attributed to 'conditions' -- not because OCaml decided
+   them, but because the schema's CHECK only admits conditions/elpi/human and
+   none of those checks is the gate's; they are the in-process structural layer
+   that runs below it. (See the schema comment on booking_verdict.decided_by.)
+ *)
+
+(* Each booking_verdict row must say who decided it. `record_refusal` is the
+   single writer, so it needs a decided_by for every refusal variant. *)
+let refusal_decided_by = function
+  | Refused { decided_by; _ } -> decided_by
+  | Queued { decided_by; _ } -> decided_by
+  | Envelope_carries_composer_grant _ | Envelope_dead _ | Kit_rejected _
+  | Kit_exceeds_envelope _ | No_wall_left _ -> "conditions"
 
 (* What the verdict is a fact ABOUT, which is not the same question as what the
  * verdict was. Only a 'composition' refusal enters the dead set.
@@ -166,6 +193,9 @@ type booked = {
   gig_terms : Terms.t;     (* the child's copy: kit grants, envelope expiry *)
   wall_ms : int;
   ladder : Phases.ladder;
+  (* WHO decided the composition: 'conditions' (the in-process evaluator) or
+     'elpi' (the real gate). This is the column record_booking writes. *)
+  decided_by : string;
 }
 
 (* --------------------------------------------------------------- the path *)
@@ -174,17 +204,99 @@ let missing_grants ~envelope ~(needs : Grants.action list) =
   let g = Terms.grants envelope in
   List.filter (fun a -> not (Grants.allows g a)) needs
 
-let book ~(now : int64) (r : request) : (booked, refusal) result =
-  (* 1. CONDITIONS. Nothing else runs until the composition is allowed to exist.
-        Deliberately first even though it is the most expensive check: issuing
-        terms for a composition that is about to be refused means a refusal can
-        consume budget, and then a malformed proposal costs the same as a real
-        one. *)
-  match Conditions.evaluate r.evidence with
-  | { verdict = Conditions.Refuse; reasons; attaches_to = attaches } ->
-      Error (Refused { reasons; attaches })
-  | { verdict = Conditions.Queue; reasons; _ } -> Error (Queued reasons)
-  | { verdict = Conditions.Book; _ } -> (
+(* ----------------------------------------------------------------------- *
+ * THE GATE SEAM.
+ *
+ * Booking is decided by Bridge.gate (elpi) when the engine is available, and
+ * by Conditions.evaluate (the in-process approximation) otherwise. That is
+ * exactly the design the codebase names: gate.elpi is the engine that actually
+ * decides; conditions.ml is a local approximation of it, and the two known
+ * disagreements are documented in STATUS.md. The bridge deliberately defers to
+ * the running engine.
+ *
+ * This seam is deliberately NOT a replacement of Conditions as step 1. Until
+ * elpi is installed and answering, every call to Bridge.gate returns
+ * Engine_missing, and treating Engine_missing as a hard refuse would turn every
+ * booking test red (they call book with no engine). So the seam is:
+ *
+ *   gate = Some (composition, capabilities) AND elpi answers
+ *       -> the engine's decision wins, decided_by = 'elpi'
+ *   gate = Some (...) but elpi is Engine_missing
+ *       -> fall back to Conditions.evaluate, decided_by = 'conditions'
+ *   gate = Some (...) but elpi FAILED or produced unparsable output
+ *       -> the engine ran and rejected/broke; that is a real engine verdict,
+ *          not an approximation. Bridge.gate_fail_safe is Refuse. Do NOT fall
+ *          back to Conditions, because Conditions does not know why the engine
+ *          refused and silently replacing the real answer with an
+ *          approximation would be exactly the "silently permissive" outcome
+ *          the bridge's error discipline forbids. decided_by = 'elpi'.
+ *   gate = None
+ *       -> Conditions.evaluate, decided_by = 'conditions' (the current,
+ *          fully-tested path; this is what the 58 booking tests exercise).
+ * ----------------------------------------------------------------------- *)
+type composition_gate = {
+  composition : Bridge.composition;
+  capabilities : Bridge.capability list;
+}
+
+(* The composition decision, given a gate (or none). Returns the verdict,
+   reasons, and decided_by. Raises nothing. *)
+let decide_composition (gate : composition_gate option)
+    (evidence : Conditions.evidence) =
+  match gate with
+  | None ->
+      let r = Conditions.evaluate evidence in
+      (r.Conditions.verdict, r.Conditions.reasons, r.Conditions.attaches_to,
+       "conditions")
+  | Some { composition; capabilities } -> (
+      match Bridge.gate ~capabilities composition with
+      | Ok { decision; reasons } ->
+          (* The engine answered. Its classification wins; Conditions is the
+             approximation and the bridge defers to the engine. Map the engine's
+             Book/Queue/Refuse to the verdict the rest of the path expects, and
+             derive the attachment the same way the true engine does: an elpi
+             hard refusal (checks 1-4) is Composition; the adversarial tie the
+             bridge layers on top (check on the reason string) is Proposal --
+             exactly Conditions' own `refutation_at_least_as_strong_as_support`
+             classification. *)
+          let verdict, attaches =
+            match decision with
+            | Bridge.Book -> (Conditions.Book, Conditions.Composition)
+            | Bridge.Queue -> (Conditions.Queue, Conditions.Proposal)
+            | Bridge.Refuse ->
+                let ties =
+                  List.mem "refutation_at_least_as_strong_as_support" reasons
+                in
+                (Conditions.Refuse,
+                 if ties then Conditions.Proposal else Conditions.Composition)
+          in
+          (verdict, reasons, attaches, "elpi")
+      | Error (Bridge.Engine_missing _) ->
+          (* The engine is absent -- the environment this code runs in today, and
+             the reason the 58 booking tests must still pass. Fall back to the
+             in-process evaluator. *)
+          let r = Conditions.evaluate evidence in
+          (r.Conditions.verdict, r.Conditions.reasons, r.Conditions.attaches_to,
+           "conditions")
+      | Error e ->
+          (* The engine is present but failed or misbehaved. Fail safe, and
+             attribute it to the engine, not to Conditions -- see the seam note
+             above. *)
+          (Conditions.Refuse, [ Bridge.engine_error_to_string e ],
+           Conditions.Composition, "elpi"))
+
+let book ?(gate = None) ~(now : int64) (r : request) : (booked, refusal) result =
+  (* 1. THE COMPOSITION DECISION. Nothing else runs until the composition is
+        allowed to exist. Deliberately first even though it is the most expensive
+        check: issuing terms for a composition that is about to be refused means
+        a refusal can consume budget, and then a malformed proposal costs the
+        same as a real one. Who decides is the seam above. *)
+  match decide_composition gate r.evidence with
+  | (Conditions.Refuse, reasons, attaches, decided_by) ->
+      Error (Refused { reasons; attaches; decided_by })
+  | (Conditions.Queue, reasons, _, decided_by) ->
+      Error (Queued { reasons; decided_by })
+  | (Conditions.Book, _, _, decided_by) -> (
       (* 2. TERMS. The envelope is checked as an envelope -- is it live, and is
             it safe to narrow from -- before anything is allowed to fit in it. *)
       let env_actions = Grants.actions (Terms.grants r.envelope) in
@@ -258,7 +370,8 @@ let book ~(now : int64) (r : request) : (booked, refusal) result =
                                 envelope;
                                 gig_terms;
                                 wall_ms;
-                                ladder = k.Kit.ladder })))))
+                                ladder = k.Kit.ladder;
+                                decided_by })))))
 
 (* --------------------------------------------------- running a booked gig *)
 
@@ -364,16 +477,18 @@ let outcome_word (c : closed) =
 
 let record_refusal ~entity ~sig_ (r : refusal) =
   let reasons = refusal_to_string r in
+  let decided_by = refusal_decided_by r in
   Store.exec_checked
     (Printf.sprintf
        "INSERT INTO booking_verdict \
         (entity_id, composition_sig, decision, reasons, decided_at, decided_by, \
          attaches_to) \
-        SELECT id, '%s', '%s', '%s', strftime('%%s','now'), 'conditions', '%s' \
+        SELECT id, '%s', '%s', '%s', strftime('%%s','now'), '%s', '%s' \
         FROM entity WHERE name = '%s';"
        (Store.esc sig_)
        (decision_of_refusal r)
-       (Store.esc reasons) (attaches_to r) (Store.esc entity))
+       (Store.esc reasons) (Store.esc decided_by) (attaches_to r)
+       (Store.esc entity))
 
 let record_booking (b : booked) =
   Store.exec_checked
@@ -381,7 +496,7 @@ let record_booking (b : booked) =
        "INSERT INTO booking_verdict \
         (entity_id, composition_sig, decision, reasons, decided_at, decided_by, \
          attaches_to) \
-        SELECT id, '%s', 'book', '%s', strftime('%%s','now'), 'conditions', \
+        SELECT id, '%s', 'book', '%s', strftime('%%s','now'), '%s', \
                'composition' \
         FROM entity WHERE name = '%s';"
        (Store.esc b.form_sig)
@@ -389,6 +504,7 @@ let record_booking (b : booked) =
           (Printf.sprintf "kit=%s wall_ms=%d gig_actions=%d grants=[%s]"
              b.kit.Kit.name b.wall_ms (Terms.budget b.gig_terms)
              (String.concat "," (List.map Grants.action_to_string b.kit.Kit.grants))))
+       (Store.esc b.decided_by)
        (Store.esc b.entity))
 
 (* A form row must exist before form_review can reference it -- the FK is the

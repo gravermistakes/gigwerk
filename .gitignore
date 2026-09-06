@@ -1,0 +1,9 @@
+# build artifacts
+ocaml/_build/
+*.install
+*.merlin
+
+# local scratch / analysis
+STATUS-ANALYSIS.md
+-version
+gigwerk.db
