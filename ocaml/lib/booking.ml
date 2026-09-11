@@ -174,9 +174,44 @@ let missing_grants ~envelope ~(needs : Grants.action list) =
   let g = Terms.grants envelope in
   List.filter (fun a -> not (Grants.allows g a)) needs
 
-let book ~(now : int64) (r : request) : (booked, refusal) result =
-  (* 1. CONDITIONS. Nothing else runs until the composition is allowed to exist.
-        Deliberately first even though it is the most expensive check: issuing
+(* Minimal conversion from the booking-path request into the composition record
+   Bridge.gate expects. This exists so the second sieve can see the same shape
+   the first sieve saw, without changing the booking path's public signature
+   until the wiring is proven. *)
+let composition_of_request (r : request) ~(provenance : Bridge.provenance)
+    ~(tier : Bridge.tier) ~(support_strength : int) ~(refutation_strength : int)
+    ~(capabilities : Bridge.capability list) : Bridge.composition =
+  {
+    entity = r.entity;
+    claims = List.combine r.cap_set
+      (List.map (fun (g : Grants.action) -> Grants.action_to_string g) r.policy_set);
+    policies = r.policy_set;
+    state_shape = r.state_shape |> (function
+      | "unit" -> Bridge.Tunit
+      | "string" -> Bridge.Tstring
+      | "int" -> Bridge.Tint
+      | _ -> Bridge.Tunit);
+    provenance; tier;
+    human_verdict = false;
+    previously_refused = false;
+    support_strength; refutation_strength;
+  }
+
+(* Map the policy sieve's final decision back into the booking path's existing
+   refusal world. Stage 1 decides structure, stage 2 decides policy, and this
+   is where the two-stage disagreement stops being a conflict: the booking path
+   no longer asks both engines the same question. *)
+let sieve_outcome_to_refusal (g : Bridge.gate_result) :
+    (booked, refusal) result =
+  match g.decision with
+  | Bridge.Book -> Error (Queued []) (* should not occur here; kept for completeness *)
+  | Bridge.Queue -> Error (Queued g.reasons)
+  | Bridge.Refuse -> Error (Refused { reasons = g.reasons; attaches = Conditions.Composition })
+
+let book ~(now : int64) (r : request) :
+  (booked, refusal) result =
+  (* 1. STRUCTURAL SIEVE. Nothing else runs until the composition is allowed to
+        exist. Deliberately first even though it is the most expensive check: issuing
         terms for a composition that is about to be refused means a refusal can
         consume budget, and then a malformed proposal costs the same as a real
         one. *)
@@ -185,7 +220,23 @@ let book ~(now : int64) (r : request) : (booked, refusal) result =
       Error (Refused { reasons; attaches })
   | { verdict = Conditions.Queue; reasons; _ } -> Error (Queued reasons)
   | { verdict = Conditions.Book; _ } -> (
-      (* 2. TERMS. The envelope is checked as an envelope -- is it live, and is
+      (* 2. POLICY SIEVE. Only runs on compositions that passed stage 1. This is
+            the disagreement's resolution, not its erasure: the two engines now
+            answer different questions, and the booking path records the one that
+            was decisive. *)
+      match Bridge.gate ~capabilities
+        (composition_of_request r
+           ~provenance:(if r.evidence.human_verdict then Bridge.Human else Bridge.Agent)
+           ~tier:(if r.evidence.tier_matches then Bridge.In_process else Bridge.Subprocess)
+           ~support_strength:r.evidence.support_strength
+           ~refutation_strength:r.evidence.refutation_strength
+           ~capabilities) with
+      | Error _ as e -> e
+      | Ok g ->
+          match sieve_outcome_to_refusal g with
+          | Error e -> e
+          | Ok _ ->
+              (* 2. TERMS. The envelope is checked as an envelope -- is it live, and is
             it safe to narrow from -- before anything is allowed to fit in it. *)
       let env_actions = Grants.actions (Terms.grants r.envelope) in
       match List.find_opt Grants.composer_only env_actions with
