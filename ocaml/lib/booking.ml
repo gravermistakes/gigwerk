@@ -174,13 +174,19 @@ let missing_grants ~envelope ~(needs : Grants.action list) =
   let g = Terms.grants envelope in
   List.filter (fun a -> not (Grants.allows g a)) needs
 
-(* Minimal conversion from the booking-path request into the composition record
-   Bridge.gate expects. This exists so the second sieve can see the same shape
-   the first sieve saw, without changing the booking path's public signature
-   until the wiring is proven. *)
-let composition_of_request (r : request) ~(provenance : Bridge.provenance)
-    ~(tier : Bridge.tier) ~(support_strength : int) ~(refutation_strength : int)
-    ~(capabilities : Bridge.capability list) : Bridge.composition =
+(* Convert Conditions.evidence into the provenance/tier pair Bridge.gate
+   expects. The mapping is deliberately small and matches the same semantics
+   Conditions already uses: a human-verdict-capable composer is Human until a
+   grant requires booking, and an agent whose tier does not match is treated as
+   needing Subprocess. This keeps the second sieve from redefining what
+   provenance and tier mean in this repo. *)
+let provenance_and_tier_of evidence =
+  ( if evidence.human_verdict then Bridge.Human else Bridge.Agent,
+    if evidence.tier_matches then Bridge.In_process else Bridge.Subprocess )
+
+let bridge_composition_of_request (r : request) ~(capabilities : Bridge.capability list)
+    : Bridge.composition =
+  let provenance, tier = provenance_and_tier_of r.evidence in
   {
     entity = r.entity;
     claims = List.combine r.cap_set
@@ -191,10 +197,12 @@ let composition_of_request (r : request) ~(provenance : Bridge.provenance)
       | "string" -> Bridge.Tstring
       | "int" -> Bridge.Tint
       | _ -> Bridge.Tunit);
-    provenance; tier;
-    human_verdict = false;
+    provenance;
+    tier;
+    human_verdict = evidence.human_verdict;
     previously_refused = false;
-    support_strength; refutation_strength;
+    support_strength = r.evidence.support_strength;
+    refutation_strength = r.evidence.refutation_strength;
   }
 
 (* Map the policy sieve's final decision back into the booking path's existing
@@ -225,12 +233,7 @@ let book ~(now : int64) (r : request) :
             answer different questions, and the booking path records the one that
             was decisive. *)
       match Bridge.gate ~capabilities
-        (composition_of_request r
-           ~provenance:(if r.evidence.human_verdict then Bridge.Human else Bridge.Agent)
-           ~tier:(if r.evidence.tier_matches then Bridge.In_process else Bridge.Subprocess)
-           ~support_strength:r.evidence.support_strength
-           ~refutation_strength:r.evidence.refutation_strength
-           ~capabilities) with
+        (bridge_composition_of_request r ~capabilities) with
       | Error _ as e -> e
       | Ok g ->
           match sieve_outcome_to_refusal g with
