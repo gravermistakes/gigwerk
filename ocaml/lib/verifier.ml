@@ -40,15 +40,17 @@ let run_command ~root ~timeout_s command =
         ignore (Unix.waitpid [] pid)
       in
       let timed_out = ref false in
-      while (!open_out || !open_err || !Option.is_some !status) && not !timed_out do
+      while (!open_out || !open_err || not (Option.is_some !status)) && not !timed_out do
         let remaining = deadline -. Unix.gettimeofday () in
         if remaining <= 0. then timed_out := true
         else begin
           let fds = (if !open_out then [out_r] else []) @ (if !open_err then [err_r] else []) in
           let ready, _, _ = Unix.select fds [] [] remaining in
           List.iter (fun fd ->
-            if fd = out_r then if not (read_available out_r out) then open_out := false
-            else if fd = err_r then if not (read_available err_r err) then open_err := false) ready;
+            if fd = out_r && !open_out then
+              if not (read_available out_r out) then open_out := false
+            else if fd = err_r && !open_err then
+              if not (read_available err_r err) then open_err := false) ready;
           if not (Option.is_some !status) then
             match Unix.waitpid [Unix.WNOHANG] pid with
             | 0, _ -> ()
@@ -58,13 +60,19 @@ let run_command ~root ~timeout_s command =
       if !timed_out then begin
         kill_and_wait ();
         Unix.close out_r; Unix.close err_r;
-        { command; exit_status = None; stdout = Buffer.contents out; stderr = Buffer.contents err ^ "\nverification timeout"; passed = false }
+        { command; exit_status = None; stdout = Buffer.contents out;
+          stderr = Buffer.contents err ^ "\nverification timeout"; passed = false }
       end else begin
         while !open_out || !open_err do
-          let ready, _, _ = Unix.select (List.filter (fun x -> x) [if !open_out then out_r else out_r; if !open_err then err_r else err_r]) [] [] 0.1 in
-          List.iter (fun fd ->
-            if fd = out_r && !open_out then if not (read_available out_r out) then open_out := false;
-            if fd = err_r && !open_err then if not (read_available err_r err) then open_err := false) ready
+          let fds = (if !open_out then [out_r] else []) @ (if !open_err then [err_r] else []) in
+          if fds = [] then ()
+          else
+            let ready, _, _ = Unix.select fds [] [] 0.1 in
+            List.iter (fun fd ->
+              if fd = out_r && !open_out then
+                if not (read_available out_r out) then open_out := false
+              else if fd = err_r && !open_err then
+                if not (read_available err_r err) then open_err := false) ready
         done;
         Unix.close out_r; Unix.close err_r;
         let code = match !status with
@@ -73,7 +81,8 @@ let run_command ~root ~timeout_s command =
           | Some (Unix.WSTOPPED n) -> 128 + n
           | None -> 1
         in
-        { command; exit_status = Some code; stdout = Buffer.contents out; stderr = Buffer.contents err; passed = code = 0 }
+        { command; exit_status = Some code; stdout = Buffer.contents out;
+          stderr = Buffer.contents err; passed = code = 0 }
       end
 
 let verify workspace specification =
