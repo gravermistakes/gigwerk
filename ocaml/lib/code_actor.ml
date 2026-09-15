@@ -5,7 +5,7 @@ type error =
 type context = string list
 
 module type S = sig
-  type context = context
+  type context = string list
   val produce : context -> Production.requirement -> Workspace.t ->
     (Production.artifact, error) result
 end
