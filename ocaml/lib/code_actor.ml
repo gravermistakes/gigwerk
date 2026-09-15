@@ -1,14 +1,11 @@
-module type S = sig
-  type context
-  val produce : context -> Production.requirement -> Workspace.t -> (Production.artifact, error) result
-end
-and error =
+type error =
   | Workspace_error of string
   | Actor_error of string
 
-module type PRODUCER = sig
-  type context
-  val produce : context -> Production.requirement -> Workspace.t -> (Production.artifact, error) result
-end
+type context = string list
 
-module type S = PRODUCER
+module type S = sig
+  type context = context
+  val produce : context -> Production.requirement -> Workspace.t ->
+    (Production.artifact, error) result
+end
