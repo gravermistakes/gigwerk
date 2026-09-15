@@ -1,6 +1,6 @@
 let create ~templates =
   let module M : Code_actor.S = struct
-    type context = Code_actor.context
+    type context = string list
 
     let produce _context requirement workspace =
       let template =
@@ -13,9 +13,12 @@ let create ~templates =
       | Some contents ->
           let path = requirement.id ^ ".ml" in
           begin match Workspace.write workspace ~path ~contents with
-          | Error e -> Error (Code_actor.Workspace_error (match e with
-              | Workspace.Invalid_root s | Workspace.Invalid_path s | Workspace.Io_error s -> s))
-          | Ok () -> Ok { Production.requirement_id = requirement.id; paths = [path] }
+          | Error e ->
+              Error (Code_actor.Workspace_error
+                       (match e with
+                        | Workspace.Invalid_root s | Workspace.Invalid_path s | Workspace.Io_error s -> s))
+          | Ok () ->
+              Ok { Production.requirement_id = requirement.id; paths = [path] }
           end
   end in
   (module M : Code_actor.S)
