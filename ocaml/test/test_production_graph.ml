@@ -8,32 +8,36 @@ let check label condition =
     Printf.eprintf "FAIL: %s\n" label
   end
 
-let requirement id depends_on =
-  Production.{ id; statement = "statement"; depends_on; acceptance = None }
+let parse source =
+  match Specification.parse source with
+  | Ok specification -> specification
+  | Error _ -> failwith "test specification must parse"
 
-let spec requirements =
-  Specification.of_requirements requirements
+let ids requirements = List.map (fun r -> r.Production.id) requirements
 
 let () =
-  let a = requirement "a" [] in
-  let b = requirement "b" ["a"] in
-  let c = requirement "c" ["b"] in
-  begin match Production_graph.build (spec [a; b; c]) with
+  let specification =
+    parse "req a : first\nreq b : second\nreq c : third\ndepends b : a\ndepends c : b\n"
+  in
+  begin match Production_graph.build specification with
   | Error _ -> check "linear graph builds" false
   | Ok graph ->
-      check "root contains a" (List.map (fun r -> r.Production.id) (Production_graph.roots graph) = ["a"]);
-      let ready0 = Production_graph.ready graph ~completed:[] in
-      check "a is initially ready" (List.map (fun r -> r.Production.id) ready0 = ["a"]);
-      let ready1 = Production_graph.ready graph ~completed:["a"] in
-      check "b becomes ready" (List.map (fun r -> r.Production.id) ready1 = ["b"])
+      check "root contains a" (ids (Production_graph.roots graph) = ["a"]);
+      check "a is initially ready" (ids (Production_graph.ready graph ~completed:[]) = ["a"]);
+      check "b becomes ready" (ids (Production_graph.ready graph ~completed:["a"]) = ["b"]);
+      check "c becomes ready after b" (ids (Production_graph.ready graph ~completed:["a"; "b"]) = ["c"])
   end;
-  let cycle = [requirement "a" ["b"]; requirement "b" ["a"]] in
-  begin match Production_graph.build (spec cycle) with
+  let cycle =
+    parse "req a : first\nreq b : second\ndepends a : b\ndepends b : a\n"
+  in
+  begin match Production_graph.build cycle with
   | Error (Production_graph.Cycle path) -> check "cycle is rejected" (List.length path >= 3)
   | _ -> check "cycle is rejected" false
   end;
-  match Production_graph.build (spec [requirement "a" ["missing"]]) with
+  let unknown = parse "req a : first\ndepends a : missing\n" in
+  begin match Production_graph.build unknown with
   | Error (Production_graph.Unknown_requirement "missing") -> incr pass
-  | _ -> check "unknown dependency is rejected" false;
+  | _ -> check "unknown dependency is rejected" false
+  end;
   Printf.printf "production_graph: %d passed, %d failed\n" !pass !fail;
   exit (if !fail = 0 then 0 else 1)
