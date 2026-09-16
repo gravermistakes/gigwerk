@@ -73,6 +73,30 @@ let () =
     (Bridge.elpi_shape_arg Bridge.Tunit = "tunit")
 
 let () =
+  print_string "\nshape_of_string -- the inverse of elpi_shape_arg\n";
+  let rt s =
+    (* render -> parse -> render must be identity, and parse must consume it all *)
+    match Bridge.shape_of_string (Bridge.elpi_shape_arg s) with
+    | Some s' -> Bridge.elpi_shape_arg s' = Bridge.elpi_shape_arg s
+    | None -> false
+  in
+  check "tunit round-trips"
+    (rt Bridge.Tunit);
+  check "tstring round-trips" (rt Bridge.Tstring);
+  check "tint round-trips" (rt Bridge.Tint);
+  check "tlist of an atom round-trips" (rt (Bridge.Tlist Bridge.Tstring));
+  check "tpair of two atoms round-trips" (rt (Bridge.Tpair (Bridge.Tunit, Bridge.Tint)));
+  check "a nested compound round-trips -- the facts_test2.elpi fixture shape"
+    (rt (Bridge.Tarrow (Bridge.Tunit,
+                        Bridge.Tlist (Bridge.Tarrow (Bridge.Tstring, Bridge.Tint)))));
+  check "parse is exact: trailing garbage is refused"
+    (Bridge.shape_of_string "tunittunit" = None);
+  check "a store shape NAME that is not an elpi type is None, not coerced"
+    (Bridge.shape_of_string "verdict_log" = None);
+  check "parse accepts the parenthesised compound form"
+    (Bridge.shape_of_string "(tlist tstring)" = Some (Bridge.Tlist Bridge.Tstring))
+
+let () =
   print_string "\nadversarial tie-break -- layered on top of elpi, not inside it\n";
   check "a tie between support and refutation escalates book to refuse"
     (let c = Bridge.{ clean_composition with support_strength = 2; refutation_strength = 2 } in

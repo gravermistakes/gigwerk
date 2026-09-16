@@ -335,6 +335,78 @@ and elpi_shape_arg = function
 let provenance_word = function Human -> "human" | Agent -> "agent"
 let tier_word = function In_process -> "in_process" | Subprocess -> "subprocess"
 
+(* Parse an elpi type expression back into a `shape`, the inverse of
+   `elpi_shape`. The grammar is exactly what the renderer emits:
+     shape  := "tunit" | "tstring" | "tint"
+             | "tlist"  shape
+             | "tpair"  shape shape
+             | "tarrow" shape shape
+   A compound argument is parenthesised on render (`tarrow tunit (tlist ...)`),
+   so the operand parser accepts optional parens around either an atom or a
+   compound. This is needed only by the CLI wiring, which reads c_state.shape (a
+   TEXT) and must hand the gate a real `shape`. The store values in seed.sql
+   ("verdict_log", "last_message", "notes") are names, not elpi types, so a name
+   that is not a known constructor returns None rather than being silently
+   coerced -- see the call site for how it falls back. *)
+let shape_of_string (raw : string) : shape option =
+  let s = String.trim raw in
+  let n = String.length s in
+  let ws i = i < n && (s.[i] = ' ' || s.[i] = '(' || s.[i] = ')') in
+  let rec skip i = if ws i then skip (i + 1) else i in
+  (* Match keyword `kw` at position i; return the index just past it, or None. *)
+  let kw i text =
+    let l = String.length text in
+    if i + l <= n && String.sub s i l = text then Some (skip (i + l)) else None
+  in
+  let atom i =
+    match kw (skip i) "tunit" with
+    | Some j -> Some (Tunit, j)
+    | None -> (
+        match kw (skip i) "tstring" with
+        | Some j -> Some (Tstring, j)
+        | None -> (
+            match kw (skip i) "tint" with
+            | Some j -> Some (Tint, j)
+            | None -> None))
+  in
+  (* A shape is either an atom, or a compound whose operands are shapes.
+     `tlist X` takes one operand; `tpair`/`tarrow` take two. *)
+  let rec shape i =
+    match kw (skip i) "tlist" with
+    | Some j -> (
+        match operand j with
+        | Some (x, k) -> Some (Tlist x, k)
+        | None -> None)
+    | None -> (
+        match kw (skip i) "tpair" with
+        | Some j -> (
+            match operand j with
+            | Some (a, k) -> (
+                match operand k with
+                | Some (b, k2) -> Some (Tpair (a, b), k2)
+                | None -> None)
+            | None -> None)
+        | None -> (
+            match kw (skip i) "tarrow" with
+            | Some j -> (
+                match operand j with
+                | Some (a, k) -> (
+                    match operand k with
+                    | Some (b, k2) -> Some (Tarrow (a, b), k2)
+                    | None -> None)
+                | None -> None)
+            | None -> atom i))
+  and operand i =
+    let j = skip i in
+    (* A compound in parens, or a bare atom/compound. *)
+    match shape j with
+    | Some r -> Some r
+    | None -> atom j
+  in
+  match shape 0 with
+  | Some (shape, j) -> if skip j = n then Some shape else None
+  | None -> None
+
 (* Generate the elpi facts for one composition, against the given catalog.
    Order does not affect gate.elpi's checks (each looks up an exact claim,
    entity, or capability name; a composition should never carry two claims on
