@@ -60,6 +60,21 @@ let claims ~entity =
     (esc entity))
   |> List.filter_map (function [ n; s ] -> Some (n, s) | _ -> None)
 
+(* The global capability registry, in exactly the shape Bridge.gate wants. This
+   is the fixed catalog a composition's claims are checked against (see the
+   comment on Bridge.capability); it is NOT the claims themselves, and is loaded
+   once so the gate can validate a claim against a capability that exists. *)
+let capabilities () : Bridge.capability list =
+  query "SELECT name, ctor, envelope, side_effecting, requires_booking \
+         FROM capability ORDER BY name"
+  |> List.filter_map (function
+       | [ n; ctor; env; se; rb ] ->
+           Some Bridge.{ name = String.trim n; ctor = String.trim ctor;
+                          envelope = String.trim env;
+                          side_effecting = String.trim se = "1";
+                          requires_booking = String.trim rb = "1" }
+       | _ -> None)
+
 let policies ~entity =
   query (Printf.sprintf
     "SELECT cp.predicate FROM c_policy cp JOIN entity e ON e.id = cp.entity_id \
