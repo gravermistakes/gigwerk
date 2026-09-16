@@ -100,12 +100,18 @@ let parse source =
                 |> List.filter (fun x -> x <> "")
               in
               if id = "" || deps = [] then Error (Malformed_line (line_no, raw))
+              else if Option.is_none (find id reqs) then
+                Error (Unknown_dependency { id; dependency = List.hd deps })
               else
-                loop (line_no + 1) reqs
-                  (List.fold_left
-                     (fun ds d -> (`Depends, id, d, line_no) :: ds)
-                     directives deps)
-                  rest
+                match List.find_opt (fun dep -> Option.is_none (find dep reqs)) deps with
+                | Some dependency ->
+                    Error (Unknown_dependency { id; dependency })
+                | None ->
+                    loop (line_no + 1) reqs
+                      (List.fold_left
+                         (fun ds d -> (`Depends, id, d, line_no) :: ds)
+                         directives deps)
+                      rest
           end
         else if starts_with line "accept " then
           begin match split_once (String.sub line 7 (String.length line - 7)) ':' with
