@@ -19,6 +19,29 @@ let query sql =
          let l = String.trim l in
          if l = "" then None else Some (String.split_on_char '|' l))
 
+(* Single value that MAY SPAN LINES. `query` splits output on '\n' into rows and
+   on '|' into columns, which is right for tabular results and silently wrong
+   for one text column holding a document: a 50-line soul body comes back as 50
+   one-column "rows" and every caller matching [[x]] sees no match at all. So a
+   scalar read keeps the output whole. *)
+let query_scalar sql =
+  let out =
+    sh (Printf.sprintf "sqlite3 -noheader %s %s"
+          (Filename.quote !db_path) (Filename.quote sql))
+  in
+  let out = String.trim out in
+  if out = "" then None else Some out
+
+(* One row per line, NOT split on '|'. For a single-column query whose values are
+   single-line but may legitimately contain a pipe. *)
+let query_column sql =
+  sh (Printf.sprintf "sqlite3 -noheader %s %s"
+        (Filename.quote !db_path) (Filename.quote sql))
+  |> String.split_on_char '\n'
+  |> List.filter_map (fun l ->
+         let l = String.trim l in
+         if l = "" then None else Some l)
+
 let exec sql =
   ignore (sh (Printf.sprintf "sqlite3 %s %s 2>&1"
                 (Filename.quote !db_path) (Filename.quote sql)))

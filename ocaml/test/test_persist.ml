@@ -36,6 +36,8 @@ let find_repo_file relpath =
 
 let schema_sql = find_repo_file "sql/schema.sql"
 let persist_sql = find_repo_file "sql/persist.sql"
+let soul_sql = find_repo_file "sql/soul.sql"
+let memory_sql = find_repo_file "sql/memory.sql"
 
 (* A fresh, real sqlite file per test run -- not :memory:, because Store
    shells out to a NEW sqlite3 process per call (see store.ml's `sh`), and an
@@ -322,6 +324,71 @@ let () =
          Working.expand s
          = (match wm.Reconstruct.full with Some f -> f | None -> "")
      | _ -> false);
+
+  (* =================================================================== *)
+  print_string "\ncontext: a soul body is a DOCUMENT, not a row\n";
+  (* =================================================================== *)
+  (* Store.query splits output on '\n' into rows and on '|' into columns. Right
+     for tabular results, silently wrong for one text column holding a document:
+     the real soul (soul/adopt_v1.sql) is ~50 lines, so it came back as ~50
+     one-column rows, matched no [[body]] pattern, and pinned NOTHING.
+     `gigwerk context` reported immediate 0 with the soul sitting in the db.
+
+     A single-line body hides it entirely -- which is what the seed used, and
+     why running the command did not catch it. So this body is deliberately
+     multi-line, and carries a '|' too. *)
+  let cdb = Filename.temp_file "gigwerk_context_test" ".sqlite3" in
+  let cmd =
+    Printf.sprintf "sqlite3 %s %s %s %s %s"
+      (Filename.quote cdb)
+      (Filename.quote (".read " ^ schema_sql))
+      (Filename.quote (".read " ^ persist_sql))
+      (Filename.quote (".read " ^ soul_sql))
+      (Filename.quote (".read " ^ memory_sql))
+  in
+  if Sys.command cmd <> 0 then failwith "test_persist: context schema load failed";
+  Store.db_path := cdb;
+  let body =
+    "# soul v1\n\nYou compose actors.\nYou do not write tools.\n\nA line with a | pipe."
+  in
+  (* Checked, not ignored: these inserts failing silently is exactly how the
+     bug under test hid. soul.adopted_by CHECKs = 'human' -- only a human
+     adopts a soul -- so 'test' is rejected, and an ignored failure would leave
+     an empty table and a green assertion about nothing. *)
+  let must_run label sql =
+    let rc = Sys.command (Printf.sprintf "sqlite3 %s %s 1>&2"
+      (Filename.quote cdb) (Filename.quote sql)) in
+    if rc <> 0 then failwith ("test_persist: " ^ label ^ " failed")
+  in
+  must_run "soul insert"
+    (Printf.sprintf
+      "INSERT INTO soul (version, body, parent, adopted_at, adopted_by, rationale) \
+       VALUES ('tv1', '%s', NULL, 0, 'human', 'r');" body);
+  must_run "ruling insert"
+    "INSERT INTO mem_ruling (subject, predicate, object, rationale, at) \
+     VALUES ('actors', 'may_not_hold', 'retrieve', 'r', 1);";
+  if Store.query_scalar "SELECT count(*) FROM v_soul_current" <> Some "1" then
+    failwith "test_persist: soul row did not land";
+
+  let ctx = Context.assemble ~floor:1 ~immediate_ceiling:100_000 () in
+  let pinned_texts =
+    List.filter_map
+      (fun (sl : Working.slot) ->
+         if sl.Working.item.Working.pinned then Some sl.Working.item.Working.text
+         else None)
+      ctx.Working.immediate
+  in
+  check "a multi-line soul body is pinned, not shredded into rows"
+    (List.exists (fun t -> String.length t > 40) pinned_texts);
+  check "the pinned soul survives whole -- its last line included"
+    (List.exists
+       (fun t ->
+          let n = String.length t and k = String.length "pipe." in
+          n >= k && String.sub t (n - k) k = "pipe.")
+       pinned_texts);
+  check "a live ruling is pinned alongside it"
+    (List.mem "actors may_not_hold retrieve" pinned_texts);
+  check "so a context holding a soul is not COLD" (not ctx.Working.cold);
 
   Printf.printf "\n%d passed, %d failed\n" !pass !fail;
   if !fail > 0 then exit 1

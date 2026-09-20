@@ -100,12 +100,12 @@ let parse source =
                 String.split_on_char ',' deps |> List.map trim
                 |> List.filter (fun x -> x <> "")
               in
-              (* Shape only. Whether a dependency EXISTS, and whether the
-                 dependencies form a cycle, belong to Production_graph -- it
-                 is the thing that can say "a -> b -> a" instead of naming one
-                 edge, and its Cycle/Unknown_requirement errors are the tested
-                 ones. Validating existence here made those unreachable and
-                 broke test_production_graph. *)
+              (* Shape only HERE. Existence is still checked, once, by the
+                 `validate` pass at end-of-parse -- doing it inline as well was
+                 redundant. What does NOT belong at parse time is cycle
+                 detection: both ids of a cycle exist, so a cycle survives
+                 parsing by construction and Production_graph catches it, naming
+                 the whole path rather than one edge. *)
               if id = "" || deps = [] then Error (Malformed_line (line_no, raw))
               else
                 loop (line_no + 1) reqs

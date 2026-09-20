@@ -38,7 +38,7 @@ section).
 `booking_verdict`, `form`, `form_review`, `span`, `sarcasm_doc`, `sarcasm_link`,
 `introspect_entry`. Was 7.
 
-**339 checks passing** across five test binaries, plus 13 SWI tests and 10 SQL
+**292 checks passing** across nine test binaries, plus 13 SWI tests and 10 SQL
 boundary cases. The booking tests were mutation-verified: 14 deliberate
 mutations, each producing the expected failure and nothing else. Two mutations
 found faults in *my own tests* — an assertion that could not fail, and a missing

@@ -27,8 +27,12 @@
 
 (* Soul body, pinned. v_soul_current is the one non-retired version. *)
 let soul_pinned () =
-  match Store.query "SELECT body FROM v_soul_current LIMIT 1" with
-  | [ [ body ] ] when String.trim body <> "" ->
+  (* query_scalar, not query: the body is a document, and `query` would shred a
+     multi-line soul into one "row" per line, match none of them, and pin
+     nothing -- silently dropping the one thing that must never fall out of the
+     window. Any real soul body is multi-line. *)
+  match Store.query_scalar "SELECT body FROM v_soul_current LIMIT 1" with
+  | Some body when String.trim body <> "" ->
       [ Working.item ~pinned:true ~salience:1.0 (String.trim body) ]
   | _ -> []
 
@@ -37,13 +41,14 @@ let soul_pinned () =
    but it is not what the machine currently believes, so it does not belong in
    the active window as though it were. *)
 let ruling_pinned () =
-  Store.query
+  (* query_column: one ruling per line, and a '|' inside a ruling's text must
+     not split it into a row this code then fails to match. *)
+  Store.query_column
     "SELECT subject || ' ' || predicate || ' ' || object FROM mem_ruling \
      WHERE retired_at IS NULL ORDER BY at"
-  |> List.filter_map (function
-       | [ s ] when String.trim s <> "" ->
-           Some (Working.item ~pinned:true ~salience:1.0 (String.trim s))
-       | _ -> None)
+  |> List.filter_map (fun s ->
+         if String.trim s = "" then None
+         else Some (Working.item ~pinned:true ~salience:1.0 (String.trim s)))
 
 (* Every SARCASM doc, ranked by its own affect. The full text is what goes in;
    the stored digest rides along as ready_digest so the working band reuses
