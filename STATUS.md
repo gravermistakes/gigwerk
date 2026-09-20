@@ -10,17 +10,29 @@ Measured, not estimated. Re-measured after the booking path landed.
 WIRED       Caps  Actor  Behaviors  Store  Booking
             Conditions  Terms  Grants  Kit  Phases
             Context  Working  Persist  Reconstruct  Affect
-NOT WIRED   Bridge  Trace  Introspect  Embed
+            Bridge (confidence + gate seam)
+NOT WIRED   Trace  Embed (reached only through `Working.contract`)
 ```
 
-`Persist`, `Reconstruct` and `Affect` became reachable with the active-context
-path: `gigwerk context` calls `Persist.load_store`, which is the first thing in
-the running program to read SARCASM back. **SARCASM stopped being write-only.**
-`Embed` is reached only indirectly, through `Working.contract`.
+Two paths landed independently and their wirings compose.
 
-`Bridge` is a special case: `Store.reviews` and `gigwerk review|forms` call
-`Bridge.confidence`, so **SWI-Prolog is reachable from the running program**.
-`Bridge.gate` — the Elpi side — is built and tested and called by nothing.
+`Persist` is now wired on **both** sides. The introspection door —
+`gigwerk introspect list|read|add|forget|rewrite` — round-trips the AI's
+notebook through `Persist.load_introspect`/`save_introspect` and survives a
+restart (verified across three separate `main.exe` processes). The SARCASM side
+is wired too: `gigwerk context` calls `Persist.load_store`, which is the first
+thing in the running program to read SARCASM back. **SARCASM stopped being
+write-only**, and `Reconstruct` and `Affect` became reachable with it.
+
+`Bridge.confidence` was already reachable from `gigwerk review|forms`.
+`Bridge.gate` is now reachable too: `propose` builds the real
+`Bridge.composition` and `Booking.book`'s seam decides through it when elpi is
+present, and through `Conditions.evaluate` when elpi is `Engine_missing`.
+`booking_verdict.decided_by` says which. **The gate is NOT end-to-end provable
+until elpi/swipl binaries are provided** — the engine-verdict arm of the seam,
+and all of `test_bridge`'s real-engine checks, skip until then. The seam and its
+engine-missing fallback are fully exercised (see `test_booking.ml`'s gate-seam
+section).
 
 **21+ tables. 9 written by OCaml**: `gig`, `gig_prediction`, `gig_outcome`,
 `booking_verdict`, `form`, `form_review`, `span`, `sarcasm_doc`, `sarcasm_link`,
@@ -50,19 +62,19 @@ are in `BOOKING.md`.
 
 | | state | what is missing |
 |---|---|---|
-| **Caps** | allegedly done | Landlock (L4); `exec` capability passing (SCM_RIGHTS) |
-| **Booking path** | **untested, wired** | untested, needs actors for confirmstion |
-| **Conditions / Terms / Grants / Kit / Phases** | **wired** | confirmation via actor test |
-| **Actor runtime** | minimal, insufficient | two behaviours; no inbox delivery; no step loop |
-| **Confidence** | **wired** but wrong | soul_version never stamped, so bands are not yet soul-scoped |
-| **Elpi gate** | part-built, unwired | `Bridge.gate` works; `booking.ml` uses `Conditions` only, and the two **disagree** — see below |
-| **Persistence** | half-built, unwired | `Persist` round-trips; nothing in `main.ml` calls it |
-| **Trace** | part-built, unwired | `Actor.run_gig` opens no spans; `Trace.gig` is a string, `span.gig_id` an FK'd integer, and nothing converts |
-| **Fact store** | partial schema only | **not per-project**; **not 3 provenance columns**; specs not embedded/linked |
+| **Caps** | done | Landlock (L4); `exec` capability passing (SCM_RIGHTS) |
+| **Booking path** | **done, wired** | — |
+| **Conditions / Terms / Grants / Kit / Phases** | **done, wired** | — |
+| **Actor runtime** | minimal | two behaviours; no inbox delivery; no step loop |
+| **Confidence** | **wired** | soul_version never stamped, so bands are not yet soul-scoped |
+| **Elpi gate** | wired as a seam | `propose` builds the composition; `Booking.book` decides through `Bridge.gate` when elpi answers, else `Conditions`. End-to-end proof waits on the elpi binaries. The two engines still **disagree** — see below |
+| **Persistence** | partially wired | `introspect` CLI door round-trips through `Persist` and survives a restart. SARCASM's `save_doc`/`load_store` still uncalled |
+| **Trace** | built, unwired | `Actor.run_gig` opens no spans; `Trace.gig` is a string, `span.gig_id` an FK'd integer, and nothing converts |
+| **Fact store** | schema only | **not per-project**; **not 3 provenance columns**; specs not embedded/linked |
 | **SARCASM** | built, persistable, unwired | not fed from working; contraction never invoked |
 | **Immediate 64k** | **wired** | verbatim band; pinned material never contracts |
 | **Working 128k** | **wired** | condensing process lands; per-sentence affect would sharpen it |
-| **Introspection** | part-built, persistable, unwired | no CLI door; the AI cannot reach it from the running program |
+| **Introspection** | **wired** | `gigwerk introspect` door round-trips through `Persist`; survives restart |
 | **RAG (a tool)** | **not built** | no corpus, no ingest, no capability row |
 | **CLI** | 7 commands, no access | `queue`, `import`, `export`, `introspect` |
 | **Soul** | schema + v1 body | never loaded; `soul_version` never stamped on a gig or review |
@@ -103,14 +115,19 @@ salience". Which one immediate makes is a decision, not a bug fix.
 
 ## What would unblock the most, in order
 
-**1. Wire `Bridge.gate`** — after resolving the disagreement above. Then a
-booking is decided by the engine the design says decides it, and
-`booking_verdict.decided_by` starts saying `elpi` instead of `conditions`.
+**1. Verify `Bridge.gate` end-to-end** — after resolving the disagreement above.
+The seam is wired: `propose` builds the real composition and `Booking.book`
+decides through `Bridge.gate` when elpi answers, `decided_by='elpi'`; it falls
+back to `Conditions` (with `decided_by='conditions'`) when elpi is
+`Engine_missing`. The remaining step is end-to-end verification, which needs the
+elpi/swipl binaries (and the disagreement below resolved): with elpi absent today,
+`propose` books through Conditions and writes `decided_by=conditions`, which is
+the correct honest value for an engine that never ran.
 
-**2. ~~Wire `Persist`~~** — done for the read path. `Context.assemble` calls
-`Persist.load_store`, so SARCASM survives a restart *and is read back*. The
-write path from `working` into SARCASM, and introspection's own persistence,
-are still plumbing nobody has run.
+**2. ~~Wire `Persist`~~** — done, both sides. The introspection door round-trips
+the AI's notebook and survives a restart across separate processes;
+`Context.assemble` calls `Persist.load_store`, so SARCASM is read back as well
+as written. `Trace` is the one thing in this area still uncalled.
 
 **3. ~~Immediate/working as two bands, with condensing between them.~~** Landed.
 `Working.curate` is 64k verbatim plus 128k contracted, `Context.assemble` feeds
