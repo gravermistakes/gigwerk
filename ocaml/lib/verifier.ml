@@ -19,25 +19,48 @@ let read_available fd buffer =
   in
   loop ()
 
-let run_command ~root ~timeout_s command =
+(* No shell. argv goes to execvp directly, so nothing in an acceptance can be
+   re-split, expanded, chained or substituted -- there is no interpreter left to
+   do it. Production.acceptance is a closed variant, so argv is built here and
+   never parsed from text at this layer. *)
+let run_acceptance ~root ~timeout_s (accept : Production.acceptance) =
+  let argv = Array.of_list (Production.acceptance_argv accept) in
+  let command = Production.acceptance_to_string accept in
   let out_r, out_w = Unix.pipe () in
   let err_r, err_w = Unix.pipe () in
   match Unix.fork () with
   | 0 ->
-      Unix.close out_r; Unix.close err_r;
-      Unix.dup2 out_w Unix.stdout; Unix.dup2 err_w Unix.stderr;
-      Unix.close out_w; Unix.close err_w;
-      Unix.chdir root;
-      Unix.execv "/bin/sh" [| "/bin/sh"; "-c"; command |]
+      (* Everything in this arm must end in _exit. A failure that unwound out of
+         the child would leave it running the PARENT's program past the fork,
+         duplicating output and any store write the parent still has pending. *)
+      (try
+         Unix.close out_r; Unix.close err_r;
+         Unix.dup2 out_w Unix.stdout; Unix.dup2 err_w Unix.stderr;
+         Unix.close out_w; Unix.close err_w;
+         Unix.chdir root;
+         Unix.execvp argv.(0) argv
+       with _ -> ());
+      (* Reached only if execvp failed: 127, as a shell would report for a
+         command that does not exist. *)
+      Unix._exit 127
   | pid ->
       Unix.close out_w; Unix.close err_w;
       Unix.set_nonblock out_r; Unix.set_nonblock err_r;
       let out = Buffer.create 256 and err = Buffer.create 256 in
       let deadline = Unix.gettimeofday () +. timeout_s in
       let open_out = ref true and open_err = ref true and status = ref None in
+      (* ECHILD means the child is already reaped, which is a fact about the
+         child being gone -- exactly what these calls are waiting to learn. It
+         is not an error to propagate, and propagating it aborted the whole of
+         Producer.run on a command that merely finished early. *)
+      let reap flags =
+        try Some (Unix.waitpid flags pid) with
+        | Unix.Unix_error (Unix.ECHILD, _, _) -> None
+        | Unix.Unix_error (Unix.EINTR, _, _) -> None
+      in
       let kill_and_wait () =
         (try Unix.kill pid Sys.sigkill with _ -> ());
-        ignore (Unix.waitpid [] pid)
+        ignore (reap [])
       in
       let timed_out = ref false in
       while (!open_out || !open_err || not (Option.is_some !status)) && not !timed_out do
@@ -52,9 +75,10 @@ let run_command ~root ~timeout_s command =
             else if fd = err_r && !open_err then
               if not (read_available err_r err) then open_err := false) ready;
           if not (Option.is_some !status) then
-            match Unix.waitpid [Unix.WNOHANG] pid with
-            | 0, _ -> ()
-            | _, s -> status := Some s
+            match reap [ Unix.WNOHANG ] with
+            | None -> status := Some (Unix.WEXITED 127)  (* already gone *)
+            | Some (0, _) -> ()
+            | Some (_, s) -> status := Some s
         end
       done;
       if !timed_out then begin
@@ -86,14 +110,22 @@ let run_command ~root ~timeout_s command =
       end
 
 let verify workspace specification =
-  let commands =
+  let accepts =
     Specification.requirements specification
-    |> List.filter_map (fun r -> Option.map (fun c -> (r.Production.id, c)) r.Production.acceptance)
+    |> List.filter_map (fun r ->
+           Option.map (fun a -> (r.Production.id, a)) r.Production.acceptance)
   in
   let results =
-    List.map (fun (_id, command) -> run_command ~root:workspace.Workspace.root ~timeout_s:30. command) commands
+    List.map
+      (fun (_id, a) ->
+        run_acceptance ~root:workspace.Workspace.root ~timeout_s:30. a)
+      accepts
   in
-  { results; passed = List.for_all (fun (r : result) -> r.passed) results }
+  (* An empty list makes List.for_all vacuously true. A specification that
+     declares no acceptance has not passed verification, it has not been
+     verified, and those must not report the same. *)
+  { results;
+    passed = accepts <> [] && List.for_all (fun (r : result) -> r.passed) results }
 
 module Verification = struct
   type nonrec t = t
