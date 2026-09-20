@@ -386,7 +386,9 @@ GROUP BY s.phase;
 -- Confidence counted only under the CURRENT soul. Compare against
 -- v_form_confidence to see how much of a form's record a prompt edit discards.
 CREATE VIEW v_form_confidence_scoped AS
-WITH cur AS (SELECT version FROM soul WHERE retired_at IS NULL LIMIT 1),
+-- v_soul_current, not `soul` directly: a version carrying only one
+-- signature is not the current soul and must not scope confidence.
+WITH cur AS (SELECT version FROM v_soul_current LIMIT 1),
 ranked AS (
   SELECT fr.form_sig,
          CASE WHEN fr.critic_passed = 0 OR fr.judge_refuted = 1 THEN 0.0

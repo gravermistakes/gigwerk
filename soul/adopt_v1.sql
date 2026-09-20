@@ -1,6 +1,8 @@
 -- Adopt soul v1. Version is the content hash: edit the body, get a new
 -- version, and every form returns to cold start.
-INSERT INTO soul (version, body, parent, adopted_at, adopted_by, rationale)
+INSERT INTO soul (version, body, parent, proposed_at, rationale,
+                  agent_signature, agent_signed_at,
+                  human_signature, human_signed_at)
 VALUES ('f4003163f950', '# GigWerk composer — soul v1
 
 You compose actors. You do not write tools, and you do not write behavior.
@@ -50,5 +52,10 @@ stops being read, and then none of this works.
 
 Say so, and stop. A composition proposed to avoid admitting uncertainty costs
 more than the admission. Declining is a valid move and is logged as one.
-', NULL, strftime('%s','now'), 'human',
-        'initial composer prompt');
+', NULL, strftime('%s','now'),
+        'initial composer prompt',
+        -- Both hands. v1 is the genesis version and is signed on adoption by
+        -- both parties at once; later versions are normally inserted with one
+        -- signature and countersigned by the other.
+        'composer',    strftime('%s','now'),
+        'gravermistakes', strftime('%s','now'));

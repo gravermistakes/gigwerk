@@ -17,10 +17,14 @@
 
 -- ------------------------------------------------------------------- soul
 -- One live version. Pinned into immediate, never contracted.
-INSERT OR IGNORE INTO soul (version, body, parent, adopted_at, adopted_by, rationale)
+INSERT OR IGNORE INTO soul (version, body, parent, proposed_at, rationale,
+                            agent_signature, agent_signed_at,
+                            human_signature, human_signed_at)
 VALUES ('v1',
         'You compose actors. You do not write tools or behavior. You are the only thing here that calls a model.',
-        NULL, strftime('%s','now'), 'human', 'initial adoption');
+        NULL, strftime('%s','now'), 'initial adoption',
+        'composer', strftime('%s','now'),
+        'gravermistakes', strftime('%s','now'));
 
 -- ---------------------------------------------------------------- rulings
 -- What the human has decided. Live rulings are pinned; a retired one is kept in

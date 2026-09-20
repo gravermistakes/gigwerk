@@ -352,9 +352,9 @@ let () =
     "# soul v1\n\nYou compose actors.\nYou do not write tools.\n\nA line with a | pipe."
   in
   (* Checked, not ignored: these inserts failing silently is exactly how the
-     bug under test hid. soul.adopted_by CHECKs = 'human' -- only a human
-     adopts a soul -- so 'test' is rejected, and an ignored failure would leave
-     an empty table and a green assertion about nothing. *)
+     bug under test hid -- an ignored failure leaves an empty table and a green
+     assertion about nothing. A soul takes BOTH signatures or v_soul_current
+     will not show it, so both are supplied here. *)
   let must_run label sql =
     let rc = Sys.command (Printf.sprintf "sqlite3 %s %s 1>&2"
       (Filename.quote cdb) (Filename.quote sql)) in
@@ -362,8 +362,9 @@ let () =
   in
   must_run "soul insert"
     (Printf.sprintf
-      "INSERT INTO soul (version, body, parent, adopted_at, adopted_by, rationale) \
-       VALUES ('tv1', '%s', NULL, 0, 'human', 'r');" body);
+      "INSERT INTO soul (version, body, parent, proposed_at, rationale, \
+        agent_signature, agent_signed_at, human_signature, human_signed_at) \
+       VALUES ('tv1', '%s', NULL, 0, 'r', 'composer', 0, 'human', 0);" body);
   must_run "ruling insert"
     "INSERT INTO mem_ruling (subject, predicate, object, rationale, at) \
      VALUES ('actors', 'may_not_hold', 'retrieve', 'r', 1);";

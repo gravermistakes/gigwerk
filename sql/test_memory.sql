@@ -5,7 +5,11 @@
 CREATE TEMP TABLE result (name TEXT, got TEXT, want TEXT);
 CREATE TEMP TABLE t (dummy INTEGER);
 
-INSERT INTO soul VALUES ('v1','be terse',NULL,1000,'human','initial',NULL);
+-- Genesis: both hands on it at once.
+INSERT INTO soul (version, body, parent, proposed_at, rationale,
+                  agent_signature, agent_signed_at,
+                  human_signature, human_signed_at)
+VALUES ('v1','be terse',NULL,1000,'initial','composer',1000,'human',1000);
 
 -- three claims about the same subject/predicate, from three memories
 INSERT INTO mem_record (subject,predicate,object,at)
@@ -96,10 +100,43 @@ INSERT INTO result
 SELECT 'confidence is full under the soul it was earned',
        CAST(n_under_current_soul AS TEXT), '15' FROM v_form_confidence_scoped WHERE form_sig='F';
 
-INSERT INTO soul VALUES ('v2','be terse and cite sources','v1',1500,'human','tightened',NULL);
+-- v2 arrives carrying ONE signature. That is a proposal, not a soul.
+INSERT INTO soul (version, body, parent, proposed_at, rationale,
+                  agent_signature, agent_signed_at)
+VALUES ('v2','be terse and cite sources','v1',1500,'tightened','composer',1500);
 INSERT INTO result
-SELECT 'adopting v2 retires v1',
+SELECT 'one signature does not adopt -- v1 is still the soul',
+       (SELECT version FROM v_soul_current), 'v1';
+INSERT INTO result
+SELECT 'the half-signed version is pending, awaiting the other party',
+       (SELECT awaiting FROM v_soul_pending WHERE version='v2'), 'human';
+INSERT INTO result
+SELECT 'and confidence is still scoped to v1, not reset by a proposal',
+       CAST((SELECT n_under_current_soul FROM v_form_confidence_scoped
+              WHERE form_sig='F') AS TEXT), '15';
+
+-- A signature cannot be taken back. This UPDATE is SUPPOSED to fail: the
+-- trigger aborts it and sqlite prints one error line to stderr. That line is
+-- the test working. Without .bail the script continues, and the assertion
+-- below is what actually checks the row survived intact.
+UPDATE soul SET agent_signature = NULL, agent_signed_at = NULL
+ WHERE version = 'v2';
+INSERT INTO result
+SELECT 'a signature survives an attempt to retract it',
+       (SELECT agent_signature FROM soul WHERE version='v2'), 'composer';
+
+-- The countersignature is what adopts it.
+UPDATE soul SET human_signature='human', human_signed_at=1600
+ WHERE version='v2';
+INSERT INTO result
+SELECT 'the second signature adopts v2 and retires v1',
        (SELECT version FROM v_soul_current), 'v2';
+INSERT INTO result
+SELECT 'v1 is retired at the countersigning time',
+       CAST((SELECT retired_at FROM soul WHERE version='v1') AS TEXT), '1600';
+INSERT INTO result
+SELECT 'nothing is left pending',
+       CAST((SELECT count(*) FROM v_soul_pending) AS TEXT), '0';
 INSERT INTO result
 SELECT 'a prompt edit resets the form to cold start',
        CAST((SELECT count(*) FROM v_form_confidence_scoped WHERE form_sig='F') AS TEXT),
