@@ -83,6 +83,16 @@ if run sql; then
   out=$(sqlite3 :memory: ".bail on" ".read sql/schema.sql" 2>&1 | grep -vE '^(wal|memory)$')
   [ -z "$out" ] && ok "sql/schema.sql" || { printf '  %s\n' "$out"; bad "sql/schema.sql"; }
 
+  # seed_memory.sql seeds the MEMORY path, not the booking path, so it does not
+  # load against schema.sql alone -- it names soul.sql and memory.sql as its own
+  # dependencies. Linting it under the short chain would report the missing
+  # tables as a fault in the file, which is the checker blaming the subject for
+  # its own setup. Given its real chain, sqlite's parser is the linter here too.
+  out=$(sqlite3 :memory: ".bail on" ".read sql/schema.sql" ".read sql/persist.sql" \
+        ".read sql/soul.sql" ".read sql/memory.sql" ".read sql/seed_memory.sql" 2>&1 \
+        | grep -vE '^(wal|memory)$')
+  [ -z "$out" ] && ok "sql/seed_memory.sql" || { printf '  %s\n' "$out"; bad "sql/seed_memory.sql"; }
+
   say "sql -- the CHECKs must actually reject (a check that cannot fail is not a check)"
   neg=$(sqlite3 :memory: ".read sql/schema.sql" ".read sql/seed.sql" \
     "INSERT INTO booking_verdict (entity_id,composition_sig,decision,reasons,decided_at,decided_by,attaches_to) VALUES (1,'x','maybe','r',0,'conditions','composition');" 2>&1 | grep -c "CHECK constraint failed")

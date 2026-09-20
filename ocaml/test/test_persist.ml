@@ -285,5 +285,43 @@ let () =
   check "span names survive"
     (List.exists (fun (id, _, name, _, _, _, _) -> id = a && name = "fs_read") rows);
 
+  (* =================================================================== *)
+  print_string "\npersist -> working: the working band is fed from SARCASM\n";
+  (* =================================================================== *)
+  fresh_db ();  (* isolate: load_store reads every doc in the db *)
+
+  let wm =
+    Reconstruct.doc ~id:"wm-1"
+      ~full:
+        "A long verbatim original. It has several sentences. See [[wm-2]] for \
+         the linked one. And still more filler after that."
+      "Digest: see [[wm-2]]."
+  in
+  Persist.save_doc wm;
+  let loaded = Persist.load_store () in
+  let items =
+    Hashtbl.fold
+      (fun _ (d : Reconstruct.doc) acc ->
+        let ready =
+          if Reconstruct.is_contracted d then Some d.Reconstruct.digest else None
+        in
+        Working.item ~salience:0.9 ?ready_digest:ready (Reconstruct.expand d) :: acc)
+      loaded []
+  in
+  (* immediate tiny, so the doc cannot stay verbatim and must spill *)
+  let ctx = Working.curate ~floor:1 ~immediate_ceiling:1 ~working_ceiling:10_000 items in
+  check "a persisted doc reaches the working band as a condensed slot"
+    (List.length ctx.Working.working = 1);
+  check "the working slot reuses SARCASM's stored digest, not a re-contraction"
+    (match ctx.Working.working with
+     | [ s ] -> s.Working.item.Working.text = "Digest: see [[wm-2]]."
+     | _ -> false);
+  check "and the verbatim original is still addressable through the slot"
+    (match ctx.Working.working with
+     | [ s ] ->
+         Working.expand s
+         = (match wm.Reconstruct.full with Some f -> f | None -> "")
+     | _ -> false);
+
   Printf.printf "\n%d passed, %d failed\n" !pass !fail;
   if !fail > 0 then exit 1

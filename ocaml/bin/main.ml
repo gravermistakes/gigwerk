@@ -20,6 +20,7 @@ let usage () =
      gigwerk review --gig N --held yes|partial|no [--critic pass|fail]\n\
     \              [--judge clear|refuted]\n\
      gigwerk forms [--db FILE]\n\
+     gigwerk context [--floor N] [--immediate N] [--working N] [--render] [--db FILE]\n\
      gigwerk caps [--entity NAME]\n\
      gigwerk doctor\n\
    \n\
@@ -321,6 +322,52 @@ let cmd_forms argv =
           sig_ n band (if caps = "" then "-" else caps) shape)
       rows
 
+(* ======================================================================= *)
+(* context: assemble the active working memory from the store.               *)
+(*                                                                           *)
+(* This is the wiring for MEMORY.md's band 2. It calls Context.assemble,     *)
+(* which is the first path in the running program to read SARCASM back        *)
+(* (Persist.load_store) and the first to invoke the condensing process on    *)
+(* live material. Bands default to 64k immediate / 128k working; the human    *)
+(* can shrink them to watch material spill and condense.                     *)
+(* ======================================================================= *)
+
+let cmd_context argv =
+  Store.db_path := arg "--db" !Store.db_path argv;
+  let ctx =
+    Context.assemble
+      ~floor:(int_arg "--floor" 64_000 argv)
+      ~immediate_ceiling:(int_arg "--immediate" 64_000 argv)
+      ~working_ceiling:(int_arg "--working" 128_000 argv)
+      ()
+  in
+  print_string (Working.context_report ctx);
+  print_newline ();
+  if List.mem "--render" argv then begin
+    print_newline ();
+    print_string (Working.render ctx);
+    print_newline ()
+  end
+  else begin
+    (* One line per slot: the shape, not the dump. A digest's first line, with
+       newlines flattened so a single slot cannot spill across rows. *)
+    let preview s =
+      let s = String.map (fun c -> if c = '\n' then ' ' else c) s in
+      if String.length s <= 64 then s else String.sub s 0 61 ^ "..."
+    in
+    List.iter
+      (fun sl ->
+        Printf.printf "  immediate %6d tok        %s\n"
+          sl.Working.item.Working.tokens (preview sl.Working.item.Working.text))
+      ctx.Working.immediate;
+    List.iter
+      (fun sl ->
+        Printf.printf "  working   %6d tok r=%.2f %s\n"
+          sl.Working.item.Working.tokens sl.Working.ratio
+          (preview sl.Working.item.Working.text))
+      ctx.Working.working
+  end
+
 let cmd_caps argv =
   Store.db_path := arg "--db" !Store.db_path argv;
   let entity = arg "--entity" "" argv in
@@ -347,6 +394,7 @@ let () =
   | _ :: "run" :: rest -> cmd_run rest
   | _ :: "review" :: rest -> cmd_review rest
   | _ :: "forms" :: rest -> cmd_forms rest
+  | _ :: "context" :: rest -> cmd_context rest
   | _ :: "caps" :: rest -> cmd_caps rest
   | _ :: "doctor" :: _ -> cmd_doctor ()
   | _ -> usage ()
