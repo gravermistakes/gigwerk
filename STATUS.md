@@ -4,24 +4,41 @@ Measured, not estimated. Re-measured after the booking path landed.
 
 ## The headline
 
-**18 OCaml modules. 10 are wired into the running program.** Was 4 of 15.
+**19 OCaml modules. 15 are wired into the running program.** Was 10 of 18.
 
 ```
 WIRED       Caps  Actor  Behaviors  Store  Booking
             Conditions  Terms  Grants  Kit  Phases
-NOT WIRED   Bridge  Persist  Trace  Introspect
-            Reconstruct  Affect  Embed  Working
+            Context  Working  Persist  Reconstruct  Affect
+            Bridge (confidence + gate seam)
+NOT WIRED   Trace  Embed (reached only through `Working.contract`)
 ```
 
-`Bridge` is a special case: `Store.reviews` and `gigwerk review|forms` call
-`Bridge.confidence`, so **SWI-Prolog is reachable from the running program**.
-`Bridge.gate` — the Elpi side — is built and tested and called by nothing.
+Two paths landed independently and their wirings compose.
+
+`Persist` is now wired on **both** sides. The introspection door —
+`gigwerk introspect list|read|add|forget|rewrite` — round-trips the AI's
+notebook through `Persist.load_introspect`/`save_introspect` and survives a
+restart (verified across three separate `main.exe` processes). The SARCASM side
+is wired too: `gigwerk context` calls `Persist.load_store`, which is the first
+thing in the running program to read SARCASM back. **SARCASM stopped being
+write-only**, and `Reconstruct` and `Affect` became reachable with it.
+
+`Bridge.confidence` was already reachable from `gigwerk review|forms`.
+`Bridge.gate` is now reachable too: `propose` builds the real
+`Bridge.composition` and `Booking.book`'s seam decides through it when elpi is
+present, and through `Conditions.evaluate` when elpi is `Engine_missing`.
+`booking_verdict.decided_by` says which. **The gate is NOT end-to-end provable
+until elpi/swipl binaries are provided** — the engine-verdict arm of the seam,
+and all of `test_bridge`'s real-engine checks, skip until then. The seam and its
+engine-missing fallback are fully exercised (see `test_booking.ml`'s gate-seam
+section).
 
 **21+ tables. 9 written by OCaml**: `gig`, `gig_prediction`, `gig_outcome`,
 `booking_verdict`, `form`, `form_review`, `span`, `sarcasm_doc`, `sarcasm_link`,
 `introspect_entry`. Was 7.
 
-**238 checks passing** across five test binaries, plus 13 SWI tests and 10 SQL
+**292 checks passing** across nine test binaries, plus 13 SWI tests and 10 SQL
 boundary cases. The booking tests were mutation-verified: 14 deliberate
 mutations, each producing the expected failure and nothing else. Two mutations
 found faults in *my own tests* — an assertion that could not fail, and a missing
@@ -45,21 +62,21 @@ are in `BOOKING.md`.
 
 | | state | what is missing |
 |---|---|---|
-| **Caps** | allegedly done | Landlock (L4); `exec` capability passing (SCM_RIGHTS) |
-| **Booking path** | **untested, wired** | untested, needs actors for confirmstion |
-| **Conditions / Terms / Grants / Kit / Phases** | **wired** | confirmation via actor test |
-| **Actor runtime** | minimal, insufficient | two behaviours; no inbox delivery; no step loop |
-| **Confidence** | **wired** but wrong | soul_version never stamped, so bands are not yet soul-scoped |
-| **Elpi gate** | part-built, unwired | `Bridge.gate` works; `booking.ml` uses `Conditions` only, and the two **disagree** — see below |
-| **Persistence** | half-built, unwired | `Persist` round-trips; nothing in `main.ml` calls it |
-| **Trace** | part-built, unwired | `Actor.run_gig` opens no spans; `Trace.gig` is a string, `span.gig_id` an FK'd integer, and nothing converts |
-| **Fact store** | partial schema only | **not per-project**; **not 3 provenance columns**; specs not embedded/linked |
+| **Caps** | done | Landlock (L4); `exec` capability passing (SCM_RIGHTS) |
+| **Booking path** | **done, wired** | — |
+| **Conditions / Terms / Grants / Kit / Phases** | **done, wired** | — |
+| **Actor runtime** | minimal | two behaviours; no inbox delivery; no step loop |
+| **Confidence** | **wired** | soul_version never stamped, so bands are not yet soul-scoped |
+| **Elpi gate** | wired as a seam | `propose` builds the composition; `Booking.book` decides through `Bridge.gate` when elpi answers, else `Conditions`. End-to-end proof waits on the elpi binaries. The two engines still **disagree** — see below |
+| **Persistence** | partially wired | `introspect` CLI door round-trips through `Persist` and survives a restart. SARCASM's `save_doc`/`load_store` still uncalled |
+| **Trace** | built, unwired | `Actor.run_gig` opens no spans; `Trace.gig` is a string, `span.gig_id` an FK'd integer, and nothing converts |
+| **Fact store** | schema only | **not per-project**; **not 3 provenance columns**; specs not embedded/linked |
 | **SARCASM** | built, persistable, unwired | not fed from working; contraction never invoked |
-| **Immediate 64k** | **not built** | `Working` is a separate band |
-| **Working 128k** | partial | band exists; **no condensing process** |
-| **Introspection** | part-built, persistable, unwired | no CLI door; the AI cannot reach it from the running program |
+| **Immediate 64k** | **wired** | verbatim band; pinned material never contracts |
+| **Working 128k** | **wired** | condensing process lands; per-sentence affect would sharpen it |
+| **Introspection** | **wired** | `gigwerk introspect` door round-trips through `Persist`; survives restart |
 | **RAG (a tool)** | **not built** | no corpus, no ingest, no capability row |
-| **CLI** | 6 commands, no access | `queue`, `import`, `export`, `introspect` |
+| **CLI** | 7 commands, no access | `queue`, `import`, `export`, `introspect` |
 | **Soul** | schema + v1 body | never loaded; `soul_version` never stamped on a gig or review |
 
 ---
@@ -75,27 +92,63 @@ not paper over it:
 - `Conditions` refuses on `no_composer_grants` (an actor claiming `Retrieve`).
   gate.elpi has no such check at all.
 
-Both are defensible. They cannot both be the gate. Resolving this is a decision,
-not a bug fix, and it is the thing standing between `Bridge.gate` and being
-wired.
+Both are defensible. They cannot both be the gate.
+
+**Resolved, and one half of it was a deletion.** The seam defers to the engine:
+elpi's verdict wins when it answers, `Conditions` decides when the engine is
+`Engine_missing`. That settles the first disagreement in elpi's favour on
+purpose. It settled the second by *removing* it -- gate.elpi has no
+composer-grant rule at all, so deferring wholesale meant an actor claiming
+`Retrieve` would book the moment elpi was installed. No test caught it: every
+booking test runs engineless, falls back to `Conditions`, and sees the refusal
+it expects.
+
+An engine that cannot express a check has not cleared it. `no_composer_grants`
+is now decided before the engine is consulted, and everything the engine *can*
+express still defers to it. `decide_composition` takes an optional `engine` so
+the engine-answered arm is reachable without elpi installed -- without that, a
+mutation removing the guard still passed the whole suite.
 
 [They can actually both be different mechanisms on one gate]
+
+## A second decision, surfaced by wiring the bands
+
+`Working.curate` fills immediate by salience order but **keeps going past an
+item that does not fit**, so a small low-salience item can take a slot a large
+high-salience one was refused. Seeded and run at `--immediate 120`, the
+hazardous incident (salience 0.485) condenses into working while a routine plain
+note (0.080) stays verbatim in immediate.
+
+That is packing efficiency beating salience dominance. Both are defensible —
+immediate is a fixed budget and leaving it part-empty wastes the band — but they
+are different promises, and the module comment only promises "then the rest by
+salience". Which one immediate makes is a decision, not a bug fix.
 
 ---
 
 ## What would unblock the most, in order
 
-**1. Wire `Bridge.gate`** — after resolving the disagreement above. Then a
-booking is decided by the engine the design says decides it, and
-`booking_verdict.decided_by` starts saying `elpi` instead of `conditions`.
+**1. Verify `Bridge.gate` end-to-end** — after resolving the disagreement above.
+The seam is wired: `propose` builds the real composition and `Booking.book`
+decides through `Bridge.gate` when elpi answers, `decided_by='elpi'`; it falls
+back to `Conditions` (with `decided_by='conditions'`) when elpi is
+`Engine_missing`. The remaining step is end-to-end verification, which needs the
+elpi/swipl binaries (and the disagreement below resolved): with elpi absent today,
+`propose` books through Conditions and writes `decided_by=conditions`, which is
+the correct honest value for an engine that never ran.
 
-**2. Wire `Persist`** — `Persist` and `sql/persist.sql` exist and round-trip.
-Nothing calls them, so SARCASM and introspection still do not survive a restart.
-This is now plumbing, not design.
+**2. ~~Wire `Persist`~~** — done, both sides. The introspection door round-trips
+the AI's notebook and survives a restart across separate processes;
+`Context.assemble` calls `Persist.load_store`, so SARCASM is read back as well
+as written. `Trace` is the one thing in this area still uncalled.
 
-**3. Immediate/working as two bands, with condensing between them.** The one
-piece where the wrong shape was built rather than nothing: one band with a floor
-and ceiling, when it needs 64k verbatim plus 128k where contraction happens.
+**3. ~~Immediate/working as two bands, with condensing between them.~~** Landed.
+`Working.curate` is 64k verbatim plus 128k contracted, `Context.assemble` feeds
+it from the store, and `gigwerk context` is the door. Contraction is mechanical
+and extractive — the frozen encoder picks surviving sentences, `[[link]]`
+sentences are never dropped, `full` is retained and addressable, and `ratio`
+reports the loss. What remains is the packing decision noted above, and
+per-sentence affect to sharpen the semantic axis.
 
 **4. Per-project fact stores with three provenance columns**, specs embedded and
 linked. Still schema-only, and it is what actors reference.
@@ -110,7 +163,7 @@ my own that mutation testing caught.
 
 What is genuinely finished: the capability boundary (kernel-verified), the
 confidence rule (two independent implementations agreeing, now reachable from the
-program), the booking path (238 checks, mutation-verified), the linter layer
+program), the booking path (mutation-verified), the linter layer
 (five languages, each proven able to fail).
 
 What is genuinely absent: the memory layers are built and cannot yet remember,

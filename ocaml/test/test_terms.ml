@@ -310,6 +310,58 @@ let () =
   check "below the floor reports COLD rather than passing quietly"
     (cold.Working.cold && cold.Working.total < 64_000);
 
+  print_string "\nworking memory -- two bands, condensing\n";
+  let para tag =
+    String.concat " "
+      (List.init 200 (fun i -> Printf.sprintf "%s sentence %d is here." tag i))
+  in
+  let long = para "alpha" in
+  check "contraction reduces the token count"
+    (Working.estimate (Working.contract ~budget:40 long) < Working.estimate long);
+  check "contraction is a no-op below budget"
+    (Working.contract ~budget:10_000 "short note" = "short note");
+  let contains hay needle =
+    let nh = String.length needle and n = String.length hay in
+    let rec go i = i + nh <= n && (String.sub hay i nh = needle || go (i + 1)) in
+    go 0
+  in
+  check "contraction keeps a [[link]] sentence even at budget 1"
+    (contains
+       (Working.contract ~budget:1
+          "filler one. filler two. see [[the-form]] for why. filler three.")
+       "[[the-form]]");
+  let blob s tag = Working.item ~salience:s (para tag) in
+  let ctx =
+    Working.curate ~floor:1 ~immediate_ceiling:1500 ~working_ceiling:100_000
+      [ Working.item ~pinned:true ~salience:1.0 "SOUL";
+        blob 0.9 "hot"; blob 0.5 "warm"; blob 0.1 "cool" ]
+  in
+  check "immediate overflow is condensed into working, not evicted"
+    (ctx.Working.condensed > 0 && ctx.Working.evicted = 0);
+  check "pinned material stays verbatim in immediate"
+    (List.exists
+       (fun s -> s.Working.item.Working.pinned && not s.Working.contracted)
+       ctx.Working.immediate);
+  check "a condensed slot keeps its full text addressable"
+    (List.for_all
+       (fun s ->
+         (not s.Working.contracted)
+         || String.length (Working.expand s)
+            > String.length s.Working.item.Working.text)
+       ctx.Working.working);
+  check "condensing reports its loss -- contraction, not a free lunch"
+    (List.for_all
+       (fun s -> (not s.Working.contracted) || s.Working.ratio < 1.0)
+       ctx.Working.working);
+  let tight =
+    Working.curate ~floor:1 ~immediate_ceiling:1500 ~working_ceiling:50
+      [ blob 0.9 "hot"; blob 0.5 "warm"; blob 0.1 "cool" ]
+  in
+  check "eviction returns only once the working band is also full"
+    (tight.Working.evicted > 0);
+  check "below the immediate floor still reports COLD"
+    (Working.curate ~floor:64_000 [ Working.item ~salience:0.5 "tiny" ]).Working.cold;
+
   Printf.printf "\ntotal: %d passed, %d failed\n" !pass !fail;
   if !fail > 0 then exit 1
 

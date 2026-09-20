@@ -382,5 +382,118 @@ let () =
   check "trailing slashes do not change the answer"
     (n ~envelope:"/srv/work/" ~scope:"/srv/work/in/");
 
+  print_string "\nthe gate seam -- who decided, and the engine-missing fallback\n";
+
+  (* The seam is: `book` decides the composition through Bridge.gate when a gate
+     is supplied and elpi answers (decided_by='elpi'), through Conditions when no
+     gate is supplied, and through Conditions again when elpi is absent
+     (Engine_missing) -- which is the world this test binary runs in today, and
+     the reason the 58 tests above must stay green regardless of the gate.
+
+     These tests pin exactly that contract without needing elpi installed. *)
+  let has_elpi = Sys.command "command -v elpi >/dev/null 2>&1" = 0 in
+
+  (* No gate supplied -> Conditions, decided_by='conditions'. *)
+  check "no gate: booked verdict is decided_by=conditions"
+    (match Booking.book ~now (req ()) with
+     | Ok b -> b.Booking.decided_by = "conditions"
+     | Error _ -> false);
+  check "no gate: a structural refusal is decided_by=conditions"
+    (match Booking.book ~now (req ~evidence:{ Conditions.clean with Conditions.grants_narrow = false } ()) with
+     | Error (Booking.Refused { decided_by; _ }) -> decided_by = "conditions"
+     | _ -> false);
+
+  (* A gate that reads the same catalog/flags as test_bridge.ml's `good`, against
+     the path that is reachable WITHOUT elpi: elpi missing -> Engine_missing ->
+     fall back to Conditions -> decided_by='conditions'. This proves the fallback
+     is not a hard refuse -- which is the whole point of the seam. *)
+  let cap_cat =
+    [ Bridge.{ name = "fs_read"; ctor = "Caps.fs_read"; envelope = "/srv/gigwerk";
+               side_effecting = false; requires_booking = false } ]
+  in
+  let gate = Some Booking.{ composition =
+      Bridge.{ clean_composition with entity = "e";
+                claims = [ ("fs_read", "/srv/gigwerk/work") ] };
+      capabilities = cap_cat }
+  in
+  check "a gate whose elpi is missing falls back to Conditions (not hard-refuse) and books"
+    (match Booking.book ~gate ~now (req ()) with
+     | Ok b -> b.Booking.decided_by = "conditions"
+     | Error _ -> false);
+  check "...and a structural refusal under that same gate is still decided_by=conditions"
+    (match Booking.book ~gate ~now (req ~evidence:{ Conditions.clean with Conditions.grants_narrow = false } ()) with
+     | Error (Booking.Refused { decided_by; _ }) -> decided_by = "conditions"
+     | _ -> false);
+
+  (* When elpi IS installed, the engine's own classification must win (not
+     Conditions), and decided_by='elpi. This is gated on the binary so the suite
+     stays green either way -- it is the one check that needs the real engine. *)
+  if has_elpi then begin
+    let bad = Some Booking.{ composition =
+        Bridge.{ clean_composition with entity = "e";
+                  claims = [ ("fs_read", "/srv/gigwerk-evil") ] };
+        capabilities = cap_cat }
+    in
+    check "an elpi widen-verdict wins and is decided_by=elpi"
+      (match Booking.book ~gate:bad ~now (req ()) with
+       | Error (Booking.Refused { decided_by; reasons; _ }) ->
+           decided_by = "elpi"
+           && List.exists (fun r -> r = "scope widens envelope for fs_read") reasons
+       | _ -> false)
+  end else
+    print_string "  SKIP  elpi is not installed; the engine-verdict arm is not exercised\n";
+
+  (* A check the engine does not have is not a check the engine has cleared.
+     gate.elpi has no composer-grant rule, so deferring wholesale would let an
+     actor claiming Retrieve book the moment elpi is installed. This must refuse
+     with a gate supplied, and it must refuse for the SAME reason and by the
+     same decider whether or not elpi is present -- so it is asserted outside
+     the has_elpi branch on purpose. *)
+  let claims_composer_grant =
+    req ~evidence:{ Conditions.clean with Conditions.no_composer_grants = false } ()
+  in
+  check "a composer-only grant is refused even with a gate supplied"
+    (match Booking.book ~gate ~now claims_composer_grant with
+     | Error (Booking.Refused { reasons; decided_by; attaches }) ->
+         decided_by = "conditions"
+         && attaches = Conditions.Composition
+         && List.mem "actor_claims_composer_only_grant" reasons
+     | _ -> false);
+  (* THE ARM THAT MATTERS, and it needs a stub engine to reach.
+     Engineless, Bridge.gate returns Engine_missing and the seam falls back to
+     Conditions -- which refuses composer grants anyway, so every engineless
+     test passes with or without the guard. A stub that ANSWERS, and answers
+     Book, is the only way to ask the real question: when the engine says yes
+     to a composition gate.elpi has no rule against, does the composer-grant
+     refusal still stand? *)
+  let engine_says_book ~capabilities:_ _ =
+    Ok Bridge.{ decision = Book; reasons = [] }
+  in
+  let composer_evidence =
+    { Conditions.clean with Conditions.no_composer_grants = false }
+  in
+  check "an engine answering Book does NOT clear a composer-only grant"
+    (match
+       Booking.decide_composition ~engine:engine_says_book
+         (Some Booking.{ composition =
+            Bridge.{ clean_composition with entity = "e"; claims = [] };
+            capabilities = cap_cat })
+         composer_evidence
+     with
+     | (Conditions.Refuse, reasons, _, decided_by) ->
+         decided_by = "conditions"
+         && List.mem "actor_claims_composer_only_grant" reasons
+     | _ -> false);
+  check "...while the same engine still books a composition with clean grants"
+    (match
+       Booking.decide_composition ~engine:engine_says_book
+         (Some Booking.{ composition =
+            Bridge.{ clean_composition with entity = "e"; claims = [] };
+            capabilities = cap_cat })
+         Conditions.clean
+     with
+     | (Conditions.Book, _, _, decided_by) -> decided_by = "elpi"
+     | _ -> false);
+
   Printf.printf "\ntotal: %d passed, %d failed\n" !pass !fail;
   if !fail > 0 then exit 1

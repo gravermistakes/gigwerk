@@ -19,6 +19,29 @@ let query sql =
          let l = String.trim l in
          if l = "" then None else Some (String.split_on_char '|' l))
 
+(* Single value that MAY SPAN LINES. `query` splits output on '\n' into rows and
+   on '|' into columns, which is right for tabular results and silently wrong
+   for one text column holding a document: a 50-line soul body comes back as 50
+   one-column "rows" and every caller matching [[x]] sees no match at all. So a
+   scalar read keeps the output whole. *)
+let query_scalar sql =
+  let out =
+    sh (Printf.sprintf "sqlite3 -noheader %s %s"
+          (Filename.quote !db_path) (Filename.quote sql))
+  in
+  let out = String.trim out in
+  if out = "" then None else Some out
+
+(* One row per line, NOT split on '|'. For a single-column query whose values are
+   single-line but may legitimately contain a pipe. *)
+let query_column sql =
+  sh (Printf.sprintf "sqlite3 -noheader %s %s"
+        (Filename.quote !db_path) (Filename.quote sql))
+  |> String.split_on_char '\n'
+  |> List.filter_map (fun l ->
+         let l = String.trim l in
+         if l = "" then None else Some l)
+
 let exec sql =
   ignore (sh (Printf.sprintf "sqlite3 %s %s 2>&1"
                 (Filename.quote !db_path) (Filename.quote sql)))
@@ -59,6 +82,21 @@ let claims ~entity =
      JOIN entity e ON e.id = cc.entity_id WHERE e.name = '%s' ORDER BY 1"
     (esc entity))
   |> List.filter_map (function [ n; s ] -> Some (n, s) | _ -> None)
+
+(* The global capability registry, in exactly the shape Bridge.gate wants. This
+   is the fixed catalog a composition's claims are checked against (see the
+   comment on Bridge.capability); it is NOT the claims themselves, and is loaded
+   once so the gate can validate a claim against a capability that exists. *)
+let capabilities () : Bridge.capability list =
+  query "SELECT name, ctor, envelope, side_effecting, requires_booking \
+         FROM capability ORDER BY name"
+  |> List.filter_map (function
+       | [ n; ctor; env; se; rb ] ->
+           Some Bridge.{ name = String.trim n; ctor = String.trim ctor;
+                          envelope = String.trim env;
+                          side_effecting = String.trim se = "1";
+                          requires_booking = String.trim rb = "1" }
+       | _ -> None)
 
 let policies ~entity =
   query (Printf.sprintf
