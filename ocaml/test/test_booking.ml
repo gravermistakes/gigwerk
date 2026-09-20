@@ -443,5 +443,57 @@ let () =
   end else
     print_string "  SKIP  elpi is not installed; the engine-verdict arm is not exercised\n";
 
+  (* A check the engine does not have is not a check the engine has cleared.
+     gate.elpi has no composer-grant rule, so deferring wholesale would let an
+     actor claiming Retrieve book the moment elpi is installed. This must refuse
+     with a gate supplied, and it must refuse for the SAME reason and by the
+     same decider whether or not elpi is present -- so it is asserted outside
+     the has_elpi branch on purpose. *)
+  let claims_composer_grant =
+    req ~evidence:{ Conditions.clean with Conditions.no_composer_grants = false } ()
+  in
+  check "a composer-only grant is refused even with a gate supplied"
+    (match Booking.book ~gate ~now claims_composer_grant with
+     | Error (Booking.Refused { reasons; decided_by; attaches }) ->
+         decided_by = "conditions"
+         && attaches = Conditions.Composition
+         && List.mem "actor_claims_composer_only_grant" reasons
+     | _ -> false);
+  (* THE ARM THAT MATTERS, and it needs a stub engine to reach.
+     Engineless, Bridge.gate returns Engine_missing and the seam falls back to
+     Conditions -- which refuses composer grants anyway, so every engineless
+     test passes with or without the guard. A stub that ANSWERS, and answers
+     Book, is the only way to ask the real question: when the engine says yes
+     to a composition gate.elpi has no rule against, does the composer-grant
+     refusal still stand? *)
+  let engine_says_book ~capabilities:_ _ =
+    Ok Bridge.{ decision = Book; reasons = [] }
+  in
+  let composer_evidence =
+    { Conditions.clean with Conditions.no_composer_grants = false }
+  in
+  check "an engine answering Book does NOT clear a composer-only grant"
+    (match
+       Booking.decide_composition ~engine:engine_says_book
+         (Some Booking.{ composition =
+            Bridge.{ clean_composition with entity = "e"; claims = [] };
+            capabilities = cap_cat })
+         composer_evidence
+     with
+     | (Conditions.Refuse, reasons, _, decided_by) ->
+         decided_by = "conditions"
+         && List.mem "actor_claims_composer_only_grant" reasons
+     | _ -> false);
+  check "...while the same engine still books a composition with clean grants"
+    (match
+       Booking.decide_composition ~engine:engine_says_book
+         (Some Booking.{ composition =
+            Bridge.{ clean_composition with entity = "e"; claims = [] };
+            capabilities = cap_cat })
+         Conditions.clean
+     with
+     | (Conditions.Book, _, _, decided_by) -> decided_by = "elpi"
+     | _ -> false);
+
   Printf.printf "\ntotal: %d passed, %d failed\n" !pass !fail;
   if !fail > 0 then exit 1

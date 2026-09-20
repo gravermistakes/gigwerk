@@ -38,7 +38,7 @@ section).
 `booking_verdict`, `form`, `form_review`, `span`, `sarcasm_doc`, `sarcasm_link`,
 `introspect_entry`. Was 7.
 
-**305 checks passing** across five test binaries, plus 13 SWI tests and 10 SQL
+**339 checks passing** across five test binaries, plus 13 SWI tests and 10 SQL
 boundary cases. The booking tests were mutation-verified: 14 deliberate
 mutations, each producing the expected failure and nothing else. Two mutations
 found faults in *my own tests* — an assertion that could not fail, and a missing
@@ -92,9 +92,22 @@ not paper over it:
 - `Conditions` refuses on `no_composer_grants` (an actor claiming `Retrieve`).
   gate.elpi has no such check at all.
 
-Both are defensible. They cannot both be the gate. Resolving this is a decision,
-not a bug fix, and it is the thing standing between `Bridge.gate` and being
-wired.
+Both are defensible. They cannot both be the gate.
+
+**Resolved, and one half of it was a deletion.** The seam defers to the engine:
+elpi's verdict wins when it answers, `Conditions` decides when the engine is
+`Engine_missing`. That settles the first disagreement in elpi's favour on
+purpose. It settled the second by *removing* it -- gate.elpi has no
+composer-grant rule at all, so deferring wholesale meant an actor claiming
+`Retrieve` would book the moment elpi was installed. No test caught it: every
+booking test runs engineless, falls back to `Conditions`, and sees the refusal
+it expects.
+
+An engine that cannot express a check has not cleared it. `no_composer_grants`
+is now decided before the engine is consulted, and everything the engine *can*
+express still defers to it. `decide_composition` takes an optional `engine` so
+the engine-answered arm is reachable without elpi installed -- without that, a
+mutation removing the guard still passed the whole suite.
 
 [They can actually both be different mechanisms on one gate]
 

@@ -241,15 +241,45 @@ type composition_gate = {
 
 (* The composition decision, given a gate (or none). Returns the verdict,
    reasons, and decided_by. Raises nothing. *)
-let decide_composition (gate : composition_gate option)
-    (evidence : Conditions.evidence) =
+(* `engine` defaults to the real Bridge.gate and exists so the ENGINE-ANSWERED
+   arm can be exercised without elpi installed. Without it that arm is
+   unreachable in tests -- every engineless call returns Engine_missing and
+   falls back to Conditions, which masks any difference between deferring to the
+   engine and not. That masking is exactly how the composer-grant hole below
+   stayed invisible: a mutation removing the guard still passed the suite. *)
+let decide_composition
+    ?(engine :
+       capabilities:Bridge.capability list ->
+       Bridge.composition ->
+       (Bridge.gate_result, Bridge.engine_error) result =
+       fun ~capabilities c -> Bridge.gate ~capabilities c)
+    (gate : composition_gate option) (evidence : Conditions.evidence) =
   match gate with
   | None ->
       let r = Conditions.evaluate evidence in
       (r.Conditions.verdict, r.Conditions.reasons, r.Conditions.attaches_to,
        "conditions")
+  (* STRUCTURAL, AND NOT THE ENGINE'S TO CLEAR.
+   *
+   * gate.elpi has no composer-grant check at all -- not a laxer one, none. So
+   * deferring wholesale to the engine does not resolve that disagreement, it
+   * deletes the check: the moment elpi is installed and answering, an actor
+   * claiming Retrieve books. No booking test catches it, because they all run
+   * with no engine.
+   *
+   * This is the refusal DIVISION.md says the rest rests on -- Refuse and not
+   * Queue, "because no human decision makes a nondeterministic actor
+   * deterministic". An engine that cannot express a check has not cleared it,
+   * and silence is not a verdict. So this one is decided before the engine is
+   * consulted, which is what "Conditions as stage 1" meant.
+   *
+   * Everything else still defers: the engine remains the policy authority for
+   * every check it can actually express. *)
+  | Some _ when not evidence.Conditions.no_composer_grants ->
+      (Conditions.Refuse, [ "actor_claims_composer_only_grant" ],
+       Conditions.Composition, "conditions")
   | Some { composition; capabilities } -> (
-      match Bridge.gate ~capabilities composition with
+      match engine ~capabilities composition with
       | Ok { decision; reasons } ->
           (* The engine answered. Its classification wins; Conditions is the
              approximation and the bridge defers to the engine. Map the engine's
