@@ -93,6 +93,33 @@ if run sql; then
         | grep -vE '^(wal|memory)$')
   [ -z "$out" ] && ok "sql/seed_memory.sql" || { printf '  %s\n' "$out"; bad "sql/seed_memory.sql"; }
 
+  # The soul files were not linted at all. adopt_v1 is the genesis version;
+  # propose_v2 is a PROPOSAL carrying one signature. Both must parse, and the
+  # proposal must land PENDING rather than current -- a half-signed soul that
+  # somehow became current would be the co-signature rule failing quietly.
+  out=$(sqlite3 :memory: ".bail on" ".read sql/schema.sql" ".read sql/soul.sql" \
+        ".read soul/adopt_v1.sql" 2>&1 | grep -vE '^(wal|memory)$')
+  [ -z "$out" ] && ok "soul/adopt_v1.sql" || { printf '  %s\n' "$out"; bad "soul/adopt_v1.sql"; }
+
+  out=$(sqlite3 :memory: ".bail on" ".read sql/schema.sql" ".read sql/soul.sql" \
+        ".read soul/adopt_v1.sql" ".read soul/propose_v2.sql" 2>&1 \
+        | grep -vE '^(wal|memory)$')
+  [ -z "$out" ] && ok "soul/propose_v2.sql" || { printf '  %s\n' "$out"; bad "soul/propose_v2.sql"; }
+
+  # Asserts WHICH version is live, not just how many. A forged second
+  # signature would keep the count at 1 while silently swapping the soul.
+  souls() {
+    sqlite3 :memory: ".read sql/schema.sql" ".read sql/soul.sql" \
+      ".read soul/adopt_v1.sql" ".read soul/propose_v2.sql" "$1" 2>/dev/null \
+      | grep -vE '^(wal|memory)$'
+  }
+  cur=$(souls "SELECT version FROM v_soul_current;")
+  pend=$(souls "SELECT version || ' awaiting ' || awaiting FROM v_soul_pending;")
+  v2=$(souls "SELECT version FROM soul WHERE parent IS NOT NULL;")
+  [ "$cur" = "f4003163f950" ] && [ "$pend" = "$v2 awaiting human" ] \
+    && ok "a proposed soul stays pending; v1 is still the live soul" \
+    || bad "proposal state wrong: current='$cur' pending='$pend'"
+
   say "sql -- the CHECKs must actually reject (a check that cannot fail is not a check)"
   neg=$(sqlite3 :memory: ".read sql/schema.sql" ".read sql/seed.sql" \
     "INSERT INTO booking_verdict (entity_id,composition_sig,decision,reasons,decided_at,decided_by,attaches_to) VALUES (1,'x','maybe','r',0,'conditions','composition');" 2>&1 | grep -c "CHECK constraint failed")
