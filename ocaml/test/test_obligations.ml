@@ -16,27 +16,27 @@ let () =
   check "unknown action is not representable"
     (Grants.action_of_string "sudo" = None);
 
-  print_string "\nterms\n";
-  let t = Terms.issue ~id:"T1" ~grants:g ~budget:3 ~expires_at:1000L in
+  print_string "\nobligations\n";
+  let t = Obligations.issue ~id:"T1" ~grants:g ~budget:3 ~expires_at:1000L in
   let is_ok = function Ok _ -> true | Error _ -> false in
-  check "granted action inside budget"  (is_ok (Terms.check t ~now:1L ~action:Grants.Read));
+  check "granted action inside budget"  (is_ok (Obligations.check t ~now:1L ~action:Grants.Read));
   check "ungranted action refused"
-    (match Terms.check t ~now:1L ~action:Grants.Write with
-     | Error (Terms.Not_granted Grants.Write) -> true | _ -> false);
+    (match Obligations.check t ~now:1L ~action:Grants.Write with
+     | Error (Obligations.Not_granted Grants.Write) -> true | _ -> false);
   check "expiry beats budget in reporting"
-    (match Terms.check t ~now:2000L ~action:Grants.Read with
-     | Error (Terms.Expired _) -> true | _ -> false);
-  let t3 = Terms.consume (Terms.consume (Terms.consume t)) in
+    (match Obligations.check t ~now:2000L ~action:Grants.Read with
+     | Error (Obligations.Expired _) -> true | _ -> false);
+  let t3 = Obligations.consume (Obligations.consume (Obligations.consume t)) in
   check "budget exhausts"
-    (match Terms.check t3 ~now:1L ~action:Grants.Read with
-     | Error (Terms.Exhausted { budget = 3 }) -> true | _ -> false);
-  check "remaining counts down" (Terms.remaining t = 3 && Terms.remaining t3 = 0);
+    (match Obligations.check t3 ~now:1L ~action:Grants.Read with
+     | Error (Obligations.Exhausted { budget = 3 }) -> true | _ -> false);
+  check "remaining counts down" (Obligations.remaining t = 3 && Obligations.remaining t3 = 0);
   check "spend checks and consumes atomically"
-    (match Terms.spend t ~now:1L ~action:Grants.Read with
-     | Ok t' -> Terms.remaining t' = 2 | Error _ -> false);
+    (match Obligations.spend t ~now:1L ~action:Grants.Read with
+     | Ok t' -> Obligations.remaining t' = 2 | Error _ -> false);
   check "spend on an ungranted action does not consume"
-    (match Terms.spend t ~now:1L ~action:Grants.Spawn with
-     | Error _ -> Terms.remaining t = 3 | Ok _ -> false);
+    (match Obligations.spend t ~now:1L ~action:Grants.Spawn with
+     | Error _ -> Obligations.remaining t = 3 | Ok _ -> false);
 
   print_string "\nconditions\n";
   let ev = Conditions.clean in
@@ -98,14 +98,14 @@ let () =
   check "flip-flop cannot settle -- consecutive is the point"
     (let q = Phases.start l in
      let q = ok (Phases.observe q "read") in
-     (* a behavior that emitted terminal, then work, then terminal would have
+     (* a script that emitted terminal, then work, then terminal would have
         been refused at the middle step, so the only way to two-in-a-row is to
         actually be finished *)
      not (Phases.settled q));
   check "echo ladder terminal differs from critic's"
     (match Phases.observe (Phases.start Phases.echo_ladder) "verdict_emitted" with
      | Error (Phases.Undeclared _) -> true | _ -> false);
-  check "a behavior cannot borrow another's completion phrase"
+  check "a script cannot borrow another's completion phrase"
     (match Phases.observe (Phases.start Phases.critic_ladder) "echoed" with
      | Error (Phases.Undeclared _) -> true | _ -> false);
 
@@ -114,20 +114,20 @@ let () =
 
 let () =
   print_string "\ntrace\n";
-  let t = Trace.create ~gig:"g1" in
-  let root = Trace.open_ t "gig" in
+  let t = Trace.create ~commission:"g1" in
+  let root = Trace.open_ t "commission" in
   let a = Trace.open_ t ~parent:root ~phase:"read" "fs_read" in
   Trace.close t ~outcome:"ok" a;
   let b = Trace.open_ t ~parent:root ~phase:"checked" "balance_check" in
   Trace.close t ~breach:"budget exhausted" b;
   check "spans keep emission order"
     (List.map (fun s -> s.Trace.name) (Trace.spans t)
-     = [ "gig"; "fs_read"; "balance_check" ]);
+     = [ "commission"; "fs_read"; "balance_check" ]);
   check "children nest under their parent"
-    (List.for_all (fun s -> s.Trace.name = "gig" || Trace.depth t s = 1)
+    (List.for_all (fun s -> s.Trace.name = "commission" || Trace.depth t s = 1)
        (Trace.spans t));
   check "an unclosed span is visible, not silently fine"
-    (List.map (fun s -> s.Trace.name) (Trace.unclosed t) = [ "gig" ]);
+    (List.map (fun s -> s.Trace.name) (Trace.unclosed t) = [ "commission" ]);
   check "double close raises rather than passing quietly"
     (match Trace.close t ~outcome:"ok" a with
      | () -> false
@@ -140,7 +140,7 @@ let () =
   check "closing the root clears unclosed" (Trace.unclosed t = []);
   check "rows carry parent links for the store"
     (match Trace.to_rows t with
-     | (_, None, "g1", "gig", _, _, _, _) :: _ -> true | _ -> false);
+     | (_, None, "g1", "commission", _, _, _, _) :: _ -> true | _ -> false);
 
   Printf.printf "\ntotal: %d passed, %d failed\n" !pass !fail;
   if !fail > 0 then exit 1
@@ -167,8 +167,8 @@ let () =
                 dissonance = 0.5; valence = -0.9 } in
   d "session" "A session about the gate. It began with [[widened]] and ended in review.";
   d "widened" ~affect:dread
-    "A composition widened its scope: /srv/gigwerk-evil against envelope /srv/gigwerk. The gate refused it, and the composer [[revised]].";
-  d "revised" "The composer revised once and was refused again, so it [[escalated]].";
+    "A composition widened its scope: /srv/gigwerk-evil against envelope /srv/gigwerk. The gate refused it, and the agent [[revised]].";
+  d "revised" "The agent revised once and was refused again, so it [[escalated]].";
   d "escalated" "Escalated to the human, who ruled the envelope stands.";
   d "routine" "A critic checked notes.txt and passed, as predicted.";
   d "unrelated" ~affect:{ Affect.zero with Affect.hazard = 0.88; surprise = 0.92;
@@ -195,7 +195,7 @@ let () =
               check would have accepted it, because the characters match; the \
               segment comparison did not, because srv/gigwerk-evil is not \
               beneath srv/gigwerk. The gate returned refuse with the reason \
-              scope widens envelope, and the composer revised once before \
+              scope widens envelope, and the agent revised once before \
               escalating to a human, who ruled that the envelope stands." in
   (* Its own store. Adding to `st` mid-suite shifted the strike percentile and
      broke seven later tests -- which is how the small-store instability got
@@ -366,36 +366,36 @@ let () =
   if !fail > 0 then exit 1
 
 let () =
-  print_string "\nkits\n";
-  check "a valid kit validates"
-    (match Kit.critic with Ok k -> k.Kit.name = "critic" | Error _ -> false);
-  check "a zero-capability kit is valid" (match Kit.echo with Ok _ -> true | _ -> false);
+  print_string "\nroles\n";
+  check "a valid role validates"
+    (match Role.critic with Ok k -> k.Role.name = "critic" | Error _ -> false);
+  check "a zero-capability role is valid" (match Role.echo with Ok _ -> true | _ -> false);
   check "A KIT MAY NOT GRANT THE RETRIEVAL THE COMPOSER USED TO DESIGN IT"
-    (match Kit.bad_researcher with
-     | Error (Kit.Composer_only Grants.Retrieve) -> true | _ -> false);
-  check "a kit with no terminal phase cannot finish, and is refused"
-    (match Kit.make ~name:"endless" ~purpose:"spin"
+    (match Role.bad_researcher with
+     | Error (Role.Composer_only Grants.Retrieve) -> true | _ -> false);
+  check "a role with no terminal phase cannot finish, and is refused"
+    (match Role.make ~name:"endless" ~purpose:"spin"
              ~grants:[] ~state_shape:"unit"
              ~ladder:[ Phases.phase "working" ] ~budget_ms:1000 ~budget_actions:1 with
-     | Error Kit.No_terminal_phase -> true | _ -> false);
-  check "a kit with no purpose is refused"
-    (match Kit.make ~name:"x" ~purpose:"  " ~grants:[] ~state_shape:"unit"
+     | Error Role.No_terminal_phase -> true | _ -> false);
+  check "a role with no purpose is refused"
+    (match Role.make ~name:"x" ~purpose:"  " ~grants:[] ~state_shape:"unit"
              ~ladder:Phases.echo_ladder ~budget_ms:100 ~budget_actions:0 with
-     | Error Kit.Empty_purpose -> true | _ -> false);
+     | Error Role.Empty_purpose -> true | _ -> false);
 
   print_string "\nquery vs retrieve\n";
-  check "Retrieve is composer-only; Query is not"
-    (Grants.composer_only Grants.Retrieve
-     && not (Grants.composer_only Grants.Query));
-  check "no other action is composer-only"
-    (not (List.exists Grants.composer_only
+  check "Retrieve is agent-only; Query is not"
+    (Grants.agent_only Grants.Retrieve
+     && not (Grants.agent_only Grants.Query));
+  check "no other action is agent-only"
+    (not (List.exists Grants.agent_only
             [ Grants.Read; Grants.Write; Grants.Spawn; Grants.Emit ]));
-  check "an actor claiming a composer-only grant is REFUSED, not queued"
+  check "an actor claiming a agent-only grant is REFUSED, not queued"
     ((Conditions.evaluate { Conditions.clean with
                             Conditions.no_composer_grants = false })
        .Conditions.verdict = Conditions.Refuse);
   check "and the reason names it"
-    (List.mem "actor_claims_composer_only_grant"
+    (List.mem "actor_claims_agent_only_grant"
        (Conditions.evaluate { Conditions.clean with
                               Conditions.no_composer_grants = false }).Conditions.reasons);
 
@@ -424,7 +424,7 @@ let () =
     (List.mem "hunch" (Introspect.tags i) && List.mem "felt" (Introspect.tags i));
   check "it draws its own structure"
     (List.length (Introspect.linked i b.Introspect.id) = 1);
-  check "retrievable on its own terms"
+  check "retrievable on its own obligations"
     (List.length (Introspect.by_tag i "scopes") = 2);
 
   print_string "\nto write, you must read\n";

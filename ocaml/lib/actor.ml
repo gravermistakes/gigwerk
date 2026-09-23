@@ -1,6 +1,6 @@
 (* The labor tier.
  *
- * A gig runs in a forked child. The parent survives whatever the child does,
+ * A commission runs in a forked child. The parent survives whatever the child does,
  * which is the boundary that every earlier draft of this design lost to its own
  * capability layer -- a Python AST walk defeated by eval, a Lua _ENV defeated
  * by FFI. Here the frozen core is an address-space boundary.
@@ -32,7 +32,7 @@ let apply_limits ~wall_ms =
   let secs = max 1 ((wall_ms + 999) / 1000) in
   ignore (Unix.alarm secs)
 
-let run_gig ~wall_ms ~(work : unit -> string) : outcome =
+let run_commission ~wall_ms ~(work : unit -> string) : outcome =
   let r, w = Unix.pipe () in
   match Unix.fork () with
   | 0 ->

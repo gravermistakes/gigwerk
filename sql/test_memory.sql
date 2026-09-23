@@ -9,7 +9,7 @@ CREATE TEMP TABLE t (dummy INTEGER);
 INSERT INTO soul (version, body, parent, proposed_at, rationale,
                   agent_signature, agent_signed_at,
                   human_signature, human_signed_at)
-VALUES ('v1','be terse',NULL,1000,'initial','composer',1000,'human',1000);
+VALUES ('v1','be terse',NULL,1000,'initial','agent',1000,'human',1000);
 
 -- three claims about the same subject/predicate, from three memories
 INSERT INTO mem_record (subject,predicate,object,at)
@@ -17,9 +17,9 @@ INSERT INTO mem_record (subject,predicate,object,at)
 INSERT INTO mem_ruling (subject,predicate,object,rationale,at)
   VALUES ('critic','tier','in_process','critics are cheap and trusted',1050);
 INSERT INTO mem_reading (subject,predicate,object,basis,confidence,at,model,soul_version)
-  VALUES ('critic','max_wall_ms','30000','saw one slow run',0.7,1200,'composer','v1'),
-         ('critic','tier','subprocess','felt safer',0.9,1200,'composer','v1'),
-         ('critic','favourite_colour','blue','no basis at all',0.9,1200,'composer','v1');
+  VALUES ('critic','max_wall_ms','30000','saw one slow run',0.7,1200,'agent','v1'),
+         ('critic','tier','subprocess','felt safer',0.9,1200,'agent','v1'),
+         ('critic','favourite_colour','blue','no basis at all',0.9,1200,'agent','v1');
 
 INSERT INTO result
 SELECT 'reading losing to record', winner, 'record'
@@ -80,7 +80,7 @@ SELECT 'only the live ruling is believed',
 -- decay
 INSERT INTO mem_reading (subject,predicate,object,basis,confidence,at,model,soul_version,half_life_days)
   VALUES ('stale','claim','x','old inference',0.9,strftime('%s','now')-(90*86400),
-          'composer','v1',30.0);
+          'agent','v1',30.0);
 INSERT INTO result
 SELECT 'a 3-half-life-old reading decays below 0.15',
        CASE WHEN confidence_now < 0.15 THEN 'decayed' ELSE 'still_loud' END, 'decayed'
@@ -103,7 +103,7 @@ SELECT 'confidence is full under the soul it was earned',
 -- v2 arrives carrying ONE signature. That is a proposal, not a soul.
 INSERT INTO soul (version, body, parent, proposed_at, rationale,
                   agent_signature, agent_signed_at)
-VALUES ('v2','be terse and cite sources','v1',1500,'tightened','composer',1500);
+VALUES ('v2','be terse and cite sources','v1',1500,'tightened','agent',1500);
 INSERT INTO result
 SELECT 'one signature does not adopt -- v1 is still the soul',
        (SELECT version FROM v_soul_current), 'v1';
@@ -123,7 +123,7 @@ UPDATE soul SET agent_signature = NULL, agent_signed_at = NULL
  WHERE version = 'v2';
 INSERT INTO result
 SELECT 'a signature survives an attempt to retract it',
-       (SELECT agent_signature FROM soul WHERE version='v2'), 'composer';
+       (SELECT agent_signature FROM soul WHERE version='v2'), 'agent';
 
 -- The countersignature is what adopts it.
 UPDATE soul SET human_signature='human', human_signed_at=1600

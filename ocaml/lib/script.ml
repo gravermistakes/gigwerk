@@ -1,6 +1,6 @@
-(* Actor behaviors. Deterministic code. No model call anywhere below this line.
+(* Actor scripts. Deterministic code. No model call anywhere below this line.
  *
- * Each behavior declares its capability requirements IN ITS TYPE. That is where
+ * Each script declares its capability requirements IN ITS TYPE. That is where
  * the ocap guarantee bites at compile time: `critic` cannot be applied without
  * an fs_read, and `echo` has no way to name one. Handing `echo_caps` to
  * `critic` is a type error, not a runtime refusal. *)
@@ -27,7 +27,7 @@ let verdict_to_string v =
   Printf.sprintf "%s|%s|%s|%s|%s"
     (if v.ok then "pass" else "fail") v.reason v.detail v.follow_up v.resource
 
-(* A failing verdict with no follow-up is a bug in the behavior, not a
+(* A failing verdict with no follow-up is a bug in the script, not a
    legitimate state. Checked, not documented. *)
 let verdict_wellformed v =
   v.reason <> "" && (v.ok || v.follow_up <> "")
@@ -68,7 +68,7 @@ let critic (c : critic_caps) ~artifact =
       in
       if empty then
         { ok = false; reason = "empty_artifact"; detail = "0 bytes of content";
-          follow_up = "the producing gig emitted nothing -- inspect it, not this artifact";
+          follow_up = "the producing commission emitted nothing -- inspect it, not this artifact";
           resource = artifact }
       else if not balanced then
         { ok = false; reason = "unbalanced_parens";
@@ -82,17 +82,17 @@ let critic (c : critic_caps) ~artifact =
 
 (* ------------------------------------------------------------- phase steps
  *
- * Phase emission lives HERE, beside the behavior, because phases.ml's ladders
+ * Phase emission lives HERE, beside the script, because phases.ml's ladders
  * are declared beside the code that reaches them and for the same reason: a
  * caller that got to choose the phase name could choose the terminal one. The
  * booker reads what comes back off the pipe and decides what it counts as; the
- * behavior only reports where it actually got to.
+ * script only reports where it actually got to.
  *
  * `None` is not a failure signal -- it is the absence of a completed step. A
  * critic that could not read the artifact never completed `read`, so it names
  * no phase at all. That is different from naming a phase outside the ladder,
- * which is a breach, and the two must not collapse: one is a behavior that hit
- * a wall, the other is a behavior whose report cannot be trusted. *)
+ * which is a breach, and the two must not collapse: one is a script that hit
+ * a wall, the other is a script whose report cannot be trusted. *)
 
 let echo_step (() : echo_caps) ~msg =
   (Some "echoed", verdict_to_string (echo () ~msg))

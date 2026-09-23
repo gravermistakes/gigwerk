@@ -26,7 +26,7 @@ let usage () =
     \              [--for SECS] [--support N] [--refute N]\n\
     \              [--message S] [--artifact PATH] [--db FILE]\n\
      gigwerk run <echo|critic> [--message S] [--artifact PATH] [--db FILE]\n\
-     gigwerk review --gig N --held yes|partial|no [--critic pass|fail]\n\
+     gigwerk review --commission N --held yes|partial|no [--critic pass|fail]\n\
     \              [--judge clear|refuted]\n\
      gigwerk forms [--db FILE]\n\
      gigwerk context [--floor N] [--immediate N] [--working N] [--render] [--db FILE]\n\
@@ -35,8 +35,8 @@ let usage () =
     \\              [--text S] [--tag a,b] [--link 1,2] [--db FILE]\n\
      gigwerk doctor\n\
    \n\
-   propose runs the whole path -- conditions, terms, kit fit, then the gig.\n\
-   run skips it and calls the behavior directly; it is the pre-gate runner and\n\
+   propose runs the whole path -- conditions, obligations, role fit, then the commission.\n\
+   run skips it and calls the script directly; it is the pre-gate runner and\n\
    is kept only so the two can be compared.\n\
    introspect is the AI's notebook. It is read and written ONLY by the AI and\n\
    survives a restart because Persist round-trips it to the store. Every write\n\
@@ -53,20 +53,20 @@ let arg name default argv =
   go argv
 
 (* Build exactly the capabilities the composition claims. A claim the store does
-   not carry produces no field, and the behavior that needs it cannot be
+   not carry produces no field, and the script that needs it cannot be
    applied -- that is the type system refusing, not a runtime check. *)
 let build_critic_caps ~entity =
-  let claims = Store.claims ~entity in
+  let claims = Agency.claims ~entity in
   let find n = List.assoc_opt n claims in
   match find "fs_read", find "sqlite_query" with
   | Some root, Some db ->
-      let db = if db = "" then !Store.db_path else db in
-      Some Behaviors.{ root = Caps.fs_read ~root; ledger = Caps.sqlite_ro ~db }
+      let db = if db = "" then !Agency.db_path else db in
+      Some Script.{ root = Caps.fs_read ~root; ledger = Caps.sqlite_ro ~db }
   | _ -> None
 
 (* `matched` answers "did the actor do its job", NOT "was the artifact good".
    A critic that correctly reports a bad artifact is a MATCHED prediction: the
-   prediction was about the actor's behavior. A critic that could not read at
+   prediction was about the actor's script. A critic that could not read at
    all is unmatched, because it produced no verdict.
 
    This distinction was wrong on the first pass and only showed up in the
@@ -83,31 +83,31 @@ let classify (o : Actor.outcome) =
   | Actor.Failed _ -> ("failed", "no", 2)
   | Actor.Crashed _ -> ("failed", "no", 2)
 
-let report ~entity ~gig_id (o : Actor.outcome) =
+let report ~entity ~commission_id (o : Actor.outcome) =
   let outcome, matched, code = classify o in
-  Store.close_gig ~gig_id ~outcome ~matched ~note:(Actor.outcome_detail o);
-  Printf.printf "%-10s %-16s matched=%-4s gig=%s\n%s\n"
-    entity outcome matched gig_id (Actor.outcome_detail o);
+  Agency.close_commission ~commission_id ~outcome ~matched ~note:(Actor.outcome_detail o);
+  Printf.printf "%-10s %-16s matched=%-4s commission=%s\n%s\n"
+    entity outcome matched commission_id (Actor.outcome_detail o);
   code
 
 let cmd_run argv =
   let entity = match argv with e :: _ when e <> "" && e.[0] <> '-' -> e | _ -> usage () in
-  Store.db_path := arg "--db" !Store.db_path argv;
-  if not (Store.entity_exists ~entity) then begin
-    Printf.eprintf "no entity %S in %s -- seed it first\n" entity !Store.db_path;
+  Agency.db_path := arg "--db" !Agency.db_path argv;
+  if not (Agency.entity_exists ~entity) then begin
+    Printf.eprintf "no entity %S in %s -- seed it first\n" entity !Agency.db_path;
     exit 3
   end;
-  let wall_ms = Store.budget ~entity in
-  let tier = if Store.provenance ~entity = "agent" then "subprocess" else "in_process" in
+  let wall_ms = Agency.budget ~entity in
+  let tier = if Agency.provenance ~entity = "agent" then "subprocess" else "in_process" in
   match entity with
   | "echo" ->
       let msg = arg "--message" "" argv in
-      let gig_id = Store.open_gig ~entity ~sig_:"echo/0" ~tier
+      let commission_id = Agency.open_commission ~entity ~sig_:"echo/0" ~tier
           ~predicts:"echo returns the message unchanged"
           ~falsifiable_by:"returned detail differs from input" in
-      let o = Actor.run_gig ~wall_ms ~work:(fun () ->
-          Behaviors.verdict_to_string (Behaviors.echo () ~msg)) in
-      exit (report ~entity ~gig_id o)
+      let o = Actor.run_commission ~wall_ms ~work:(fun () ->
+          Script.verdict_to_string (Script.echo () ~msg)) in
+      exit (report ~entity ~commission_id o)
   | "critic" ->
       let artifact = arg "--artifact" "" argv in
       if artifact = "" then usage ();
@@ -115,16 +115,16 @@ let cmd_run argv =
        | None ->
            Printf.eprintf
              "critic requires fs_read and sqlite_query; composition claims: %s\n"
-             (String.concat ", " (List.map fst (Store.claims ~entity)));
+             (String.concat ", " (List.map fst (Agency.claims ~entity)));
            exit 3
        | Some caps ->
-           let gig_id = Store.open_gig ~entity ~sig_:"critic/2" ~tier
+           let commission_id = Agency.open_commission ~entity ~sig_:"critic/2" ~tier
                ~predicts:"critic emits a verdict on the artifact"
                ~falsifiable_by:"critic produces no verdict (unreadable, crash, or budget kill)" in
-           let o = Actor.run_gig ~wall_ms ~work:(fun () ->
-               Behaviors.verdict_to_string (Behaviors.critic caps ~artifact)) in
-           exit (report ~entity ~gig_id o))
-  | e -> Printf.eprintf "unknown behavior %S\n" e; exit 2
+           let o = Actor.run_commission ~wall_ms ~work:(fun () ->
+               Script.verdict_to_string (Script.critic caps ~artifact)) in
+           exit (report ~entity ~commission_id o))
+  | e -> Printf.eprintf "unknown script %S\n" e; exit 2
 
 (* ======================================================================= *)
 (* propose: the whole path.                                                  *)
@@ -155,9 +155,9 @@ let parse_grants s =
   |> Result.map List.rev
 
 let kit_for = function
-  | "echo" -> Some Kit.echo
-  | "critic" -> Some Kit.critic
-  | "scribe" -> Some Kit.scribe
+  | "echo" -> Some Role.echo
+  | "critic" -> Some Role.critic
+  | "scribe" -> Some Role.scribe
   | _ -> None
 
 (* Build the real composition the gate is asked to decide, from the same store
@@ -191,21 +191,21 @@ let gate_of_store ~entity ~state_shape ~evidence ~claims ~policy_set
              support_strength;
              refutation_strength }
   in
-  Booking.{ composition; capabilities = Store.capabilities () }
+  Booking.{ composition; capabilities = Agency.capabilities () }
 
-(* The work thunk. `scribe` is absent on purpose -- see kit.ml. *)
+(* The work thunk. `scribe` is absent on purpose -- see role.ml. *)
 let work_for ~entity ~msg ~artifact =
   match entity with
   | "echo" ->
-      Some (fun (_ : Terms.t) ->
-          let phase, payload = Behaviors.echo_step () ~msg in
+      Some (fun (_ : Obligations.t) ->
+          let phase, payload = Script.echo_step () ~msg in
           Booking.emit ~phase payload)
   | "critic" -> (
       match build_critic_caps ~entity with
       | None -> None
       | Some caps ->
-          Some (fun (_ : Terms.t) ->
-              let phase, payload = Behaviors.critic_step caps ~artifact in
+          Some (fun (_ : Obligations.t) ->
+              let phase, payload = Script.critic_step caps ~artifact in
               Booking.emit ~phase payload))
   | _ -> None
 
@@ -213,10 +213,10 @@ let cmd_propose argv =
   let entity =
     match argv with e :: _ when e <> "" && e.[0] <> '-' -> e | _ -> usage ()
   in
-  Store.db_path := arg "--db" !Store.db_path argv;
-  if not (Store.entity_exists ~entity) then begin
+  Agency.db_path := arg "--db" !Agency.db_path argv;
+  if not (Agency.entity_exists ~entity) then begin
     Printf.eprintf "no entity %S in %s -- run: sqlite3 %s \".read sql/seed.sql\"\n"
-      entity !Store.db_path !Store.db_path;
+      entity !Agency.db_path !Agency.db_path;
     exit 3
   end;
   let grants =
@@ -224,13 +224,13 @@ let cmd_propose argv =
     | Ok g -> g
     | Error w -> Printf.eprintf "unknown action %S in --grant\n" w; exit 2
   in
-  let claims = Store.claims ~entity in
+  let claims = Agency.claims ~entity in
   let cap_set = List.map fst claims in
-  let policy_set = Store.policies ~entity in
+  let policy_set = Agency.policies ~entity in
   let state_shape =
-    match Store.query (Printf.sprintf
+    match Agency.query (Printf.sprintf
       "SELECT s.shape FROM c_state s JOIN entity e ON e.id = s.entity_id \
-       WHERE e.name = '%s'" (Store.esc entity)) with
+       WHERE e.name = '%s'" (Agency.esc entity)) with
     | [ [ sh ] ] -> String.trim sh
     | _ -> ""
   in
@@ -238,12 +238,12 @@ let cmd_propose argv =
   let sig_ =
     Booking.form_sig ~cap_set ~policy_set ~state_shape ~widen_epoch
   in
-  let tier = if Store.provenance ~entity = "agent" then "subprocess" else "in_process" in
-  let kit = match kit_for entity with
+  let tier = if Agency.provenance ~entity = "agent" then "subprocess" else "in_process" in
+  let role = match kit_for entity with
     | Some k -> k
-    | None -> Printf.eprintf "no kit for %S\n" entity; exit 2
+    | None -> Printf.eprintf "no role for %S\n" entity; exit 2
   in
-  let kit_grants = match kit with Ok k -> k.Kit.grants | Error _ -> [] in
+  let kit_grants = match role with Ok k -> k.Role.grants | Error _ -> [] in
   let evidence =
     Booking.evidence_of_store ~entity ~sig_ ~tier ~kit_grants
       ~support_strength:(int_arg "--support" 1 argv)
@@ -251,21 +251,21 @@ let cmd_propose argv =
   in
   let now = Int64.of_float (Unix.time ()) in
   let envelope =
-    Terms.issue ~id:("env/" ^ entity)
+    Obligations.issue ~id:("env/" ^ entity)
       ~grants:(Grants.make ~entity ~snapshot:sig_ ~actions:grants)
       ~budget:(int_arg "--budget" 5 argv)
       ~expires_at:(Int64.add now (Int64.of_int (int_arg "--for" 300 argv)))
   in
   let request =
     { Booking.entity; evidence; cap_set; policy_set; state_shape; widen_epoch;
-      envelope; kit }
+      envelope; role }
   in
   (* The gate decides the composition -- but ONLY when the engine is actually
      there to answer. `gate_of_store` is always built (the facts are cheap) and
      `book`'s seam falls back to Conditions when elpi is Engine_missing, so this
      is safe in today's elpi-less environment AND uses the real engine the moment
      elpi lands. *)
-  let provenance = Store.provenance ~entity in
+  let provenance = Agency.provenance ~entity in
   let gate =
     gate_of_store ~entity ~state_shape ~evidence ~claims ~policy_set
       ~provenance ~tier
@@ -287,29 +287,29 @@ let cmd_propose argv =
       (match Booking.record_booking b with
        | Ok () -> () | Error e -> Printf.eprintf "WARN verdict: %s\n" e);
       Printf.printf
-        "decision  book\nkit       %s\nwall_ms   %d\ngig_terms %s budget=%d\nenvelope  %d/%d spent\n"
-        b.Booking.kit.Kit.name b.Booking.wall_ms
-        (Grants.to_string (Terms.grants b.Booking.gig_terms))
-        (Terms.budget b.Booking.gig_terms)
-        (Terms.consumed b.Booking.envelope) (Terms.budget b.Booking.envelope);
+        "decision  book\nrole      %s\nwall_ms   %d\ncommission_obligations %s budget=%d\nenvelope  %d/%d spent\n"
+        b.Booking.role.Role.name b.Booking.wall_ms
+        (Grants.to_string (Obligations.grants b.Booking.commission_obligations))
+        (Obligations.budget b.Booking.commission_obligations)
+        (Obligations.consumed b.Booking.envelope) (Obligations.budget b.Booking.envelope);
       let msg = arg "--message" "" argv in
       let artifact = arg "--artifact" "" argv in
       (match work_for ~entity ~msg ~artifact with
        | None ->
            Printf.printf
-             "no behavior wired for %S -- booked, not run\n" entity;
+             "no script wired for %S -- booked, not run\n" entity;
            exit 0
        | Some work ->
-           let gig_id =
-             Store.open_gig ~entity ~sig_ ~tier
-               ~predicts:(Printf.sprintf "%s settles on its terminal phase" b.Booking.kit.Kit.name)
+           let commission_id =
+             Agency.open_commission ~entity ~sig_ ~tier
+               ~predicts:(Printf.sprintf "%s settles on its terminal phase" b.Booking.role.Role.name)
                ~falsifiable_by:"no phase emitted, an undeclared phase, or a non-completed outcome"
            in
            let c = Booking.run b ~work in
            let outcome = Booking.outcome_word c and matched = Booking.matched c in
-           Store.close_gig ~gig_id ~outcome ~matched ~note:c.Booking.payload;
-           Printf.printf "gig       %s\noutcome   %s\nmatched   %s\nphase     %s%s\n%s\n"
-             gig_id outcome matched
+           Agency.close_commission ~commission_id ~outcome ~matched ~note:c.Booking.payload;
+           Printf.printf "commission       %s\noutcome   %s\nmatched   %s\nphase     %s%s\n%s\n"
+             commission_id outcome matched
              (match Phases.current c.Booking.progress with Some p -> p | None -> "-")
              (match c.Booking.breach with
               | Some br -> " BREACH: " ^ Phases.breach_to_string br
@@ -323,36 +323,36 @@ let cmd_propose argv =
 (* Three fields because matched = prediction held AND critic passed AND judge *)
 (* failed to refute, and collapsing them to one boolean throws away which of  *)
 (* the three burned the slot. The critic's mechanical verdict is already in    *)
-(* gig_outcome; asking for it again here is not redundant -- this is the       *)
+(* commission_outcome; asking for it again here is not redundant -- this is the       *)
 (* human's reading of it, and the two disagreeing is the signal that routes    *)
 (* to a human next time.                                                      *)
 (* ======================================================================= *)
 
 let cmd_review argv =
-  Store.db_path := arg "--db" !Store.db_path argv;
-  let gig_id = arg "--gig" "" argv in
-  if gig_id = "" then usage ();
+  Agency.db_path := arg "--db" !Agency.db_path argv;
+  let commission_id = arg "--commission" "" argv in
+  if commission_id = "" then usage ();
   let held = arg "--held" "" argv in
   if not (List.mem held [ "yes"; "partial"; "no" ]) then begin
     prerr_string "--held must be yes, partial or no\n"; exit 2
   end;
   let critic_passed = arg "--critic" "pass" argv = "pass" in
   let judge_refuted = arg "--judge" "clear" argv = "refuted" in
-  match Store.gig_form ~gig_id with
-  | None -> Printf.eprintf "no gig %s in %s\n" gig_id !Store.db_path; exit 3
+  match Agency.commission_form ~commission_id with
+  | None -> Printf.eprintf "no commission %s in %s\n" commission_id !Agency.db_path; exit 3
   | Some form_sig -> (
       match
-        Store.write_review ~form_sig ~gig_id:(Some gig_id) ~held ~critic_passed
+        Agency.write_review ~form_sig ~commission_id:(Some commission_id) ~held ~critic_passed
           ~judge_refuted ~soul_version:None
       with
       | Error e -> Printf.eprintf "could not write review: %s\n" e; exit 3
       | Ok () ->
-          let n = List.length (Store.reviews ~form_sig) in
+          let n = List.length (Agency.reviews ~form_sig) in
           Printf.printf "recorded review %d for form %s\n" n form_sig;
           (* A review that lands but changes no band is a review that did not
              reach the form -- the FK-orphan failure. Reading the band back is
              the cheapest proof it landed. *)
-          (match Bridge.confidence ~form_sig (Store.reviews ~form_sig) with
+          (match Bridge.confidence ~form_sig (Agency.reviews ~form_sig) with
            | Ok { band; certainty } ->
                Printf.printf "band      %s  certainty %.4f\n"
                  (Bridge.band_to_string band) certainty
@@ -362,8 +362,8 @@ let cmd_review argv =
                  (Bridge.engine_error_to_string e)))
 
 let cmd_forms argv =
-  Store.db_path := arg "--db" !Store.db_path argv;
-  let rows = Store.forms () in
+  Agency.db_path := arg "--db" !Agency.db_path argv;
+  let rows = Agency.forms () in
   if rows = [] then print_string "no forms yet -- run `gigwerk propose`\n"
   else
     List.iter
@@ -371,7 +371,7 @@ let cmd_forms argv =
         let band =
           if n = 0 then "c_needs_review (no reviews)"
           else
-            match Bridge.confidence ~form_sig:sig_ (Store.reviews ~form_sig:sig_) with
+            match Bridge.confidence ~form_sig:sig_ (Agency.reviews ~form_sig:sig_) with
             | Ok { band; certainty } ->
                 Printf.sprintf "%-14s %.4f" (Bridge.band_to_string band) certainty
             | Error _ ->
@@ -393,7 +393,7 @@ let cmd_forms argv =
 (* ======================================================================= *)
 
 let cmd_context argv =
-  Store.db_path := arg "--db" !Store.db_path argv;
+  Agency.db_path := arg "--db" !Agency.db_path argv;
   let ctx =
     Context.assemble
       ~floor:(int_arg "--floor" 64_000 argv)
@@ -429,24 +429,24 @@ let cmd_context argv =
   end
 
 let cmd_caps argv =
-  Store.db_path := arg "--db" !Store.db_path argv;
+  Agency.db_path := arg "--db" !Agency.db_path argv;
   let entity = arg "--entity" "" argv in
   if entity = "" then
     List.iter (function
         | [ n; env; se; rb ] ->
             Printf.printf "%-14s envelope=%-24s side_effecting=%s requires_booking=%s\n" n env se rb
         | _ -> ())
-      (Store.query "SELECT name, envelope, side_effecting, requires_booking FROM capability ORDER BY name")
+      (Agency.query "SELECT name, envelope, side_effecting, requires_booking FROM capability ORDER BY name")
   else
     List.iter (fun (n, s) -> Printf.printf "%-14s scope=%s\n" n s)
-      (Store.claims ~entity)
+      (Agency.claims ~entity)
 
 (* ------------------------------------------------------------------ memory *)
 (* The AI's notebook. introspect.ml is the ONLY module that may read or write
  * this space, and the CLI door is the harness handing the AI that access --
  * which is precisely the "no CLI door; the AI cannot reach it" gap STATUS.md
  * names. The round-trip to the store is Persist.load_introspect / save_introspect;
- * nothing here re-implements the encoding (store.ml's `-separator '|'` is the
+ * nothing here re-implements the encoding (agency.ml's `-separator '|'` is the
  * reason entries must avoid embedded newlines and pipes -- see persist.ml).
  *
  * TOKEN DISCIPLINE, HONESTLY. A write needs a token, and only a read mints one.
@@ -456,13 +456,13 @@ let cmd_caps argv =
  * earns nothing, because looking is not writing. *)
 
 let require_introspect_table () =
-  match Store.query "SELECT name FROM sqlite_master WHERE type='table' AND name='introspect_entry'" with
+  match Agency.query "SELECT name FROM sqlite_master WHERE type='table' AND name='introspect_entry'" with
   | [ [ _ ] ] -> ()
   | _ ->
       Printf.eprintf
         "store %s has no introspect_entry table -- load sql/persist.sql:\\n\
          \\  sqlite3 %s \".read sql/schema.sql\" \".read sql/persist.sql\"\n"
-        !Store.db_path !Store.db_path;
+        !Agency.db_path !Agency.db_path;
       exit 3
 
 let fmt_entry (e : Introspect.entry) =
@@ -502,13 +502,13 @@ let int_id argv =
   | [] -> None
 
 let cmd_introspect argv =
-  Store.db_path := arg "--db" !Store.db_path argv;
+  Agency.db_path := arg "--db" !Agency.db_path argv;
   require_introspect_table ();
   let sub = match argv with s :: _ when s <> "" && s.[0] <> '-' -> s | _ -> usage () in
   let notebook = Persist.load_introspect () in
   let persist_then ok_msg code =
     (* Save back so the entry survives this process. `save_introspect` runs
-       through Store and can itself fail; report rather than exit cleanly
+       through Agency and can itself fail; report rather than exit cleanly
        pretending a memory was kept. *)
     match (try Ok (Persist.save_introspect notebook) with exn -> Error (Printexc.to_string exn)) with
     | Error msg -> Printf.eprintf "WARN could not persist notebook: %s\n" msg; exit 3
@@ -576,14 +576,14 @@ let cmd_introspect argv =
   | _ -> usage ()
 
 let cmd_doctor argv =
-  Store.db_path := arg "--db" !Store.db_path argv;
+  Agency.db_path := arg "--db" !Agency.db_path argv;
   Printf.printf "openat2 + RESOLVE_BENEATH : %s\n"
     (if Caps.have_openat2 () then "available" else "MISSING - capability roots are not enforced");
   Printf.printf "sqlite3 CLI               : %s\n"
     (if Sys.command "sqlite3 -version > /dev/null 2>&1" = 0 then "found" else "MISSING");
-  Printf.printf "store                     : %s\n" !Store.db_path;
+  Printf.printf "store                     : %s\n" !Agency.db_path;
   Printf.printf "persist (introspect)       : %s\n"
-    (match Store.query "SELECT name FROM sqlite_master WHERE type='table' AND name='introspect_entry'" with
+    (match Agency.query "SELECT name FROM sqlite_master WHERE type='table' AND name='introspect_entry'" with
      | [ [ _ ] ] -> "wired"
      | _ -> "unwired (load sql/persist.sql)")
 

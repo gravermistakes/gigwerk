@@ -21,9 +21,9 @@ INSERT OR IGNORE INTO soul (version, body, parent, proposed_at, rationale,
                             agent_signature, agent_signed_at,
                             human_signature, human_signed_at)
 VALUES ('v1',
-        'You compose actors. You do not write tools or behavior. You are the only thing here that calls a model.',
+        'You compose actors. You do not write tools or script. You are the only thing here that calls a model.',
         NULL, strftime('%s','now'), 'initial adoption',
-        'composer', strftime('%s','now'),
+        'agent', strftime('%s','now'),
         'gravermistakes', strftime('%s','now'));
 
 -- ---------------------------------------------------------------- rulings
@@ -31,7 +31,7 @@ VALUES ('v1',
 -- the ledger but stays OUT of the active window.
 INSERT OR IGNORE INTO mem_ruling (subject, predicate, object, rationale, at)
 VALUES
-  ('scribe', 'requires', 'human_verdict_per_gig',
+  ('scribe', 'requires', 'human_verdict_per_commission',
    'fs_write is side-effecting and booking-gated', strftime('%s','now')),
   ('actors', 'may_not_hold', 'retrieve',
    'a non-deterministic actor breaks every claim the design rests on', strftime('%s','now'));
@@ -51,7 +51,7 @@ VALUES
   -- The hazardous one: highest salience, so it survives into immediate first.
   ('incident-scribe',
    'Incident: [[scribe]] hit a budget kill mid-write.',
-   'Incident: scribe hit a budget kill mid-write. The gig was booked with a 60s wall and a 1-action budget. The action spent its whole allowance before emitting a terminal phase, so the parent recorded budget_exceeded and matched=no. The full write never landed, and the partial file was left in the work root. This is the case the wall clock exists to bound.',
+   'Incident: scribe hit a budget kill mid-write. The commission was booked with a 60s wall and a 1-action budget. The action spent its whole allowance before emitting a terminal phase, so the parent recorded budget_exceeded and matched=no. The full write never landed, and the partial file was left in the work root. This is the case the wall clock exists to bound.',
    '0.5,0.1,0.05',
    0.5, 0.9, 0.2, 0.6, 0.0, -1.0),
 

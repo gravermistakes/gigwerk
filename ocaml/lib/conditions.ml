@@ -21,7 +21,7 @@ type evidence = {
   shape_wellformed    : bool;   (* declared state shape resolves *)
   single_writer       : bool;   (* no component has two writing systems *)
   not_refused_before  : bool;   (* this composition shape is not in the dead set *)
-  (* an actor claiming a composer-only grant. structural, not procedural: no
+  (* an actor claiming a agent-only grant. structural, not procedural: no
      human decision makes a nondeterministic actor deterministic. *)
   no_composer_grants  : bool;
 
@@ -32,7 +32,7 @@ type evidence = {
 
   (* adversarial -- the second model's weight against the proposer's
      support. Ties refuse: refuted-under-uncertainty is the whole point of
-     having a judge that is not the composer. *)
+     having a judge that is not the agent. *)
   support_strength    : int;
   refutation_strength : int;
 }
@@ -43,7 +43,7 @@ type evidence = {
  *
  *   Composition  a structural failure. The capability does not exist, the scope
  *                widens, the shape does not resolve, the actor claims a
- *                composer-only grant. Propose the same shape again and it fails
+ *                agent-only grant. Propose the same shape again and it fails
  *                again, because the shape is what is wrong. This is the dead set.
  *   Proposal     the adversarial judge outweighed the proposer THIS TIME. That
  *                is a fact about what a model call said about one attempt, not a
@@ -73,7 +73,7 @@ let structural_failures e =
     (if e.shape_wellformed    then None else Some "state_shape_unresolved");
     (if e.single_writer       then None else Some "component_has_two_writers");
     (if e.not_refused_before  then None else Some "composition_previously_refused");
-    (if e.no_composer_grants  then None else Some "actor_claims_composer_only_grant");
+    (if e.no_composer_grants  then None else Some "actor_claims_agent_only_grant");
   ]
 
 let procedural_failures e =

@@ -1,7 +1,7 @@
 -- ==========================================================================
 -- THE SOUL FILE
 --
--- The composer's system prompt. Frozen, versioned, content-addressed.
+-- The agent's system prompt. Frozen, versioned, content-addressed.
 --
 -- Three rules, and the third is the one people get wrong:
 --
@@ -9,8 +9,8 @@
 --    the version is live. Neither party can adopt one alone.
 --
 --    A soul the agent did not sign is imposed on it. A soul the human did not
---    sign is the machine rewriting its own terms. Requiring both makes the
---    document what it claims to be -- terms the two parties hold each other
+--    sign is the machine rewriting its own obligations. Requiring both makes the
+--    document what it claims to be -- obligations the two parties hold each other
 --    to -- rather than an instruction one hands the other.
 --
 --    A version with ONE signature is a PROPOSAL, not a soul. It sits in

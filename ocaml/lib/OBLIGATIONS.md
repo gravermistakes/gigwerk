@@ -1,4 +1,4 @@
-# Terms · Grants · Conditions
+# Obligations · Grants · Conditions
 
 Renamed from the bughunting vocabulary. Three modules, three different
 questions, zero dependencies.
@@ -6,7 +6,7 @@ questions, zero dependencies.
 | module | question | was |
 |---|---|---|
 | `Grants` | **what** may this actor do | `Scope` |
-| `Terms`  | **how many** and **until when** | `Lease` |
+| `Obligations`  | **how many** and **until when** | `Lease` |
 | `Conditions` | **what must hold** to book it | `Lance_rule_gate` |
 | `Caps`   | **where** — kernel-enforced | (new) |
 
@@ -19,11 +19,11 @@ whole reason the vocabulary is worth separating.
 it's unrepresentable — a typo in a composition fails to parse instead of
 silently granting nothing.
 
-## Terms couples budget to permission
+## Obligations couples budget to permission
 
 One value holding grants, budget, and expiry, checked per action. That coupling
 is the point: exhaustion and ungranted-action become the same mechanism, so an
-approved gig can't burn unbounded actions inside itself.
+approved commission can't burn unbounded actions inside itself.
 
 A budget number in a table nothing reads is not a budget. This has to be
 threaded through every action to mean anything — which is why `spend` exists
@@ -33,14 +33,14 @@ once and act twice.
 Expiry is tested before budget, so a lapsed contract doesn't report a budget
 figure as though it were still live.
 
-## Terms is an ACL. Caps is not. Keep both.
+## Obligations is an ACL. Caps is not. Keep both.
 
-`Terms.check` is ask-and-answer. The `openat2` dirfd in `Caps` is object
+`Obligations.check` is ask-and-answer. The `openat2` dirfd in `Caps` is object
 capability — no reference, no call, nothing to ask.
 
 They are orthogonal, not competing: **a dirfd cannot express "twenty reads then
-stop", and Terms cannot prevent a path escape.** Spatial bounds from the kernel,
-quantitative bounds from Terms, threaded together.
+stop", and Obligations cannot prevent a path escape.** Spatial bounds from the kernel,
+quantitative bounds from Obligations, threaded together.
 
 ## Conditions: three verdicts, and the ordering matters
 
@@ -74,7 +74,7 @@ budget. `test_gigwerk.ml` — 16/16, the capability and process-boundary layer.
 `follow_up` and `resource`. A verdict that reports a failure without a next step
 makes the reader re-derive one — and `verdict_wellformed` enforces it rather
 than documenting it: a failing verdict with an empty `follow_up` is a bug in the
-behavior, not a legitimate state.
+script, not a legitimate state.
 
 **Generalization guard** (`continuous-learning-v2`'s 2+ projects rule), in
 `prolog/confidence.pl`. `promotable/2` returns `too_narrow(N)` until a candidate
@@ -91,26 +91,26 @@ and the error was collapsing a distinction that matters: in the source document 
 exactly where its source says. Same syntax, entirely different trust. The pattern
 was never the problem; the binding was.
 
-So `Phases` exists, and it closes a gap `Terms` cannot reach. `Terms` bounds
+So `Phases` exists, and it closes a gap `Obligations` cannot reach. `Obligations` bounds
 *failure* to finish — budget spent, deadline passed. It has no way to express
-finished early and correctly, so without this a gig that completes in 3 of 20
+finished early and correctly, so without this a commission that completes in 3 of 20
 actions merely stops being called.
 
 Three properties make the signal a condition rather than a report:
 
-- **The ladder is declared by the tool.** Not by the composer, not per instance.
-  The composer picks which behavior runs; it cannot pick what "done" means. A
+- **The ladder is declared by the tool.** Not by the agent, not per instance.
+  The agent picks which script runs; it cannot pick what "done" means. A
   test asserts `critic` cannot emit `echo`'s terminal phrase and vice versa.
-- **An undeclared phase is a breach**, not an unknown state. A behavior that can
+- **An undeclared phase is a breach**, not an unknown state. A script that can
   emit arbitrary strings can emit "done" by accident — which is the property that
   made the phrase untrustworthy to begin with.
 - **Regression after terminal is refused.** Emitting work after `done` is a bug
-  in the behavior, and it is caught at the emission rather than inferred later.
+  in the script, and it is caught at the emission rather than inferred later.
 
 The repetition count drops out of the same reasoning. Thrice exists because the
 emitter might be unreliable; a deterministic emitter needs one, and
 `~consecutive:1` settles on a single emission. The default of 2 is insurance
-against a *buggy* behavior that flip-flops, not against a lying one — and since
+against a *buggy* script that flip-flops, not against a lying one — and since
 regression is already refused, the only route to two-in-a-row is actually being
 finished.
 
@@ -118,7 +118,7 @@ finished.
 
 **pass@1 / pass@3 / cost-per-success.** Presumes a model doing the task. Actors
 are deterministic, so pass@1 is 1.0 or 0.0 and the metric cannot move. `matched`
-is the analogue, and only for the composer's proposals.
+is the analogue, and only for the agent's proposals.
 
 **Model-assigned confidence (0.3–0.9 by an observer model).** A model scoring
 its own pattern extraction. Cheap and self-referential; the bands here come from

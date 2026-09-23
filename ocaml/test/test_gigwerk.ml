@@ -44,29 +44,29 @@ let () =
      answer to "can ocap cross a process boundary": for fork, by inheritance.
      NOT for exec -- the fd is O_CLOEXEC, so exec would need SCM_RIGHTS or
      re-derivation under Landlock. Phase 2 question, flagged not guessed. *)
-  let o = Actor.run_gig ~wall_ms:5000 ~work:(fun () -> Caps.read c "inside.txt") in
+  let o = Actor.run_commission ~wall_ms:5000 ~work:(fun () -> Caps.read c "inside.txt") in
   check "inherited capability works in the forked child"
     (match o with Actor.Completed s -> s = "hello (world)\n" | _ -> false);
-  let o = Actor.run_gig ~wall_ms:5000
+  let o = Actor.run_commission ~wall_ms:5000
       ~work:(fun () -> Caps.read c "../../etc/passwd") in
   check "child cannot escape the inherited root"
     (match o with Actor.Failed _ -> true | _ -> false);
-  let o = Actor.run_gig ~wall_ms:5000 ~work:(fun () -> failwith "boom") in
+  let o = Actor.run_commission ~wall_ms:5000 ~work:(fun () -> failwith "boom") in
   check "child failure is reported, parent survives"
     (match o with Actor.Failed s -> s = "boom" | _ -> false);
-  let o = Actor.run_gig ~wall_ms:1000 ~work:(fun () -> Unix.sleep 5; "never") in
+  let o = Actor.run_commission ~wall_ms:1000 ~work:(fun () -> Unix.sleep 5; "never") in
   check "runaway child is killed on the wall clock"
     (match o with Actor.Budget_exceeded _ -> true | _ -> false);
   check "parent is alive after all of the above" (1 + 1 = 2);
 
   print_string "\nbehaviors are deterministic\n";
-  let mk () = Behaviors.critic { root = c; ledger = Caps.sqlite_ro ~db:"x.db" }
+  let mk () = Script.critic { root = c; ledger = Caps.sqlite_ro ~db:"x.db" }
                 ~artifact:"inside.txt" in
   check "same input, same verdict" (mk () = mk ());
   check "echo needs no capability at all"
-    ((Behaviors.echo () ~msg:"m").detail = "m");
+    ((Script.echo () ~msg:"m").detail = "m");
   check "critic reports a bad artifact without erroring"
-    (let v = Behaviors.critic { root = c; ledger = Caps.sqlite_ro ~db:"x.db" }
+    (let v = Script.critic { root = c; ledger = Caps.sqlite_ro ~db:"x.db" }
                ~artifact:"nope.txt" in
      not v.ok && v.reason = "unreadable");
 

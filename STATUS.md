@@ -7,8 +7,8 @@ Measured, not estimated. Re-measured after the booking path landed.
 **19 OCaml modules. 15 are wired into the running program.** Was 10 of 18.
 
 ```
-WIRED       Caps  Actor  Behaviors  Store  Booking
-            Conditions  Terms  Grants  Kit  Phases
+WIRED       Caps  Actor  Script  Agency  Booking
+            Conditions  Obligations  Grants  Role  Phases
             Context  Working  Persist  Reconstruct  Affect
             Bridge (confidence + gate seam)
 NOT WIRED   Trace  Embed (reached only through `Working.contract`)
@@ -34,7 +34,7 @@ and all of `test_bridge`'s real-engine checks, skip until then. The seam and its
 engine-missing fallback are fully exercised (see `test_booking.ml`'s gate-seam
 section).
 
-**21+ tables. 9 written by OCaml**: `gig`, `gig_prediction`, `gig_outcome`,
+**21+ tables. 9 written by OCaml**: `commission`, `commission_prediction`, `commission_outcome`,
 `booking_verdict`, `form`, `form_review`, `span`, `sarcasm_doc`, `sarcasm_link`,
 `introspect_entry`. Was 7.
 
@@ -49,7 +49,7 @@ proven able to fail on a real fault. See `LINTERS.md`.
 
 ## The loop that now closes
 
-    propose → conditions → terms → kit fit → actor → phase check → review → band
+    propose → conditions → obligations → role fit → actor → phase check → review → band
 
 Verified end to end: cold start reads 0.0667 at one review, `a_autopass` at 15
 clean, `b_last_review` at 16 with one recent failure, and the adversarial judge
@@ -64,12 +64,12 @@ are in `BOOKING.md`.
 |---|---|---|
 | **Caps** | done | Landlock (L4); `exec` capability passing (SCM_RIGHTS) |
 | **Booking path** | **done, wired** | — |
-| **Conditions / Terms / Grants / Kit / Phases** | **done, wired** | — |
+| **Conditions / Obligations / Grants / Role / Phases** | **done, wired** | — |
 | **Actor runtime** | minimal | two behaviours; no inbox delivery; no step loop |
 | **Confidence** | **wired** | soul_version never stamped, so bands are not yet soul-scoped |
 | **Elpi gate** | wired as a seam | `propose` builds the composition; `Booking.book` decides through `Bridge.gate` when elpi answers, else `Conditions`. End-to-end proof waits on the elpi binaries. The two engines still **disagree** — see below |
 | **Persistence** | partially wired | `introspect` CLI door round-trips through `Persist` and survives a restart. SARCASM's `save_doc`/`load_store` still uncalled |
-| **Trace** | built, unwired | `Actor.run_gig` opens no spans; `Trace.gig` is a string, `span.gig_id` an FK'd integer, and nothing converts |
+| **Trace** | built, unwired | `Actor.run_commission` opens no spans; `Trace.commission` is a string, `span.commission_id` an FK'd integer, and nothing converts |
 | **Fact store** | schema only | **not per-project**; **not 3 provenance columns**; specs not embedded/linked |
 | **SARCASM** | built, persistable, unwired | not fed from working; contraction never invoked |
 | **Immediate 64k** | **wired** | verbatim band; pinned material never contracts |
@@ -77,7 +77,7 @@ are in `BOOKING.md`.
 | **Introspection** | **wired** | `gigwerk introspect` door round-trips through `Persist`; survives restart |
 | **RAG (a tool)** | **not built** | no corpus, no ingest, no capability row |
 | **CLI** | 7 commands, no access | `queue`, `import`, `export`, `introspect` |
-| **Soul** | schema + v1 body | never loaded; `soul_version` never stamped on a gig or review |
+| **Soul** | schema + v1 body | never loaded; `soul_version` never stamped on a commission or review |
 
 ---
 
@@ -98,7 +98,7 @@ Both are defensible. They cannot both be the gate.
 elpi's verdict wins when it answers, `Conditions` decides when the engine is
 `Engine_missing`. That settles the first disagreement in elpi's favour on
 purpose. It settled the second by *removing* it -- gate.elpi has no
-composer-grant rule at all, so deferring wholesale meant an actor claiming
+agent-grant rule at all, so deferring wholesale meant an actor claiming
 `Retrieve` would book the moment elpi was installed. No test caught it: every
 booking test runs engineless, falls back to `Conditions`, and sees the refusal
 it expects.

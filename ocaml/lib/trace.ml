@@ -1,10 +1,10 @@
 (* Tracing — the observability gap the checklist named and this design had.
  *
  * The ledger already recorded WHAT happened. A trace records what happened
- * INSIDE a gig and in what order, so a failure can be located rather than
+ * INSIDE a commission and in what order, so a failure can be located rather than
  * merely noticed.
  *
- * Spans are emitted by the runtime, not by behaviors. A behavior that could
+ * Spans are emitted by the runtime, not by scripts. A script that could
  * write its own trace could write a flattering one, and the trace is evidence.
  * Same reasoning as Phases: the thing being observed does not author the
  * observation. *)
@@ -12,23 +12,23 @@
 type span = {
   id        : int;
   parent    : int option;
-  gig       : string;
+  commission       : string;
   name      : string;
   phase     : string option;    (* the declared phase this span sat in *)
   started   : float;
   ended     : float option;
   outcome   : string option;    (* set once, at close *)
-  breach    : string option;    (* a Terms or Phases breach, if that ended it *)
+  breach    : string option;    (* a Obligations or Phases breach, if that ended it *)
 }
 
-type t = { mutable next : int; mutable spans : span list; gig : string }
+type t = { mutable next : int; mutable spans : span list; commission : string }
 
-let create ~gig = { next = 1; spans = []; gig }
+let create ~commission = { next = 1; spans = []; commission }
 
 let open_ t ?parent ?phase name =
   let id = t.next in
   t.next <- id + 1;
-  let s = { id; parent; gig = t.gig; name; phase;
+  let s = { id; parent; commission = t.commission; name; phase;
             started = Unix.gettimeofday (); ended = None;
             outcome = None; breach = None } in
   t.spans <- s :: t.spans;
@@ -83,7 +83,7 @@ let to_lines t =
    be queryable beside outcomes for anything to be learned from it. *)
 let to_rows t =
   List.map (fun s ->
-      (s.id, s.parent, s.gig, s.name, s.phase,
+      (s.id, s.parent, s.commission, s.name, s.phase,
        (match duration_ms s with Some d -> int_of_float d | None -> -1),
        s.outcome, s.breach))
     (spans t)

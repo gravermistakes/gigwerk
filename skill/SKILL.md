@@ -2,11 +2,11 @@
 name: compose-actor
 description: >
   Compose a GigWerk actor from components and submit it for booking. Use when
-  asked to build, add, spawn, or modify an actor/worker/entity, or when a gig
+  asked to build, add, spawn, or modify an actor/worker/entity, or when a commission
   needs a shape no existing actor has. Composes from the frozen capability
-  table only — never authors capabilities or behavior. Triggers: "make an
+  table only — never authors capabilities or script. Triggers: "make an
   actor", "compose a worker", "spawn an entity", "give X read access",
-  "what should handle this gig", "gigwerk".
+  "what should handle this commission", "gigwerk".
 ---
 
 # compose-actor
@@ -25,13 +25,13 @@ a deterministic check or a booking policy, not a smarter actor.
 ## Capabilities are values, not permissions
 
 A capability row is a **build instruction**. At spawn the runtime constructs a
-record holding exactly the claimed tools and hands it to the actor's behavior.
+record holding exactly the claimed tools and hands it to the actor's script.
 A tool you don't list is not denied — it is absent. Calling it fails to compile.
 
 So there is no runtime check to reason about, and two things follow:
 
 - **You cannot grant a capability that isn't in `capability`.** Not "shouldn't" —
-  the foreign key refuses it. If a gig needs a tool that isn't there, say so and
+  the foreign key refuses it. If a commission needs a tool that isn't there, say so and
   stop. That request goes to a human.
 - **`scope` is a constructor argument.** `fs_read` scoped to
   `/srv/gigwerk/work` is built around a directory handle rooted there with no
@@ -80,8 +80,8 @@ and let the booker route between them.
 **5. Write the prediction before submitting.**
 
 Every proposal carries `predicts` and `falsifiable_by`. Not intent — a statement
-some specific later observation could contradict. "Completes dedupe gigs inside
-budget; falsified if `budget_exceeded` twice in ten gigs." If you can't write the
+some specific later observation could contradict. "Completes dedupe commissions inside
+budget; falsified if `budget_exceeded` twice in ten commissions." If you can't write the
 falsifier you don't understand the actor well enough to propose it.
 
 **6. Submit. Do not install.**
@@ -118,5 +118,5 @@ between a bad composition and the runtime.
 | `c_capability`, `c_policy` | insert (claims only) |
 | `capability`, `component_owner` | **never** |
 | any `provenance='human'` row | **never** |
-| `gig_prediction` | insert, before the gig runs |
-| `gig_outcome`, `booking_verdict` | **never** — the runtime writes these |
+| `commission_prediction` | insert, before the commission runs |
+| `commission_outcome`, `booking_verdict` | **never** — the runtime writes these |

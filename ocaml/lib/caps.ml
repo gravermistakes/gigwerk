@@ -1,6 +1,6 @@
 (* Capabilities as values.
  *
- * The types here are abstract on purpose. A behavior receives a record holding
+ * The types here are abstract on purpose. A script receives a record holding
  * exactly the capabilities its composition claimed; a capability it did not
  * claim is not a denied field, it is a field that does not exist in its
  * parameter type. There is no ambient namespace to reach through and no

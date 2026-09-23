@@ -1,4 +1,4 @@
-(* The booking path, tested as a path: Conditions -> Terms -> Kit -> Actor.
+(* The booking path, tested as a path: Conditions -> Obligations -> Role -> Actor.
  *
  * Most of these are properties of ORDERING, which is the part that cannot be
  * read off the types. `book` returning the right answer is not enough -- it has
@@ -21,27 +21,27 @@ let now = 1000L
 let env_expiry = 1100L   (* 100s of wall clock = 100_000ms *)
 
 let envelope_of ?(budget = 5) ?(expires_at = env_expiry) actions =
-  Terms.issue ~id:"env"
+  Obligations.issue ~id:"env"
     ~grants:(Grants.make ~entity:"e" ~snapshot:"s" ~actions)
     ~budget ~expires_at
 
 let req ?(entity = "e") ?(evidence = Conditions.clean) ?(cap_set = [ "fs_read" ])
     ?(policy_set = [ "bookable" ]) ?(state_shape = "verdict_log")
     ?(widen_epoch = 0) ?(envelope = envelope_of [ Grants.Read; Grants.Query ])
-    ?(kit = Kit.critic) () =
+    ?(role = Role.critic) () =
   { Booking.entity; evidence; cap_set; policy_set; state_shape; widen_epoch;
-    envelope; kit }
+    envelope; role }
 
 let () =
   print_string "\nordering: conditions run before anything is spent\n";
 
-  (* The reason Conditions is first: if terms were debited before the composition
+  (* The reason Conditions is first: if obligations were debited before the composition
      was checked, a malformed proposal would cost exactly as much as a real one,
-     and a composer in a loop could drain an envelope with proposals that were
+     and a agent in a loop could drain an envelope with proposals that were
      never going to book.
      
      Testing this by "the envelope was not debited" does not work and the failed
-     attempt is worth recording: Terms is immutable, so the caller's value can
+     attempt is worth recording: Obligations is immutable, so the caller's value can
      never change and the assertion cannot fail. It was a test that looked like
      it proved the ordering and proved nothing. What IS falsifiable is
      PRECEDENCE -- construct a request that fails at two stages at once and check
@@ -51,7 +51,7 @@ let () =
   check "structurally refused AND a dead envelope -> conditions reports it"
     (match Booking.book ~now (req ~evidence:refusing ~envelope:dead_env ()) with
      | Error (Booking.Refused _) -> true | _ -> false);
-  check "structurally refused AND a kit that cannot fit -> conditions reports it"
+  check "structurally refused AND a role that cannot fit -> conditions reports it"
     (match
        Booking.book ~now
          (req ~evidence:refusing ~envelope:(envelope_of []) ())
@@ -63,70 +63,70 @@ let () =
                                human_verdict = false } in
      match Booking.book ~now (req ~evidence:queueing ~envelope:dead_env ()) with
      | Error (Booking.Queued _) -> true | _ -> false);
-  check "a dead envelope AND a kit that cannot fit -> the envelope reports it"
-    (* Terms before Kit, in the order the user named. *)
+  check "a dead envelope AND a role that cannot fit -> the envelope reports it"
+    (* Obligations before Role, in the order the user named. *)
     (match
        Booking.book ~now
-         (req ~envelope:(envelope_of ~budget:0 []) ~kit:Kit.critic ())
+         (req ~envelope:(envelope_of ~budget:0 []) ~role:Role.critic ())
      with
      | Error (Booking.Envelope_dead _) -> true | _ -> false);
 
   let env = envelope_of [ Grants.Read; Grants.Query ] in
   check "a booking debits the envelope, exactly once"
     (match Booking.book ~now (req ~envelope:env ()) with
-     | Ok b -> Terms.consumed b.Booking.envelope = 1
+     | Ok b -> Obligations.consumed b.Booking.envelope = 1
      | Error _ -> false);
   check "the debit has to be THREADED -- booking from the returned envelope stacks"
     (* The falsifiable form of "the caller's copy is untouched": a caller that
        forgets to carry the returned envelope forward gets an envelope that never
-       runs down, which is the same as having no across-gig bound at all. *)
+       runs down, which is the same as having no across-commission bound at all. *)
     (match Booking.book ~now (req ~envelope:env ()) with
      | Error _ -> false
      | Ok b1 -> (
          match Booking.book ~now (req ~envelope:b1.Booking.envelope ()) with
-         | Ok b2 -> Terms.consumed b2.Booking.envelope = 2
+         | Ok b2 -> Obligations.consumed b2.Booking.envelope = 2
          | Error _ -> false));
   check "and it runs the envelope down to nothing after its budget of bookings"
     (let rec drain e n =
        match Booking.book ~now (req ~envelope:e ()) with
        | Ok b -> drain b.Booking.envelope (n + 1)
-       | Error (Booking.Envelope_dead (Terms.Exhausted _)) -> n
+       | Error (Booking.Envelope_dead (Obligations.Exhausted _)) -> n
        | Error _ -> -1
      in
      drain (envelope_of ~budget:3 [ Grants.Read; Grants.Query ]) 0 = 3);
 
   print_string "\nthe envelope is checked as an envelope\n";
 
-  check "an envelope granting retrieve is refused before any kit is consulted"
+  check "an envelope granting retrieve is refused before any role is consulted"
     (is_err
        (function
          | Booking.Envelope_carries_composer_grant Grants.Retrieve -> true
          | _ -> false)
        (Booking.book ~now
           (req ~envelope:(envelope_of [ Grants.Read; Grants.Retrieve ]) ())));
-  check "...and that beats the kit-fit check, which would also have failed"
+  check "...and that beats the role-fit check, which would also have failed"
     (* echo needs nothing, so it fits any envelope. The refusal must still fire,
        which proves the check is on the envelope and not on the pairing. *)
     (is_err
        (function Booking.Envelope_carries_composer_grant _ -> true | _ -> false)
        (Booking.book ~now
-          (req ~kit:Kit.echo ~envelope:(envelope_of [ Grants.Retrieve ]) ())));
+          (req ~role:Role.echo ~envelope:(envelope_of [ Grants.Retrieve ]) ())));
   check "an expired envelope reports Expired, not a budget figure"
     (is_err
        (function
-         | Booking.Envelope_dead (Terms.Expired _) -> true | _ -> false)
+         | Booking.Envelope_dead (Obligations.Expired _) -> true | _ -> false)
        (Booking.book ~now:2000L (req ())));
   check "an exhausted envelope reports Exhausted"
     (is_err
        (function
-         | Booking.Envelope_dead (Terms.Exhausted { budget = 0 }) -> true
+         | Booking.Envelope_dead (Obligations.Exhausted { budget = 0 }) -> true
          | _ -> false)
        (Booking.book ~now
           (req ~envelope:(envelope_of ~budget:0 [ Grants.Read; Grants.Query ]) ())));
 
-  print_string "\nthe kit must FIT the envelope, not define it\n";
+  print_string "\nthe role must FIT the envelope, not define it\n";
 
-  check "a kit needing actions the envelope lacks is refused"
+  check "a role needing actions the envelope lacks is refused"
     (is_err
        (function
          | Booking.Kit_exceeds_envelope [ Grants.Read; Grants.Query ] -> true
@@ -137,109 +137,109 @@ let () =
        (function
          | Booking.Kit_exceeds_envelope [ Grants.Query ] -> true | _ -> false)
        (Booking.book ~now (req ~envelope:(envelope_of [ Grants.Read ]) ())));
-  check "a kit needing nothing fits an empty envelope"
-    (match Booking.book ~now (req ~kit:Kit.echo ~envelope:(envelope_of []) ()) with
+  check "a role needing nothing fits an empty envelope"
+    (match Booking.book ~now (req ~role:Role.echo ~envelope:(envelope_of []) ()) with
      | Ok _ -> true | Error _ -> false);
-  check "an invalid kit is refused with the KIT layer's own reason"
+  check "an invalid role is refused with the KIT layer's own reason"
     (is_err
        (function
-         | Booking.Kit_rejected (Kit.Composer_only Grants.Retrieve) -> true
+         | Booking.Kit_rejected (Role.Composer_only Grants.Retrieve) -> true
          | _ -> false)
        (Booking.book ~now
           (* NOT an envelope carrying Retrieve: that check fires first and
              correctly, which would make this test prove the wrong thing. *)
-          (req ~kit:Kit.bad_researcher ~envelope:(envelope_of [ Grants.Read ]) ())));
+          (req ~role:Role.bad_researcher ~envelope:(envelope_of [ Grants.Read ]) ())));
 
-  (* Kit.t has no signature hiding its fields, so an `Ok` can carry a record
-     that never passed through Kit.make. Trusting a constructor that was not
-     necessarily used is precisely how a composer-only grant gets in. *)
+  (* Role.t has no signature hiding its fields, so an `Ok` can carry a record
+     that never passed through Role.make. Trusting a constructor that was not
+     necessarily used is precisely how a agent-only grant gets in. *)
   let forged =
-    Ok { Kit.name = "forged"; purpose = "smuggle retrieval";
+    Ok { Role.name = "forged"; purpose = "smuggle retrieval";
          grants = [ Grants.Read; Grants.Retrieve ];
          state_shape = "notes"; ladder = Phases.critic_ladder;
          budget_ms = 1000; budget_actions = 2 }
   in
-  check "a FORGED kit record is caught by re-validation at booking"
+  check "a FORGED role record is caught by re-validation at booking"
     (is_err
-       (function Booking.Kit_rejected (Kit.Composer_only _) -> true | _ -> false)
-       (Booking.book ~now (req ~kit:forged ~envelope:(envelope_of [ Grants.Read ]) ())));
-  check "a kit with grants and no action allowance cannot be made at all"
+       (function Booking.Kit_rejected (Role.Composer_only _) -> true | _ -> false)
+       (Booking.book ~now (req ~role:forged ~envelope:(envelope_of [ Grants.Read ]) ())));
+  check "a role with grants and no action allowance cannot be made at all"
     (match
-       Kit.make ~name:"starved" ~purpose:"act with no allowance"
+       Role.make ~name:"starved" ~purpose:"act with no allowance"
          ~grants:[ Grants.Read ] ~state_shape:"unit"
          ~ladder:Phases.critic_ladder ~budget_ms:100 ~budget_actions:0
      with
-     | Error (Kit.Cannot_act _) -> true | _ -> false);
+     | Error (Role.Cannot_act _) -> true | _ -> false);
 
   print_string "\nbooked to match: narrowing, not copying\n";
 
-  (* The single most important line in booking.ml. If gig_terms copied the
+  (* The single most important line in booking.ml. If commission_obligations copied the
      envelope's grants, an actor would hold whatever the human happened to
-     authorise rather than what its kit needs -- and every claim about least
+     authorise rather than what its role needs -- and every claim about least
      authority in this design would be decoration. *)
   let wide = envelope_of [ Grants.Read; Grants.Query; Grants.Write; Grants.Spawn ] in
   check "the actor's grants are the KIT's, not the envelope's"
     (match Booking.book ~now (req ~envelope:wide ()) with
      | Ok b ->
-         let g = Terms.grants b.Booking.gig_terms in
+         let g = Obligations.grants b.Booking.commission_obligations in
          Grants.allows g Grants.Read && Grants.allows g Grants.Query
          && not (Grants.allows g Grants.Write)
          && not (Grants.allows g Grants.Spawn)
      | Error _ -> false);
-  check "the actor's terms cannot outlive the envelope"
+  check "the actor's obligations cannot outlive the envelope"
     (match Booking.book ~now (req ~envelope:wide ()) with
      | Ok b ->
-         Terms.expires_at b.Booking.gig_terms = Terms.expires_at wide
+         Obligations.expires_at b.Booking.commission_obligations = Obligations.expires_at wide
      | Error _ -> false);
-  check "the actor's action allowance is the kit's declared number, verbatim"
+  check "the actor's action allowance is the role's declared number, verbatim"
     (match Booking.book ~now (req ~envelope:wide ()) with
-     | Ok b -> Terms.budget b.Booking.gig_terms = 2   (* Kit.critic declares 2 *)
+     | Ok b -> Obligations.budget b.Booking.commission_obligations = 2   (* Role.critic declares 2 *)
      | Error _ -> false);
-  check "a kit with no grants gets a budget of 0, not a flattering 1"
-    (* Dead terms are the CORRECT terms for an actor with no permitted action.
-       An earlier `max 1` here printed budget=1 for a kit that declared 0. *)
-    (match Booking.book ~now (req ~kit:Kit.echo ~envelope:(envelope_of []) ()) with
-     | Ok b -> Terms.budget b.Booking.gig_terms = 0
+  check "a role with no grants gets a budget of 0, not a flattering 1"
+    (* Dead obligations are the CORRECT obligations for an actor with no permitted action.
+       An earlier `max 1` here printed budget=1 for a role that declared 0. *)
+    (match Booking.book ~now (req ~role:Role.echo ~envelope:(envelope_of []) ()) with
+     | Ok b -> Obligations.budget b.Booking.commission_obligations = 0
      | Error _ -> false);
-  check "the actor's terms snapshot is the form sig, so grants are traceable"
+  check "the actor's obligations snapshot is the form sig, so grants are traceable"
     (match Booking.book ~now (req ~envelope:wide ()) with
      | Ok b ->
-         Grants.snapshot (Terms.grants b.Booking.gig_terms) = b.Booking.form_sig
+         Grants.snapshot (Obligations.grants b.Booking.commission_obligations) = b.Booking.form_sig
      | Error _ -> false);
 
   print_string "\nbooked to match: the tighter wall clock wins\n";
 
-  check "kit tighter than terms -> kit"
+  check "role tighter than obligations -> role"
     (* critic asks 5000ms; the envelope leaves 100_000ms *)
     (match Booking.book ~now (req ()) with
      | Ok b -> b.Booking.wall_ms = 5000 | Error _ -> false);
-  check "terms tighter than kit -> terms"
+  check "obligations tighter than role -> obligations"
     (match
        Booking.book ~now
          (req ~envelope:(envelope_of ~expires_at:1002L [ Grants.Read; Grants.Query ]) ())
      with
      | Ok b -> b.Booking.wall_ms = 2000 | Error _ -> false);
   (* No_wall_left is reachable only from the KIT side today, and that is worth
-     knowing rather than assuming: Terms is second-granular and `live` already
-     refuses when now >= expires_at, so the terms side of the min is always at
-     least 1000ms by the time it is computed. A kit asking for zero time is the
+     knowing rather than assuming: Obligations is second-granular and `live` already
+     refuses when now >= expires_at, so the obligations side of the min is always at
+     least 1000ms by the time it is computed. A role asking for zero time is the
      one way to reach zero, and booking is the right place to refuse it because
      the wall clock is a property of the PAIRING, not of either side alone. *)
   let no_time =
-    Kit.make ~name:"instant" ~purpose:"ask for no time at all" ~grants:[]
+    Role.make ~name:"instant" ~purpose:"ask for no time at all" ~grants:[]
       ~state_shape:"unit" ~ladder:Phases.echo_ladder ~budget_ms:0
       ~budget_actions:0
   in
-  check "a kit asking for zero wall clock is refused at booking"
+  check "a role asking for zero wall clock is refused at booking"
     (is_err
        (function Booking.No_wall_left { kit_ms = 0; _ } -> true | _ -> false)
-       (Booking.book ~now (req ~kit:no_time ~envelope:(envelope_of []) ())));
+       (Booking.book ~now (req ~role:no_time ~envelope:(envelope_of []) ())));
   check "...and the refusal reports what each side offered"
     (is_err
        (function
          | Booking.No_wall_left { kit_ms = 0; terms_ms = 100_000 } -> true
          | _ -> false)
-       (Booking.book ~now (req ~kit:no_time ~envelope:(envelope_of []) ())));
+       (Booking.book ~now (req ~role:no_time ~envelope:(envelope_of []) ())));
 
   print_string "\nform identity\n";
 
@@ -301,10 +301,10 @@ let () =
        (Booking.book ~now
           (req ~evidence:{ Conditions.clean with Conditions.requires_human = true;
                                                  human_verdict = false } ())));
-  check "a broken kit attaches to the KIT"
-    (is_err (fun r -> att r = "kit")
+  check "a broken role attaches to the KIT"
+    (is_err (fun r -> att r = "role")
        (Booking.book ~now
-          (req ~kit:Kit.bad_researcher ~envelope:(envelope_of [ Grants.Read ]) ())));
+          (req ~role:Role.bad_researcher ~envelope:(envelope_of [ Grants.Read ]) ())));
   check "conditions itself distinguishes the two Refuse reasons"
     (let structural =
        Conditions.evaluate { Conditions.clean with Conditions.single_writer = false } in
@@ -319,7 +319,7 @@ let () =
   print_string "\nphases cross the fork; the PARENT decides what counts\n";
 
   let booked =
-    match Booking.book ~now (req ~kit:Kit.echo ~envelope:(envelope_of []) ()) with
+    match Booking.book ~now (req ~role:Role.echo ~envelope:(envelope_of []) ()) with
     | Ok b -> b
     | Error _ -> failwith "echo must book"
   in
@@ -336,7 +336,7 @@ let () =
     (let c = run_emitting (Booking.emit ~phase:None "silent") in
      Booking.matched c = "no" && Phases.emissions c.Booking.progress = 0);
   check "an UNDECLARED phase is a breach, and a breach is never partial credit"
-    (* The child chooses what to say; the parent chooses what counts. A behavior
+    (* The child chooses what to say; the parent chooses what counts. A script
        that can name any string could name the terminal one. *)
     (let c = run_emitting (Booking.emit ~phase:(Some "done") "forged") in
      (match c.Booking.breach with
@@ -347,7 +347,7 @@ let () =
        load-bearing rather than defensive. That is the point of pinning it. *)
     (let c = run_emitting (Booking.emit ~phase:(Some "done") "forged") in
      Phases.emissions c.Booking.progress = 0 && c.Booking.breach <> None);
-  check "a phase from ANOTHER kit's ladder is undeclared here"
+  check "a phase from ANOTHER role's ladder is undeclared here"
     (let c = run_emitting (Booking.emit ~phase:(Some "verdict_emitted") "x") in
      c.Booking.breach <> None && Booking.matched c = "no");
   check "a crash is not a breach -- it is an outcome"
@@ -357,7 +357,7 @@ let () =
   check "the wall clock kills a runaway and matched is no"
     (let slow =
        match Booking.book ~now
-               (req ~kit:Kit.echo ~envelope:(envelope_of ~expires_at:1002L []) ())
+               (req ~role:Role.echo ~envelope:(envelope_of ~expires_at:1002L []) ())
        with Ok b -> b | Error _ -> failwith "must book" in
      let c = Booking.run slow ~work:(fun _ -> Unix.sleep 5; "never") in
      Booking.outcome_word c = "budget_exceeded" && Booking.matched c = "no");
@@ -444,7 +444,7 @@ let () =
     print_string "  SKIP  elpi is not installed; the engine-verdict arm is not exercised\n";
 
   (* A check the engine does not have is not a check the engine has cleared.
-     gate.elpi has no composer-grant rule, so deferring wholesale would let an
+     gate.elpi has no agent-grant rule, so deferring wholesale would let an
      actor claiming Retrieve book the moment elpi is installed. This must refuse
      with a gate supplied, and it must refuse for the SAME reason and by the
      same decider whether or not elpi is present -- so it is asserted outside
@@ -452,19 +452,19 @@ let () =
   let claims_composer_grant =
     req ~evidence:{ Conditions.clean with Conditions.no_composer_grants = false } ()
   in
-  check "a composer-only grant is refused even with a gate supplied"
+  check "a agent-only grant is refused even with a gate supplied"
     (match Booking.book ~gate ~now claims_composer_grant with
      | Error (Booking.Refused { reasons; decided_by; attaches }) ->
          decided_by = "conditions"
          && attaches = Conditions.Composition
-         && List.mem "actor_claims_composer_only_grant" reasons
+         && List.mem "actor_claims_agent_only_grant" reasons
      | _ -> false);
   (* THE ARM THAT MATTERS, and it needs a stub engine to reach.
      Engineless, Bridge.gate returns Engine_missing and the seam falls back to
-     Conditions -- which refuses composer grants anyway, so every engineless
+     Conditions -- which refuses agent grants anyway, so every engineless
      test passes with or without the guard. A stub that ANSWERS, and answers
      Book, is the only way to ask the real question: when the engine says yes
-     to a composition gate.elpi has no rule against, does the composer-grant
+     to a composition gate.elpi has no rule against, does the agent-grant
      refusal still stand? *)
   let engine_says_book ~capabilities:_ _ =
     Ok Bridge.{ decision = Book; reasons = [] }
@@ -472,7 +472,7 @@ let () =
   let composer_evidence =
     { Conditions.clean with Conditions.no_composer_grants = false }
   in
-  check "an engine answering Book does NOT clear a composer-only grant"
+  check "an engine answering Book does NOT clear a agent-only grant"
     (match
        Booking.decide_composition ~engine:engine_says_book
          (Some Booking.{ composition =
@@ -482,7 +482,7 @@ let () =
      with
      | (Conditions.Refuse, reasons, _, decided_by) ->
          decided_by = "conditions"
-         && List.mem "actor_claims_composer_only_grant" reasons
+         && List.mem "actor_claims_agent_only_grant" reasons
      | _ -> false);
   check "...while the same engine still books a composition with clean grants"
     (match

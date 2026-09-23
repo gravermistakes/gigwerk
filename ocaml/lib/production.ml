@@ -1,7 +1,7 @@
 (* An acceptance check is a CLOSED VARIANT, not a command string.
  *
  * It was a string, and Verifier handed it to /bin/sh -c. The specification is
- * written by the composer, which is the one thing in this system that calls a
+ * written by the agent, which is the one thing in this system that calls a
  * model, so the path ran: model output -> free text -> shell. A working
  * directory is not a confinement.
  *

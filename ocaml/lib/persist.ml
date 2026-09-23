@@ -1,14 +1,14 @@
 (* Durable form for the four modules that otherwise lose everything on exit:
  * Embed (via the vectors embedded in a Reconstruct.doc), Reconstruct,
- * Introspect and Trace. Every statement here goes through Store.query,
- * Store.exec and Store.esc -- nothing new was added to Store, so this file
- * inherits Store's shelling-out design whole, including three sharp edges
- * that are not obvious from reading store.ml alone. Each is worked around
- * HERE, in the SQL this file writes, because store.ml itself is out of
+ * Introspect and Trace. Every statement here goes through Agency.query,
+ * Agency.exec and Agency.esc -- nothing new was added to Agency, so this file
+ * inherits Agency's shelling-out design whole, including three sharp edges
+ * that are not obvious from reading agency.ml alone. Each is worked around
+ * HERE, in the SQL this file writes, because agency.ml itself is out of
  * bounds:
  *
  * 1. NULL and '' ARE THE SAME STRING ON THE WAY OUT.
- *    `Store.query` shells out to `sqlite3 -noheader -separator '|'` with no
+ *    `Agency.query` shells out to `sqlite3 -noheader -separator '|'` with no
  *    `.nullvalue` set, and sqlite's default nullvalue is ''. A NULL column
  *    and a column holding the empty string print identically, so a plain
  *    `SELECT full FROM sarcasm_doc` cannot tell "no full form was kept"
@@ -31,7 +31,7 @@
  *    that string reparses to a DIFFERENT double than the one stored (found
  *    by hand while building this file: a real, not a theoretical, failure --
  *    see the report). What actually works is sqlite's own `!` printf flag --
- *    `printf('%!.17g', col)` -- which is documented sqlite-specific behavior
+ *    `printf('%!.17g', col)` -- which is documented sqlite-specific script
  *    telling it to compute genuine digits out to the requested precision
  *    instead of its normal fast (and here, wrong) path. Every affect tone
  *    and every `at` timestamp is read back through `%!.17g`, never bare and
@@ -40,7 +40,7 @@
  *    plain text, never touching sqlite's REAL affinity at all.
  *
  * 3. A ROW THAT PRINTS AS ALL EMPTY COLUMNS DOES NOT COME BACK.
- *    `Store.query` trims each output line and drops it if the trim is ''.
+ *    `Agency.query` trims each output line and drops it if the trim is ''.
  *    A row whose only selected column happens to render as '' -- NULL,
  *    or a genuinely empty string, or (with (2) fixed) never a truncated
  *    float -- is therefore indistinguishable from no row at all: the query
@@ -53,11 +53,11 @@
  * splits on raw '\n' between rows and raw '|' between columns, with no
  * escaping. A digest, a full text, or an introspection entry that contains
  * a literal newline or pipe will misparse on the way back out. Nothing here
- * can fix that without changing store.ml, which is out of scope; it is
+ * can fix that without changing agency.ml, which is out of scope; it is
  * reported instead of patched around. Keep persisted prose to text without
- * embedded newlines or pipes until store.ml grows a real serialization. *)
+ * embedded newlines or pipes until agency.ml grows a real serialization. *)
 
-let sql_str s = "'" ^ Store.esc s ^ "'"
+let sql_str s = "'" ^ Agency.esc s ^ "'"
 let sql_opt_str = function None -> "NULL" | Some s -> sql_str s
 let sql_float f = Printf.sprintf "%.17g" f   (* see limitation (2) above *)
 
@@ -102,12 +102,12 @@ let parse_doc_row = function
    diff, because sarcasm_link is a projection of `digest` (see persist.sql):
    the only way it can never say something `digest` does not is to be
    rebuilt from `digest` in full on every save, not patched. All of it goes
-   through one Store.exec call, matching how store.ml itself bundles
-   related statements (open_gig/close_gig) rather than risking a partial
+   through one Agency.exec call, matching how agency.ml itself bundles
+   related statements (open_commission/close_commission) rather than risking a partial
    write split across two shelled-out connections. *)
 let save_doc (d : Reconstruct.doc) : unit =
   let a = d.Reconstruct.affect in
-  let id = Store.esc d.Reconstruct.id in
+  let id = Agency.esc d.Reconstruct.id in
   let links = Reconstruct.links d in
   let link_sql =
     if links = [] then ""
@@ -118,7 +118,7 @@ let save_doc (d : Reconstruct.doc) : unit =
         "INSERT INTO sarcasm_link (from_id, to_id, position) VALUES %s;"
         (String.concat ", " (List.mapi value links))
   in
-  Store.exec (Printf.sprintf
+  Agency.exec (Printf.sprintf
     "INSERT OR REPLACE INTO sarcasm_doc \
        (id, digest, full, vec, affect_surprise, affect_hazard, affect_novelty, \
         affect_cost, affect_dissonance, affect_valence) \
@@ -133,7 +133,7 @@ let save_doc (d : Reconstruct.doc) : unit =
     id link_sql)
 
 let load_doc (id : string) : Reconstruct.doc option =
-  match Store.query (Printf.sprintf
+  match Agency.query (Printf.sprintf
       "SELECT %s FROM sarcasm_doc WHERE id = %s;" doc_select_cols (sql_str id)) with
   | [] -> None
   | [ row ] -> Some (parse_doc_row row)
@@ -145,7 +145,7 @@ let load_doc (id : string) : Reconstruct.doc option =
    contained a literal "[[]]", and would then vanish from the result
    instead of coming back as "". *)
 let doc_links (from_id : string) : string list =
-  Store.query (Printf.sprintf
+  Agency.query (Printf.sprintf
     "SELECT position, to_id FROM sarcasm_link WHERE from_id = %s ORDER BY position;"
     (sql_str from_id))
   |> List.map (function
@@ -158,7 +158,7 @@ let save_store (s : Reconstruct.store) : unit =
 
 let load_store () : Reconstruct.store =
   let s = Reconstruct.store () in
-  Store.query (Printf.sprintf "SELECT %s FROM sarcasm_doc;" doc_select_cols)
+  Agency.query (Printf.sprintf "SELECT %s FROM sarcasm_doc;" doc_select_cols)
   |> List.iter (fun row -> Reconstruct.add s (parse_doc_row row));
   s
 
@@ -190,7 +190,7 @@ let save_introspect (t : Introspect.t) : unit =
         "INSERT INTO introspect_entry (id, text, tags, links, at) VALUES %s;"
         (String.concat ", " (List.map row entries))
   in
-  Store.exec (Printf.sprintf "DELETE FROM introspect_entry; %s" insert)
+  Agency.exec (Printf.sprintf "DELETE FROM introspect_entry; %s" insert)
 
 let parse_introspect_row = function
   | [ id; text; tags; links; at ] ->
@@ -233,7 +233,7 @@ let parse_introspect_row = function
  * this task does not own. Reported rather than patched. *)
 let load_introspect () : Introspect.t =
   let rows =
-    Store.query
+    Agency.query
       "SELECT id, text, tags, links, printf('%!.17g', at) \
        FROM introspect_entry ORDER BY id ASC;"
   in
@@ -251,35 +251,35 @@ let load_introspect () : Introspect.t =
 (* TRACE: Trace.to_rows into the existing `span` table.                  *)
 (* ===================================================================== *)
 
-(* save_trace takes gig_id EXPLICITLY rather than reading it off `t`, and
+(* save_trace takes commission_id EXPLICITLY rather than reading it off `t`, and
  * that is not a convenience choice.
  *
- * `Trace.t.gig : string` and `span.gig_id : INTEGER NOT NULL REFERENCES
- * gig(id)` are two different kinds of identifier that happen to share a
+ * `Trace.t.commission : string` and `span.commission_id : INTEGER NOT NULL REFERENCES
+ * commission(id)` are two different kinds of identifier that happen to share a
  * name. Trace was written against a human-readable label (test_terms.ml's
- * own trace uses `Trace.create ~gig:"g1"`); the ledger's `gig` table uses a
+ * own trace uses `Trace.create ~commission:"g1"`); the ledger's `commission` table uses a
  * surrogate integer key nothing in trace.ml ever produces or sees. There is
- * no function anywhere that turns one into the other, so `to_rows`' `gig`
- * field cannot be dropped into `span.gig_id` honestly -- either sqlite
+ * no function anywhere that turns one into the other, so `to_rows`' `commission`
+ * field cannot be dropped into `span.commission_id` honestly -- either sqlite
  * stores it as text against an INTEGER-affinity column (silently, since a
  * label like "g1" cannot be cast) or, if the label happens to look
- * numeric, it lands in the ledger under the wrong gig's id entirely. This
+ * numeric, it lands in the ledger under the wrong commission's id entirely. This
  * is a pre-existing mismatch between trace.ml and schema.sql, not
  * something to paper over here: the caller is asked for the real ledger
- * gig_id instead, and `to_rows`' own `gig` string is not used at all. See
+ * commission_id instead, and `to_rows`' own `commission` string is not used at all. See
  * the report for the fuller version of this. *)
-let save_trace ~(gig_id : int) (t : Trace.t) : unit =
+let save_trace ~(commission_id : int) (t : Trace.t) : unit =
   let rows = Trace.to_rows t in
   if rows <> [] then begin
-    let row (id, parent, _gig, name, phase, duration_ms, outcome, breach) =
+    let row (id, parent, _commission, name, phase, duration_ms, outcome, breach) =
       let iopt = function None -> "NULL" | Some i -> string_of_int i in
       Printf.sprintf "(%d, %d, %s, %s, %s, %d, %s, %s)"
-        id gig_id (iopt parent) (sql_str name) (sql_opt_str phase)
+        id commission_id (iopt parent) (sql_str name) (sql_opt_str phase)
         duration_ms (sql_opt_str outcome) (sql_opt_str breach)
     in
-    Store.exec (Printf.sprintf
+    Agency.exec (Printf.sprintf
       "INSERT OR REPLACE INTO span \
-         (id, gig_id, parent, name, phase, duration_ms, outcome, breach) \
+         (id, commission_id, parent, name, phase, duration_ms, outcome, breach) \
        VALUES %s;"
       (String.concat ", " (List.map row rows)))
   end
@@ -290,17 +290,17 @@ let save_trace ~(gig_id : int) (t : Trace.t) : unit =
  * so there is no absolute timestamp anywhere in this path to rebuild a
  * live span from. Fabricating one (e.g. `started = 0.0`) would be a made-up
  * number wearing a real field's name. The honest thing is the shape
- * `to_rows` itself returns, minus the `gig` string (see save_trace) and
- * with the caller's own gig_id as the lookup key instead. *)
-let load_spans ~(gig_id : int)
+ * `to_rows` itself returns, minus the `commission` string (see save_trace) and
+ * with the caller's own commission_id as the lookup key instead. *)
+let load_spans ~(commission_id : int)
     : (int * int option * string * string option * int * string option * string option) list =
-  Store.query (Printf.sprintf
+  Agency.query (Printf.sprintf
     "SELECT id, parent, name, \
        CASE WHEN phase IS NULL THEN 0 ELSE 1 END, COALESCE(phase, ''), \
        duration_ms, \
        CASE WHEN outcome IS NULL THEN 0 ELSE 1 END, COALESCE(outcome, ''), \
        CASE WHEN breach IS NULL THEN 0 ELSE 1 END, COALESCE(breach, '') \
-     FROM span WHERE gig_id = %d ORDER BY id ASC;" gig_id)
+     FROM span WHERE commission_id = %d ORDER BY id ASC;" commission_id)
   |> List.map (function
       | [ id; parent; name; pflag; pval; dur; oflag; oval; bflag; bval ] ->
           let opt tag flag value =

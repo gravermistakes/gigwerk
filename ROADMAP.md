@@ -41,7 +41,7 @@ gigwerk run critic --artifact ./out.txt  # reads, emits a verdict row
 Build:
 - OCaml + Eio. `dune` project, `gigwerk` executable.
 - Read a composition from sqlite, construct the capability record, spawn,
-  deliver one message, step, write `gig` + `gig_outcome`.
+  deliver one message, step, write `commission` + `commission_outcome`.
 - Capability constructors for real: `fs_read`, `sqlite_query`. Two is enough.
 - The `echo` fixture first — it proves delivery/step/outcome without tools.
 
@@ -61,7 +61,7 @@ than the one in the schema comments, and the comments need correcting.
 
 **Done when:** `echo` and `critic` both run, write outcome rows, and a
 capability the composition didn't claim is a compile error in the actor's
-behavior — demonstrated by trying it and failing to build.
+script — demonstrated by trying it and failing to build.
 
 ---
 
@@ -104,21 +104,21 @@ buys back your attention.
 
 ```
 gigwerk queue                  # what's waiting on you
-gigwerk review <gig>           # your verdict; writes form_review
+gigwerk review <commission>           # your verdict; writes form_review
 gigwerk forms                  # C / B / A bands per form
 ```
 
 Build:
-- Wire the composer skill to `gigwerk propose`. The skill exists; the CLI it
+- Wire the agent skill to `gigwerk propose`. The skill exists; the CLI it
   calls doesn't yet.
 - Review queue as a real surface, not an implied one.
 - `prolog/confidence.pl` already computes the bands — connect it to booking so
   A-band forms auto-book and C-band forms stop.
-- Feedback module: `gig_outcome` + `form_review` written on every gig close,
+- Feedback module: `commission_outcome` + `form_review` written on every commission close,
   including crashes and budget kills.
 
 **Done when:** a form you've reviewed 12+ times auto-books without asking you,
-and a form that starts failing drops out of auto-book inside 15 gigs.
+and a form that starts failing drops out of auto-book inside 15 commissions.
 
 This is the phase where the ~100 reviews of runway start accruing. It can't
 start earlier and shouldn't start later.
@@ -130,18 +130,18 @@ start earlier and shouldn't start later.
 **Usable as:** confidence you can trust rather than confidence you hope in.
 
 Build:
-- Adversarial judge as a **second model**, separate from the composer. Two
+- Adversarial judge as a **second model**, separate from the agent. Two
   disciplines make it work rather than being a second opinion in name:
-  it sees **artifact and outcome only, never the composer's justification**,
+  it sees **artifact and outcome only, never the agent's justification**,
   and its prior is **refuted-under-uncertainty** so ties kill.
 - Per-language linters behind one interface: `(source, before) → verdict +
   reasons`. You already have the Lisp one — `gate.lisp` from the SBCL build is
   exactly this shape. OCaml gets the compiler. Python gets ruff plus an AST walk.
 - `judge_refuted` already burns a confidence slot in `confidence.pl`. Decide
   then whether a refutation should also *veto* autopass outright — stronger,
-  but one aggressive refutation then costs 15 gigs of runway.
+  but one aggressive refutation then costs 15 commissions of runway.
 
-**Done when:** a composition that passes the gate and completes its gig is
+**Done when:** a composition that passes the gate and completes its commission is
 still held out of A-band because the judge refuted it.
 
 ---
@@ -152,12 +152,12 @@ still held out of A-band because the judge refuted it.
 data existing.
 
 Build:
-- Mode declarations over `gig_result/8` — already flat and ILP-shaped in
+- Mode declarations over `commission_result/8` — already flat and ILP-shaped in
   `export_facts.sql`.
 - Induced rules → your review → gate logic. **Never** Aleph → gate directly;
   that closes the loop on itself.
 
-**Do not start this before ~100 labeled gigs exist.** Aleph wants 3 positives
+**Do not start this before ~100 labeled commissions exist.** Aleph wants 3 positives
 minimum and gives you nothing trustworthy at 40 examples. The temptation to
 wire it early is how you end up trusting a rule that memorised one bad week.
 

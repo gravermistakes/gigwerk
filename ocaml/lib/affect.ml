@@ -34,7 +34,7 @@ let unit_ = clamp 0.0 1.0
 let surprise_of_match = function
   | "yes" -> 0.0 | "partial" -> 0.5 | _ -> 1.0
 
-(* a gig that touched something irreversible, breached its terms, or crashed *)
+(* a commission that touched something irreversible, breached its obligations, or crashed *)
 let hazard_of ~side_effecting ~breached ~crashed =
   unit_ ((if side_effecting then 0.4 else 0.0)
          +. (if breached then 0.3 else 0.0)

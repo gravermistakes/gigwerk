@@ -1,4 +1,4 @@
-(* Store access. Shells out to the sqlite3 CLI rather than binding libsqlite3,
+(* Agency access. Shells out to the sqlite3 CLI rather than binding libsqlite3,
  * which keeps Phase 1 free of opam. Replace with ocaml-sqlite3 when the
  * dependency is worth having; every call site goes through here. *)
 
@@ -122,38 +122,38 @@ let entity_exists ~entity =
                  (esc entity)) with
   | [ _ ] -> true | _ -> false
 
-(* Prediction is written BEFORE the gig runs and outcome after, in separate
+(* Prediction is written BEFORE the commission runs and outcome after, in separate
    statements, because a log of what happened without a log of what was expected
    is history rather than an error signal. *)
 (* One connection, both statements: last_insert_rowid() is per-connection, and
    the sqlite3 CLI opens a new one per invocation. Splitting these silently
-   yielded gig_id=0 and orphaned every outcome row. *)
-let open_gig ~entity ~sig_ ~tier ~predicts ~falsifiable_by =
+   yielded commission_id=0 and orphaned every outcome row. *)
+let open_commission ~entity ~sig_ ~tier ~predicts ~falsifiable_by =
   let script = Printf.sprintf
     "BEGIN; \
-     INSERT INTO gig (entity_id, composition_sig, booked_at, started_at, tier) \
+     INSERT INTO commission (entity_id, composition_sig, booked_at, started_at, tier) \
      SELECT id, '%s', strftime('%%s','now'), strftime('%%s','now'), '%s' \
        FROM entity WHERE name = '%s'; \
-     INSERT INTO gig_prediction (gig_id, predicts, falsifiable_by, made_at) \
+     INSERT INTO commission_prediction (commission_id, predicts, falsifiable_by, made_at) \
      VALUES (last_insert_rowid(), '%s', '%s', strftime('%%s','now')); \
-     SELECT gig_id FROM gig_prediction ORDER BY gig_id DESC LIMIT 1; \
+     SELECT commission_id FROM commission_prediction ORDER BY commission_id DESC LIMIT 1; \
      COMMIT;"
     (esc sig_) (esc tier) (esc entity) (esc predicts) (esc falsifiable_by) in
   let out = sh (Printf.sprintf "sqlite3 %s %s 2>&1"
                   (Filename.quote !db_path) (Filename.quote script)) in
   String.trim out
 
-let close_gig ~gig_id ~outcome ~matched ~note =
+let close_commission ~commission_id ~outcome ~matched ~note =
   exec (Printf.sprintf
-    "UPDATE gig SET ended_at = strftime('%%s','now') WHERE id = %s; \
-     INSERT INTO gig_outcome (gig_id, outcome, matched, observed_at, note) \
+    "UPDATE commission SET ended_at = strftime('%%s','now') WHERE id = %s; \
+     INSERT INTO commission_outcome (commission_id, outcome, matched, observed_at, note) \
      VALUES (%s, '%s', '%s', strftime('%%s','now'), '%s');"
-    gig_id gig_id (esc outcome) (esc matched) (esc note))
+    commission_id commission_id (esc outcome) (esc matched) (esc note))
 
 (* --------------------------------------------------------------- reviews *)
 
 (* The human's review is the source of confidence. Nothing else writes this
- * table: not the critic (mechanical, already recorded as gig_outcome.matched),
+ * table: not the critic (mechanical, already recorded as commission_outcome.matched),
  * not the AI (its rank is stored beside a verdict, never instead of one).
  *
  * form_review has an FK to form(sig). The FK is not enforced by default in
@@ -161,24 +161,24 @@ let close_gig ~gig_id ~outcome ~matched ~note =
  * invisible to every band, which is how three reviews once "passed" while
  * silently inserting nothing. So the form row is created first, in the same
  * connection, and the whole thing is one transaction. *)
-let write_review ~form_sig ~gig_id ~held ~critic_passed ~judge_refuted ~soul_version =
+let write_review ~form_sig ~commission_id ~held ~critic_passed ~judge_refuted ~soul_version =
   exec_checked (Printf.sprintf
     "BEGIN; \
      INSERT INTO form_review \
-       (form_sig, gig_id, prediction_held, critic_passed, judge_refuted, \
+       (form_sig, commission_id, prediction_held, critic_passed, judge_refuted, \
         human_reviewed, soul_version, at) \
      SELECT '%s', %s, '%s', %d, %d, 1, %s, strftime('%%s','now') \
      WHERE EXISTS (SELECT 1 FROM form WHERE sig = '%s'); \
      COMMIT;"
     (esc form_sig)
-    (match gig_id with Some g -> g | None -> "NULL")
+    (match commission_id with Some g -> g | None -> "NULL")
     (esc held) (if critic_passed then 1 else 0) (if judge_refuted then 1 else 0)
     (match soul_version with Some s -> "'" ^ esc s ^ "'" | None -> "NULL")
     (esc form_sig))
 
-let gig_form ~gig_id =
+let commission_form ~commission_id =
   match query (Printf.sprintf
-    "SELECT composition_sig FROM gig WHERE id = %s" gig_id) with
+    "SELECT composition_sig FROM commission WHERE id = %s" commission_id) with
   | [ [ s ] ] -> Some (String.trim s)
   | _ -> None
 

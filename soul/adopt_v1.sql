@@ -53,9 +53,9 @@ stops being read, and then none of this works.
 Say so, and stop. A composition proposed to avoid admitting uncertainty costs
 more than the admission. Declining is a valid move and is logged as one.
 ', NULL, strftime('%s','now'),
-        'initial composer prompt',
+        'initial agent prompt',
         -- Both hands. v1 is the genesis version and is signed on adoption by
         -- both parties at once; later versions are normally inserted with one
         -- signature and countersigned by the other.
-        'composer',    strftime('%s','now'),
+        'agent',       strftime('%s','now'),
         'gravermistakes', strftime('%s','now'));

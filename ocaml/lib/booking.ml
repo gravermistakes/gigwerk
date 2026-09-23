@@ -1,16 +1,16 @@
-(* The booking path: Conditions -> Terms -> Kit -> Actor booked to match.
+(* The booking path: Conditions -> Obligations -> Role -> Actor booked to match.
  *
  * WHY THIS ORDER, since it is not the order the types suggest.
  *
- * My instinct was Kit -> Terms: the kit knows which actions it needs, so let it
- * hand those to Terms. That is backwards, and the way it is backwards is the
- * same failure this whole design exists to prevent. If the kit supplies the
+ * My instinct was Role -> Obligations: the role knows which actions it needs, so let it
+ * hand those to Obligations. That is backwards, and the way it is backwards is the
+ * same failure this whole design exists to prevent. If the role supplies the
  * budget, the thing that runs inside the bound is the thing that set the bound.
- * A kit author who wants more room writes a bigger number, and the number stops
+ * A role author who wants more room writes a bigger number, and the number stops
  * being a bound and becomes a declaration.
  *
- * So the envelope is authored ABOVE the kit and the kit is then checked to see
- * whether it fits inside. Terms first, kit second, and a kit that needs an
+ * So the envelope is authored ABOVE the role and the role is then checked to see
+ * whether it fits inside. Obligations first, role second, and a role that needs an
  * action the envelope does not grant is refused rather than accommodated. This
  * is the same discipline Caps applies to space -- the dirfd has no parent --
  * applied to quantity: the allowance has no author downstream of itself.
@@ -18,26 +18,26 @@
  * WHAT "BOOKED TO MATCH" MEANS HERE. Two things, and both are checked:
  *
  *   1. The actor's grants are the KIT's, not the envelope's. If the envelope
- *      permits Read and Write and the kit only reads, the booked actor holds
+ *      permits Read and Write and the role only reads, the booked actor holds
  *      Read. Least authority, computed at booking, not trusted at runtime.
- *   2. The actor's wall clock is min(what the kit asks, what the terms leave).
+ *   2. The actor's wall clock is min(what the role asks, what the obligations leave).
  *      Whichever is tighter, always, and resolved before the fork so no code
- *      inside the gig participates in the decision.
+ *      inside the commission participates in the decision.
  *
  * THE FORK PROBLEM, stated rather than papered over.
  *
- * A gig runs in a forked child (actor.ml). Terms are an immutable OCaml value,
- * so `Terms.spend` inside the child mutates a copy that dies with the child --
+ * A commission runs in a forked child (actor.ml). Obligations are an immutable OCaml value,
+ * so `Obligations.spend` inside the child mutates a copy that dies with the child --
  * the parent never learns what was consumed. A per-action counter therefore
- * CANNOT be a global bound across gigs, and pretending otherwise would be a
+ * CANNOT be a global bound across commissions, and pretending otherwise would be a
  * budget figure nobody reads.
  *
- * Two Terms values instead, each bounding what it can actually bound:
+ * Two Obligations values instead, each bounding what it can actually bound:
  *
  *   envelope   held by the parent, debited ONE unit per booking, before the
- *              fork. This is the across-gig bound and it cannot be evaded,
+ *              fork. This is the across-commission bound and it cannot be evaded,
  *              because the child does not hold it.
- *   gig_terms  a narrowed copy handed to the child. Per-gig action allowance.
+ *   commission_obligations  a narrowed copy handed to the child. Per-commission action allowance.
  *              Dying with the child is correct, not a leak: it was never a
  *              running total.
  *
@@ -45,7 +45,7 @@
  * which is why it is the backstop rather than the accountant.
  *
  * PHASES CROSS THE FORK, WHICH IS THE POINT. The child reports a phase name on
- * the pipe; the PARENT checks it against the kit's ladder. An undeclared phase
+ * the pipe; the PARENT checks it against the role's ladder. An undeclared phase
  * is a breach detected by the reader, not a self-report the reader trusts. That
  * is the only reason a completion signal means anything here: the child chooses
  * what to say and the parent chooses what counts. *)
@@ -62,12 +62,12 @@ type refusal =
                  decided_by : string }
   | Queued of { reasons : string list; decided_by : string }
   (* An envelope carrying Retrieve would hand ranked retrieval to an actor the
-     moment it is copied down. Kit.validate already refuses a kit that claims a
-     composer-only grant, but nothing checked the ENVELOPE -- and the envelope
-     is what gets narrowed into the actor's terms. Same hole, one layer up. *)
+     moment it is copied down. Role.validate already refuses a role that claims a
+     agent-only grant, but nothing checked the ENVELOPE -- and the envelope
+     is what gets narrowed into the actor's obligations. Same hole, one layer up. *)
   | Envelope_carries_composer_grant of Grants.action
-  | Envelope_dead of Terms.breach
-  | Kit_rejected of Kit.rejection
+  | Envelope_dead of Obligations.breach
+  | Kit_rejected of Role.rejection
   | Kit_exceeds_envelope of Grants.action list
   | No_wall_left of { kit_ms : int; terms_ms : int }
 
@@ -79,15 +79,15 @@ let refusal_to_string = function
       Printf.sprintf "queued: %s [decided_by=%s]"
         (String.concat ", " reasons) decided_by
   | Envelope_carries_composer_grant a ->
-      Printf.sprintf "envelope grants composer-only action %s"
+      Printf.sprintf "envelope grants agent-only action %s"
         (Grants.action_to_string a)
-  | Envelope_dead b -> "envelope not live: " ^ Terms.breach_to_string b
-  | Kit_rejected r -> "kit rejected: " ^ Kit.rejection_to_string r
+  | Envelope_dead b -> "envelope not live: " ^ Obligations.breach_to_string b
+  | Kit_rejected r -> "role rejected: " ^ Role.rejection_to_string r
   | Kit_exceeds_envelope acts ->
-      Printf.sprintf "kit needs actions the envelope does not grant: %s"
+      Printf.sprintf "role needs actions the envelope does not grant: %s"
         (String.concat ", " (List.map Grants.action_to_string acts))
   | No_wall_left { kit_ms; terms_ms } ->
-      Printf.sprintf "no wall clock left: kit asks %dms, envelope leaves %dms"
+      Printf.sprintf "no wall clock left: role asks %dms, envelope leaves %dms"
         kit_ms terms_ms
 
 (* The decision recorded in booking_verdict. `Queued` and `Refused` are as much
@@ -101,7 +101,7 @@ let decision_of_refusal = function
 (* WHO decided the composition. The composition-level verdicts (Refused/Queued)
    carry it because that is where 'conditions' vs 'elpi' actually diverges. The
    refusals that happen AFTER elpi/conditions already said Book (an envelope
-   that carries a composer grant, a dead envelope, a rejected or oversized kit,
+   that carries a agent grant, a dead envelope, a rejected or oversized role,
    no wall clock) are attributed to 'conditions' -- not because OCaml decided
    them, but because the schema's CHECK only admits conditions/elpi/human and
    none of those checks is the gate's; they are the in-process structural layer
@@ -120,7 +120,7 @@ let refusal_decided_by = function
  * verdict was. Only a 'composition' refusal enters the dead set.
  *
  * This distinction was missing on the first wiring and the consequence was
- * immediate: `propose critic` with no --grant refused (the kit needs read and
+ * immediate: `propose critic` with no --grant refused (the role needs read and
  * query, the envelope granted nothing), that refusal was written against the
  * form, and `propose critic --grant read,query` then refused forever with
  * "composition_previously_refused". The form's identity ignores envelopes on
@@ -133,7 +133,7 @@ let refusal_decided_by = function
 let attaches_to = function
   (* Conditions already decided this; do not re-derive it. *)
   | Refused { attaches; _ } -> Conditions.attachment_to_string attaches
-  | Kit_rejected _ -> "kit"
+  | Kit_rejected _ -> "role"
   | Queued _ | Envelope_carries_composer_grant _ | Envelope_dead _
   | Kit_exceeds_envelope _ | No_wall_left _ -> "proposal"
 
@@ -178,19 +178,19 @@ type request = {
   policy_set : string list;
   state_shape : string;
   widen_epoch : int;
-  envelope : Terms.t;
-  (* The result Kit.make returns, not a bare Kit.t, so a caller can pass
-     `Kit.critic` straight through and an invalid kit refuses with the kit
+  envelope : Obligations.t;
+  (* The result Role.make returns, not a bare Role.t, so a caller can pass
+     `Role.critic` straight through and an invalid role refuses with the role
      layer's own reason instead of a reason invented here. *)
-  kit : (Kit.t, Kit.rejection) result;
+  role : (Role.t, Role.rejection) result;
 }
 
 type booked = {
   entity : string;
   form_sig : string;
-  kit : Kit.t;
-  envelope : Terms.t;      (* AFTER the per-booking debit *)
-  gig_terms : Terms.t;     (* the child's copy: kit grants, envelope expiry *)
+  role : Role.t;
+  envelope : Obligations.t;      (* AFTER the per-booking debit *)
+  commission_obligations : Obligations.t;     (* the child's copy: role grants, envelope expiry *)
   wall_ms : int;
   ladder : Phases.ladder;
   (* WHO decided the composition: 'conditions' (the in-process evaluator) or
@@ -201,7 +201,7 @@ type booked = {
 (* --------------------------------------------------------------- the path *)
 
 let missing_grants ~envelope ~(needs : Grants.action list) =
-  let g = Terms.grants envelope in
+  let g = Obligations.grants envelope in
   List.filter (fun a -> not (Grants.allows g a)) needs
 
 (* ----------------------------------------------------------------------- *
@@ -245,7 +245,7 @@ type composition_gate = {
    arm can be exercised without elpi installed. Without it that arm is
    unreachable in tests -- every engineless call returns Engine_missing and
    falls back to Conditions, which masks any difference between deferring to the
-   engine and not. That masking is exactly how the composer-grant hole below
+   engine and not. That masking is exactly how the agent-grant hole below
    stayed invisible: a mutation removing the guard still passed the suite. *)
 let decide_composition
     ?(engine :
@@ -261,7 +261,7 @@ let decide_composition
        "conditions")
   (* STRUCTURAL, AND NOT THE ENGINE'S TO CLEAR.
    *
-   * gate.elpi has no composer-grant check at all -- not a laxer one, none. So
+   * gate.elpi has no agent-grant check at all -- not a laxer one, none. So
    * deferring wholesale to the engine does not resolve that disagreement, it
    * deletes the check: the moment elpi is installed and answering, an actor
    * claiming Retrieve books. No booking test catches it, because they all run
@@ -276,7 +276,7 @@ let decide_composition
    * Everything else still defers: the engine remains the policy authority for
    * every check it can actually express. *)
   | Some _ when not evidence.Conditions.no_composer_grants ->
-      (Conditions.Refuse, [ "actor_claims_composer_only_grant" ],
+      (Conditions.Refuse, [ "actor_claims_agent_only_grant" ],
        Conditions.Composition, "conditions")
   | Some { composition; capabilities } -> (
       match engine ~capabilities composition with
@@ -318,7 +318,7 @@ let decide_composition
 let book ?(gate = None) ~(now : int64) (r : request) : (booked, refusal) result =
   (* 1. THE COMPOSITION DECISION. Nothing else runs until the composition is
         allowed to exist. Deliberately first even though it is the most expensive
-        check: issuing terms for a composition that is about to be refused means
+        check: issuing obligations for a composition that is about to be refused means
         a refusal can consume budget, and then a malformed proposal costs the
         same as a real one. Who decides is the seam above. *)
   match decide_composition gate r.evidence with
@@ -329,43 +329,43 @@ let book ?(gate = None) ~(now : int64) (r : request) : (booked, refusal) result 
   | (Conditions.Book, _, _, decided_by) -> (
       (* 2. TERMS. The envelope is checked as an envelope -- is it live, and is
             it safe to narrow from -- before anything is allowed to fit in it. *)
-      let env_actions = Grants.actions (Terms.grants r.envelope) in
-      match List.find_opt Grants.composer_only env_actions with
+      let env_actions = Grants.actions (Obligations.grants r.envelope) in
+      match List.find_opt Grants.agent_only env_actions with
       | Some a -> Error (Envelope_carries_composer_grant a)
       | None -> (
-          match Terms.tick r.envelope ~now with
+          match Obligations.tick r.envelope ~now with
           | Error b -> Error (Envelope_dead b)
           | Ok envelope -> (
               (* 3. KIT. Validated, then FITTED. Re-validated even when the
-                    caller passes an Ok: Kit.t has no signature hiding its
+                    caller passes an Ok: Role.t has no signature hiding its
                     fields, so an Ok can carry a record that never went through
-                    Kit.make. Trusting the constructor that was not necessarily
-                    used is how a composer-only grant gets in. *)
-              match r.kit with
+                    Role.make. Trusting the constructor that was not necessarily
+                    used is how a agent-only grant gets in. *)
+              match r.role with
               | Error rej -> Error (Kit_rejected rej)
               | Ok k -> (
-                  match Kit.validate k with
+                  match Role.validate k with
                   | Error rej -> Error (Kit_rejected rej)
                   | Ok k -> (
-                      match missing_grants ~envelope ~needs:k.Kit.grants with
+                      match missing_grants ~envelope ~needs:k.Role.grants with
                       | _ :: _ as excess -> Error (Kit_exceeds_envelope excess)
                       | [] ->
                           (* 4. BOOKED TO MATCH. Both bounds resolved here, in
                                 the parent, before any child exists. *)
                           let terms_ms =
                             let secs =
-                              Int64.sub (Terms.expires_at envelope) now
+                              Int64.sub (Obligations.expires_at envelope) now
                             in
                             if Int64.compare secs 0L <= 0 then 0
                             else if Int64.compare secs 86400L > 0 then
-                              86_400_000 (* a day is already past any kit ask *)
+                              86_400_000 (* a day is already past any role ask *)
                             else Int64.to_int (Int64.mul secs 1000L)
                           in
-                          let wall_ms = min k.Kit.budget_ms terms_ms in
+                          let wall_ms = min k.Role.budget_ms terms_ms in
                           if wall_ms < 1 then
                             Error
                               (No_wall_left
-                                 { kit_ms = k.Kit.budget_ms; terms_ms })
+                                 { kit_ms = k.Role.budget_ms; terms_ms })
                           else
                             let sig_ =
                               form_sig ~cap_set:r.cap_set
@@ -374,40 +374,40 @@ let book ?(gate = None) ~(now : int64) (r : request) : (booked, refusal) result 
                                 ~widen_epoch:r.widen_epoch
                             in
                             (* The narrowing. k.grants, never env_actions:
-                               the actor gets what the kit needs and not what
+                               the actor gets what the role needs and not what
                                the envelope happened to permit. *)
-                            let gig_terms =
-                              Terms.issue
+                            let commission_obligations =
+                              Obligations.issue
                                 ~id:(sig_ ^ "/" ^ r.entity)
                                 ~grants:
                                   (Grants.make ~entity:r.entity ~snapshot:sig_
-                                     ~actions:k.Kit.grants)
-                                (* Exactly what the kit declared. An earlier
+                                     ~actions:k.Role.grants)
+                                (* Exactly what the role declared. An earlier
                                    `max 1` here was a lie in the direction that
-                                   matters: it printed budget=1 for a kit that
-                                   declared 0. Kit.validate already refuses a
-                                   kit with grants and no allowance, so 0 only
-                                   reaches here for a kit with no grants -- and
-                                   dead terms are the CORRECT terms for an actor
+                                   matters: it printed budget=1 for a role that
+                                   declared 0. Role.validate already refuses a
+                                   role with grants and no allowance, so 0 only
+                                   reaches here for a role with no grants -- and
+                                   dead obligations are the CORRECT obligations for an actor
                                    that has no action it is permitted to take. *)
-                                ~budget:k.Kit.budget_actions
-                                ~expires_at:(Terms.expires_at envelope)
+                                ~budget:k.Role.budget_actions
+                                ~expires_at:(Obligations.expires_at envelope)
                             in
                             Ok
                               { entity = r.entity;
                                 form_sig = sig_;
-                                kit = k;
+                                role = k;
                                 envelope;
-                                gig_terms;
+                                commission_obligations;
                                 wall_ms;
-                                ladder = k.Kit.ladder;
+                                ladder = k.Role.ladder;
                                 decided_by })))))
 
-(* --------------------------------------------------- running a booked gig *)
+(* --------------------------------------------------- running a booked commission *)
 
 (* Wire format on the pipe: PHASE \x1f PAYLOAD. \x1f because the verdict
    encoding already owns '|' and a payload containing the separator would let a
-   behavior forge a phase transition -- the one thing the parent is supposed to
+   script forge a phase transition -- the one thing the parent is supposed to
    be the sole judge of. Only the FIRST separator splits, so a payload may
    contain more. *)
 let sep = '\x1f'
@@ -415,7 +415,7 @@ let sep = '\x1f'
 (* `None` emits a bare payload with no separator at all, so the parent observes
    zero phases rather than observing an empty phase name -- an empty name is not
    in any ladder and would read as a BREACH, which is a much stronger claim
-   about the behavior than "it did not finish a step". *)
+   about the script than "it did not finish a step". *)
 let emit ~(phase : string option) payload =
   match phase with
   | None -> payload
@@ -438,19 +438,19 @@ type closed = {
   payload : string;
 }
 
-(* `work` receives the gig's own terms. Behaviors today do not thread them --
-   they take capabilities and return a verdict -- so for the stock kits this
+(* `work` receives the commission's own obligations. Script today do not thread them --
+   they take capabilities and return a verdict -- so for the stock roles this
    argument is unused and the wall clock is the only live bound inside the
    child. That is a real remaining gap, named here rather than hidden: the
-   plumbing exists and the behaviors have not been rewritten to use it. *)
-let run (b : booked) ~(work : Terms.t -> string) : closed =
-  let outcome = Actor.run_gig ~wall_ms:b.wall_ms ~work:(fun () -> work b.gig_terms) in
+   plumbing exists and the scripts have not been rewritten to use it. *)
+let run (b : booked) ~(work : Obligations.t -> string) : closed =
+  let outcome = Actor.run_commission ~wall_ms:b.wall_ms ~work:(fun () -> work b.commission_obligations) in
   let pr0 = Phases.start b.ladder in
   match outcome with
   | Actor.Completed body -> (
       match split_emission body with
       | None ->
-          (* Completed without naming a phase. Not a breach -- a behavior that
+          (* Completed without naming a phase. Not a breach -- a script that
              emits nothing is silent, not lying -- but it settles nothing, and
              `matched` reads it as no. *)
           { booked = b; outcome; progress = pr0; breach = None;
@@ -461,7 +461,7 @@ let run (b : booked) ~(work : Terms.t -> string) : closed =
               { booked = b; outcome; progress = pr0; breach = Some br;
                 settled = false; payload }
           | Ok pr ->
-              (* One emission is enough for a deterministic behavior; the
+              (* One emission is enough for a deterministic script; the
                  default of 2 guards against a flip-flopping bug, and a single
                  fork produces exactly one report. *)
               { booked = b; outcome; progress = pr; breach = None;
@@ -489,7 +489,7 @@ let matched (c : closed) =
          invariant of ANOTHER module -- if phases.ml ever records an emission and
          flags it separately (a reasonable change, it would make breaches
          inspectable), the emissions arm would start awarding partial credit to a
-         behavior that named a phase outside its own ladder. The invariant this
+         script that named a phase outside its own ladder. The invariant this
          depends on is pinned by a test, so it cannot rot silently. *)
       if c.breach <> None then "no"
       else if c.settled then "yes"
@@ -508,20 +508,20 @@ let outcome_word (c : closed) =
 let record_refusal ~entity ~sig_ (r : refusal) =
   let reasons = refusal_to_string r in
   let decided_by = refusal_decided_by r in
-  Store.exec_checked
+  Agency.exec_checked
     (Printf.sprintf
        "INSERT INTO booking_verdict \
         (entity_id, composition_sig, decision, reasons, decided_at, decided_by, \
          attaches_to) \
         SELECT id, '%s', '%s', '%s', strftime('%%s','now'), '%s', '%s' \
         FROM entity WHERE name = '%s';"
-       (Store.esc sig_)
+       (Agency.esc sig_)
        (decision_of_refusal r)
-       (Store.esc reasons) (Store.esc decided_by) (attaches_to r)
-       (Store.esc entity))
+       (Agency.esc reasons) (Agency.esc decided_by) (attaches_to r)
+       (Agency.esc entity))
 
 let record_booking (b : booked) =
-  Store.exec_checked
+  Agency.exec_checked
     (Printf.sprintf
        "INSERT INTO booking_verdict \
         (entity_id, composition_sig, decision, reasons, decided_at, decided_by, \
@@ -529,27 +529,27 @@ let record_booking (b : booked) =
         SELECT id, '%s', 'book', '%s', strftime('%%s','now'), '%s', \
                'composition' \
         FROM entity WHERE name = '%s';"
-       (Store.esc b.form_sig)
-       (Store.esc
-          (Printf.sprintf "kit=%s wall_ms=%d gig_actions=%d grants=[%s]"
-             b.kit.Kit.name b.wall_ms (Terms.budget b.gig_terms)
-             (String.concat "," (List.map Grants.action_to_string b.kit.Kit.grants))))
-       (Store.esc b.decided_by)
-       (Store.esc b.entity))
+       (Agency.esc b.form_sig)
+       (Agency.esc
+          (Printf.sprintf "role=%s wall_ms=%d commission_actions=%d grants=[%s]"
+             b.role.Role.name b.wall_ms (Obligations.budget b.commission_obligations)
+             (String.concat "," (List.map Grants.action_to_string b.role.Role.grants))))
+       (Agency.esc b.decided_by)
+       (Agency.esc b.entity))
 
 (* A form row must exist before form_review can reference it -- the FK is the
    reason a review insert silently vanished once. Idempotent: the same
    composition books many times and the form is the same form. *)
 let ensure_form (b : booked) ~cap_set ~policy_set ~widen_epoch =
-  Store.exec_checked
+  Agency.exec_checked
     (Printf.sprintf
        "INSERT OR IGNORE INTO form \
         (sig, cap_set, policy_set, state_shape, widen_epoch, first_seen) \
         VALUES ('%s', '%s', '%s', '%s', %d, strftime('%%s','now'));"
-       (Store.esc b.form_sig)
-       (Store.esc (String.concat "," (List.sort String.compare cap_set)))
-       (Store.esc (String.concat "," (List.sort String.compare policy_set)))
-       (Store.esc b.kit.Kit.state_shape) widen_epoch)
+       (Agency.esc b.form_sig)
+       (Agency.esc (String.concat "," (List.sort String.compare cap_set)))
+       (Agency.esc (String.concat "," (List.sort String.compare policy_set)))
+       (Agency.esc b.role.Role.state_shape) widen_epoch)
 
 (* ------------------------------------------------- evidence from the store *)
 
@@ -589,16 +589,16 @@ let scope_narrows ~envelope ~scope =
   if String.trim scope = "" then true
   else is_prefix (split_segments envelope) (split_segments scope)
 
-let one_int sql = match Store.query sql with
+let one_int sql = match Agency.query sql with
   | [ [ v ] ] -> (try int_of_string (String.trim v) with _ -> 0)
   | _ -> 0
 
 let evidence_of_store ~entity ~sig_ ~tier ~(kit_grants : Grants.action list)
     ~support_strength ~refutation_strength : Conditions.evidence =
-  let e = Store.esc entity in
-  let claims = Store.claims ~entity in
+  let e = Agency.esc entity in
+  let claims = Agency.claims ~entity in
   let cap_rows =
-    Store.query
+    Agency.query
       "SELECT name, envelope, requires_booking FROM capability"
     |> List.filter_map (function
          | [ n; env; rb ] -> Some (n, (env, String.trim rb = "1"))
@@ -615,12 +615,12 @@ let evidence_of_store ~entity ~sig_ ~tier ~(kit_grants : Grants.action list)
         | Some (env, _) -> scope_narrows ~envelope:env ~scope)
       claims
   in
-  (* The kit says what shape it keeps; c_state says what shape the entity has.
+  (* The role says what shape it keeps; c_state says what shape the entity has.
      A composition where those disagree does not resolve, and the disagreement
      is invisible at runtime because each side is individually well-formed. *)
   let shape_wellformed =
     match
-      Store.query
+      Agency.query
         (Printf.sprintf
            "SELECT s.shape FROM c_state s JOIN entity e ON e.id = s.entity_id \
             WHERE e.name = '%s'" e)
@@ -651,12 +651,12 @@ let evidence_of_store ~entity ~sig_ ~tier ~(kit_grants : Grants.action list)
            "SELECT count(*) FROM booking_verdict \
             WHERE composition_sig = '%s' AND decision = 'refuse' \
               AND attaches_to = 'composition'"
-           (Store.esc sig_))
+           (Agency.esc sig_))
   in
   let no_composer_grants =
-    not (List.exists Grants.composer_only kit_grants)
+    not (List.exists Grants.agent_only kit_grants)
   in
-  let provenance = Store.provenance ~entity in
+  let provenance = Agency.provenance ~entity in
   let tier_matches =
     if provenance = "agent" then tier = "subprocess" else true
   in
@@ -675,7 +675,7 @@ let evidence_of_store ~entity ~sig_ ~tier ~(kit_grants : Grants.action list)
            "SELECT count(*) FROM booking_verdict \
             WHERE composition_sig = '%s' AND decision = 'book' \
               AND decided_by = 'human'"
-           (Store.esc sig_))
+           (Agency.esc sig_))
   in
   { Conditions.capabilities_exist; grants_narrow; shape_wellformed;
     single_writer; not_refused_before; no_composer_grants; tier_matches;

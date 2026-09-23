@@ -53,8 +53,8 @@ CREATE TABLE c_budget (
   entity_id   INTEGER PRIMARY KEY REFERENCES entity(id) ON DELETE CASCADE,
   wall_ms     INTEGER NOT NULL DEFAULT 30000,
   mem_bytes   INTEGER NOT NULL DEFAULT 268435456,
-  msg_quota   INTEGER NOT NULL DEFAULT 1000,   -- messages per gig
-  gigs_per_hr INTEGER NOT NULL DEFAULT 60
+  msg_quota   INTEGER NOT NULL DEFAULT 1000,   -- messages per commission
+  commissions_per_hr INTEGER NOT NULL DEFAULT 60
 );
 
 -- ------------------------------------------- kind 2: capability components
@@ -66,7 +66,7 @@ CREATE TABLE c_budget (
 --
 -- Instead these rows are BUILD INSTRUCTIONS. At spawn, the runtime constructs a
 -- capability record containing exactly the claimed tools and hands it to the
--- actor's behavior function. An unclaimed tool is not a denied tool -- it is
+-- actor's script function. An unclaimed tool is not a denied tool -- it is
 -- not a field. Calling it is a type error at compile time, not a refusal at
 -- run time. There is no check because there is no reference.
 --
@@ -79,7 +79,7 @@ CREATE TABLE capability (
   ctor             TEXT NOT NULL,        -- constructor in the frozen core
   envelope         TEXT NOT NULL,        -- outer bound, human-authored
   side_effecting   INTEGER NOT NULL DEFAULT 0,
-  requires_booking INTEGER NOT NULL DEFAULT 0   -- 1 = a human approves each gig
+  requires_booking INTEGER NOT NULL DEFAULT 0   -- 1 = a human approves each commission
 );
 
 CREATE TABLE c_capability (
@@ -113,14 +113,14 @@ CREATE TABLE component_owner (
 
 INSERT INTO component_owner (component, system) VALUES
   ('c_inbox','delivery'), ('c_state','step'), ('c_budget','accountant'),
-  ('c_capability','composer'), ('c_policy','composer');
+  ('c_capability','agent'), ('c_policy','agent');
 
 -- --------------------------------------------------------------- the ledger
 -- Prediction is a separate table from outcome, written earlier, and the schema
 -- makes it awkward to do otherwise. A log of what happened without a log of
 -- what was expected is history, not an error signal.
 
-CREATE TABLE gig (
+CREATE TABLE commission (
   id             INTEGER PRIMARY KEY,
   entity_id      INTEGER NOT NULL REFERENCES entity(id),
   composition_sig TEXT   NOT NULL,       -- hash of the claimed component set
@@ -128,20 +128,20 @@ CREATE TABLE gig (
   started_at     INTEGER,
   ended_at       INTEGER,
   tier           TEXT NOT NULL CHECK (tier IN ('in_process','subprocess')),
-  -- Which system prompt this ran under. Not decoration: a gig executed under
+  -- Which system prompt this ran under. Not decoration: a commission executed under
   -- one soul is not evidence about a system running another.
   soul_version   TEXT
 );
 
-CREATE TABLE gig_prediction (
-  gig_id          INTEGER PRIMARY KEY REFERENCES gig(id) ON DELETE CASCADE,
+CREATE TABLE commission_prediction (
+  commission_id          INTEGER PRIMARY KEY REFERENCES commission(id) ON DELETE CASCADE,
   predicts        TEXT    NOT NULL,
   falsifiable_by  TEXT    NOT NULL,
   made_at         INTEGER NOT NULL
 );
 
-CREATE TABLE gig_outcome (
-  gig_id      INTEGER PRIMARY KEY REFERENCES gig(id) ON DELETE CASCADE,
+CREATE TABLE commission_outcome (
+  commission_id      INTEGER PRIMARY KEY REFERENCES commission(id) ON DELETE CASCADE,
   outcome     TEXT    NOT NULL CHECK (outcome IN
                 ('completed','failed','human_rejected','budget_exceeded','starved')),
   matched     TEXT    NOT NULL CHECK (matched IN ('yes','partial','no')),
@@ -170,7 +170,7 @@ CREATE TABLE booking_verdict (
   -- incompatible jobs at once: it is the audit log of every refusal AND the dead
   -- set that `not_refused_before` reads. Those are different sets, and
   -- conflating them was a live bug -- refusing a proposal because the envelope
-  -- the human authored this time did not cover the kit wrote a 'refuse' row
+  -- the human authored this time did not cover the role wrote a 'refuse' row
   -- against the FORM, and the form (whose identity deliberately ignores
   -- envelopes) could then never book again. A transient refusal killed a shape
   -- permanently.
@@ -182,11 +182,11 @@ CREATE TABLE booking_verdict (
   --   proposal     a property of THIS attempt: the envelope was too narrow,
   --                expired, exhausted, or left no wall clock. Says nothing
   --                about the shape.
-  --   kit          a property of the kit: it is malformed and every composition
+  --   role          a property of the role: it is malformed and every composition
   --                assembled from it is affected, but the composition that
   --                happened to reach for it is not itself dead.
   attaches_to     TEXT    NOT NULL DEFAULT 'composition'
-                  CHECK (attaches_to IN ('composition','proposal','kit'))
+                  CHECK (attaches_to IN ('composition','proposal','role'))
 );
 
 -- Crash facts. The disposition query cannot fire without these; a policy that
@@ -194,7 +194,7 @@ CREATE TABLE booking_verdict (
 CREATE TABLE crash (
   id          INTEGER PRIMARY KEY,
   entity_id   INTEGER NOT NULL REFERENCES entity(id),
-  gig_id      INTEGER REFERENCES gig(id),
+  commission_id      INTEGER REFERENCES commission(id),
   fault_class TEXT    NOT NULL,
   retry_index INTEGER NOT NULL DEFAULT 0,
   chosen      TEXT,                       -- disposition actually applied
@@ -220,7 +220,7 @@ GROUP BY e.id;
 -- Flat facts for Aleph. One row per (composition, outcome) so ILP can search
 -- for rules over SHAPE, not just over result.
 CREATE VIEW v_aleph_facts AS
-SELECT g.id                AS gig_id,
+SELECT g.id                AS commission_id,
        e.name              AS entity,
        e.provenance        AS provenance,
        g.tier              AS tier,
@@ -233,12 +233,12 @@ SELECT g.id                AS gig_id,
        go.matched          AS matched,
        go.outcome          AS outcome,
        (go.outcome = 'completed') AS good
-FROM gig g
+FROM commission g
 JOIN entity e ON e.id = g.entity_id
-LEFT JOIN gig_prediction gp ON gp.gig_id = g.id
-LEFT JOIN gig_outcome    go ON go.gig_id = g.id;
+LEFT JOIN commission_prediction gp ON gp.commission_id = g.id
+LEFT JOIN commission_outcome    go ON go.commission_id = g.id;
 
--- Acceptance rate, watched in BOTH directions. Under ~0.2 the composer is
+-- Acceptance rate, watched in BOTH directions. Under ~0.2 the agent is
 -- thrashing. Over ~0.9 you have become a rubber stamp, which is how HITL
 -- systems actually die -- approval fatigue, not bad proposals.
 CREATE VIEW v_acceptance AS
@@ -252,7 +252,7 @@ GROUP BY decided_by;
 -- FORM IDENTITY AND CONFIDENCE
 --
 -- Human review is the source of confidence, so confidence is measured per
--- FORM, not per entity or per gig.
+-- FORM, not per entity or per commission.
 --
 -- Cold start uses a FIXED denominator of 15. Three-for-three reads as 0.20,
 -- not 1.00, so the 0.80 auto-book threshold is unreachable until 12 matches
@@ -278,7 +278,7 @@ CREATE TABLE form (
 CREATE TABLE form_review (
   id          INTEGER PRIMARY KEY,
   form_sig    TEXT    NOT NULL REFERENCES form(sig),
-  gig_id      INTEGER REFERENCES gig(id),
+  commission_id      INTEGER REFERENCES commission(id),
   -- matched = prediction held AND critic passed AND judge failed to refute.
   -- Any one of the three failing burns a slot. The judge can therefore spend
   -- confidence without spending the human's time, which is the point of it.
@@ -342,31 +342,31 @@ FROM rates;
 -- TRACE
 --
 -- Spans are a ledger TABLE, not a log file. A trace that cannot be joined
--- against outcomes teaches you nothing -- you can see that a gig was slow and
--- not whether slow gigs fail more often.
+-- against outcomes teaches you nothing -- you can see that a commission was slow and
+-- not whether slow commissions fail more often.
 --
--- Emitted by the runtime, never by behaviors. A behavior that wrote its own
+-- Emitted by the runtime, never by scripts. A script that wrote its own
 -- trace could write a flattering one, and the trace is evidence.
 -- ==========================================================================
 
 CREATE TABLE span (
   id         INTEGER NOT NULL,
-  gig_id     INTEGER NOT NULL REFERENCES gig(id) ON DELETE CASCADE,
-  parent     INTEGER,                      -- NULL for the gig's root span
+  commission_id     INTEGER NOT NULL REFERENCES commission(id) ON DELETE CASCADE,
+  parent     INTEGER,                      -- NULL for the commission's root span
   name       TEXT    NOT NULL,
   phase      TEXT,                          -- the declared phase it sat in
   duration_ms INTEGER NOT NULL DEFAULT -1,  -- -1 = never closed
   outcome    TEXT,
-  breach     TEXT,                          -- Terms or Phases breach, if any
-  PRIMARY KEY (gig_id, id)
+  breach     TEXT,                          -- Obligations or Phases breach, if any
+  PRIMARY KEY (commission_id, id)
 );
 
-CREATE INDEX span_by_gig ON span(gig_id);
+CREATE INDEX span_by_commission ON span(commission_id);
 
--- An unclosed span is a control-flow bug that a passing gig can hide.
+-- An unclosed span is a control-flow bug that a passing commission can hide.
 CREATE VIEW v_unclosed_spans AS
-SELECT s.gig_id, e.name AS entity, s.name AS span, s.phase
-FROM span s JOIN gig g ON g.id = s.gig_id JOIN entity e ON e.id = g.entity_id
+SELECT s.commission_id, e.name AS entity, s.name AS span, s.phase
+FROM span s JOIN commission g ON g.id = s.commission_id JOIN entity e ON e.id = g.entity_id
 WHERE s.duration_ms < 0;
 
 -- The join the trace exists for: does time spent in a phase predict outcome?
@@ -378,8 +378,8 @@ SELECT s.phase,
        sum(s.breach IS NOT NULL)      AS breaches,
        round(1.0 * sum(o.outcome = 'completed') / count(*), 3) AS completion_rate
 FROM span s
-JOIN gig g ON g.id = s.gig_id
-LEFT JOIN gig_outcome o ON o.gig_id = g.id
+JOIN commission g ON g.id = s.commission_id
+LEFT JOIN commission_outcome o ON o.commission_id = g.id
 WHERE s.phase IS NOT NULL
 GROUP BY s.phase;
 

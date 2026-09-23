@@ -16,9 +16,9 @@ Read before editing:
 Mandatory rules:
 1. Work only on the files explicitly listed under your task. You may read any repository file needed to understand an interface, but do not modify files outside your task's modification set.
 2. Do not redesign GigWerk's existing booking architecture. Do not introduce a new model abstraction. Do not introduce frontend code, API code, database migrations, or external inference dependencies.
-3. Preserve existing public behavior unless the task explicitly changes it.
+3. Preserve existing public script unless the task explicitly changes it.
 4. Use OCaml/Dune/Opam and the repository's existing conventions.
-5. Write the failing test before implementation. Run it and observe the expected failure. Then implement the minimum behavior required by the task. Then run the relevant test and the full `cd ocaml && dune test` suite.
+5. Write the failing test before implementation. Run it and observe the expected failure. Then implement the minimum script required by the task. Then run the relevant test and the full `cd ocaml && dune test` suite.
 6. Do not weaken or delete tests to make them pass. Do not turn a verification failure into success. Do not silently swallow errors.
 7. Do not add speculative abstractions, generic frameworks, or dependencies solely for elegance.
 8. Before finishing, inspect `git diff --check`, run the relevant test commands again, and report exact commands and outcomes.
@@ -58,7 +58,7 @@ Required grammar:
 
 Tests MUST cover: one requirement; declaration order; multiple dependencies; duplicate IDs; unknown dependency; unknown acceptance target; malformed lines; blank lines/comments if comments are supported.
 
-Do NOT implement graph ordering, filesystem access, Actor behavior, subprocess execution, CLI changes, learning traces, or any form of code generation.
+Do NOT implement graph ordering, filesystem access, Actor script, subprocess execution, CLI changes, learning traces, or any form of code generation.
 
 Definition of done:
 - New parser tests fail before implementation for the intended reason.
@@ -143,7 +143,7 @@ Actor requirements:
 
 Tests MUST cover: successful write/read; nested directories; absolute path rejection; parent traversal rejection; artifact requirement ID; generated path list; deterministic output; Actor cannot report verification success; Actor cannot write outside workspace.
 
-Do NOT modify `actor.ml`, `booking.ml`, `store.ml`, CLI code, verifier code, or database schema.
+Do NOT modify `actor.ml`, `booking.ml`, `agency.ml`, CLI code, verifier code, or database schema.
 
 Definition of done:
 - Tests fail before implementation, then pass.
@@ -224,7 +224,7 @@ CLI output MUST be machine-readable enough to identify terminal status, requirem
 
 Tests MUST cover: two requirements with dependency order; generated artifacts; verification after generation; invalid generated code causing failure; production Actor failure retaining prior evidence; missing template; malformed specification.
 
-Do NOT modify booking/capability logic, store schema, GitHub integration, or any other CLI command behavior.
+Do NOT modify booking/capability logic, store schema, GitHub integration, or any other CLI command script.
 
 Definition of done:
 - End-to-end tests fail before orchestration, then pass.
@@ -310,7 +310,7 @@ Failure fixture must demonstrate that invalid generated code results in a non-su
 Definition of done:
 - Every verification command and result is recorded in the task report.
 - No implementation files were changed.
-- Documentation matches actual behavior rather than planned behavior.
+- Documentation matches actual script rather than planned script.
 - Commit exactly: `docs: document verified code production MVP`.
 
 ## Reviewer contract for EVERY task
@@ -320,7 +320,7 @@ The reviewer must independently read the task brief, the implementation plan, an
 1. Scope: did the implementation modify anything outside the task's allowed modification set?
 2. Contract: do every required interface, semantic rule, and test requirement exist exactly as specified?
 3. Regression: does `cd ocaml && dune test` remain green, and are new tests meaningful rather than vacuous?
-4. Boundary integrity: did the task accidentally introduce a model abstraction, bypass the Actor/workspace/verifier boundary, weaken verification, or alter existing booking/capability behavior?
+4. Boundary integrity: did the task accidentally introduce a model abstraction, bypass the Actor/workspace/verifier boundary, weaken verification, or alter existing booking/capability script?
 
 A reviewer must classify each finding as `blocking`, `non-blocking`, or `no finding`. A blocking finding requires a fix and scoped re-review. A non-blocking finding must not be used as an excuse to expand task scope.
 

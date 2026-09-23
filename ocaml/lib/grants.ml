@@ -4,7 +4,7 @@
  * it is unrepresentable, so a typo in a composition fails to parse rather than
  * silently granting nothing.
  *
- * Grants answer WHAT. Terms answer HOW MANY and UNTIL WHEN. Caps answer WHERE.
+ * Grants answer WHAT. Obligations answer HOW MANY and UNTIL WHEN. Caps answer WHERE.
  * Three different questions; keeping them separate is why none of them has to
  * be a string match. *)
 
@@ -13,7 +13,7 @@ type action =
   | Write     (* write a file beneath the capability root *)
   | Spawn     (* start a subprocess *)
   | Query     (* EXACT lookup against the fact store *)
-  | Retrieve  (* RANKED retrieval -- RAG. composer only. see below. *)
+  | Retrieve  (* RANKED retrieval -- RAG. agent only. see below. *)
   | Emit      (* send a message to another entity's inbox *)
 
 (* Query and Retrieve are not two flavours of reading. They differ in
@@ -29,9 +29,9 @@ type action =
  *
  * So the AI retrieves in order to decide how to assemble an actor and what it
  * should do. The actor it assembles references facts. Actors do not RAG.
- * That is not a convention: `composer_only` makes the gate refuse it. *)
+ * That is not a convention: `agent_only` makes the gate refuse it. *)
 
-let composer_only = function
+let agent_only = function
   | Retrieve -> true
   | Read | Write | Spawn | Query | Emit -> false
 

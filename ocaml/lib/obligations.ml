@@ -1,15 +1,15 @@
-(* Terms — the bounded contract a gig runs under.
+(* Obligations — the bounded contract a commission runs under.
  *
  * One value carrying grants AND budget AND expiry, checked per action. That
  * coupling is the point: budget exhaustion and ungranted action are the same
- * mechanism, so an approved gig cannot burn unbounded actions inside itself.
+ * mechanism, so an approved commission cannot burn unbounded actions inside itself.
  *
  * A budget number sitting in a table that nothing reads is not a budget. This
  * has to be threaded through every action to mean anything.
  *
- * Terms are an ACL: the actor asks, the terms answer. That is deliberately NOT
+ * Obligations are an ACL: the actor asks, the obligations answer. That is deliberately NOT
  * what Caps is. A capability dirfd cannot express "twenty reads then stop";
- * Terms cannot stop a path escape. Spatial bounds come from the kernel via
+ * Obligations cannot stop a path escape. Spatial bounds come from the kernel via
  * Caps, quantitative bounds come from here, and both are threaded together. *)
 
 type breach =
@@ -19,7 +19,7 @@ type breach =
 
 let breach_to_string = function
   | Expired { at; now } ->
-      Printf.sprintf "terms expired at %Ld, now %Ld" at now
+      Printf.sprintf "obligations expired at %Ld, now %Ld" at now
   | Exhausted { budget } ->
       Printf.sprintf "budget of %d actions exhausted" budget
   | Not_granted a ->
@@ -41,9 +41,9 @@ let consume t = { t with consumed = t.consumed + 1 }
 (* Is this contract still alive, independent of any action?
  *
  * Split out from `check` because the booker has to ask exactly this and has no
- * action to name yet -- it is deciding whether to issue a gig at all. Forcing
- * it to invent an action to interrogate the terms would have made the answer
- * depend on which action it picked, which is not a property of the terms.
+ * action to name yet -- it is deciding whether to issue a commission at all. Forcing
+ * it to invent an action to interrogate the obligations would have made the answer
+ * depend on which action it picked, which is not a property of the obligations.
  *
  * Order matters: expiry first, because a lapsed contract should not report a
  * budget figure as though it were still live. *)
@@ -63,7 +63,7 @@ let check t ~now ~action =
 
 (* Debit one unit with no action named. The booker spends this per GIG, in the
  * parent, before the fork -- see booking.ml. Deliberately NOT expressible as
- * `spend ~action:Spawn`: a kit with no grants at all (echo) would then be
+ * `spend ~action:Spawn`: a role with no grants at all (echo) would then be
  * unbookable, and the thing being counted here is the booking, not a step. *)
 let tick t ~now =
   match live t ~now with

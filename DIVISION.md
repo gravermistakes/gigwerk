@@ -5,7 +5,7 @@
     reads the fact store                reference the fact store
     RETRIEVES (RAG, a tool)             never retrieve
     uses tools to learn                 use only their granted caps
-    assembles actors from kits          are the thing assembled
+    assembles actors from roles          are the thing assembled
     decides what they need to do        do it
                                         are CHECKED against the fact store
 
@@ -19,7 +19,7 @@ overrule a `Reading`, and ground truth that fades is not ground truth.
 | | determinism | who may hold it |
 |---|---|---|
 | `Query` | exact — same facts in, same answer out | anyone |
-| `Retrieve` | ranked — depends on the corpus, embedding drift, a threshold | **composer only** |
+| `Retrieve` | ranked — depends on the corpus, embedding drift, a threshold | **agent only** |
 
 An actor holding `Retrieve` is no longer deterministic code, and every claim
 made about actors here stops being true with it: that a failing critic means
@@ -30,23 +30,23 @@ on determinism.
 So the AI retrieves in order to work out how to assemble an actor and what it
 should do. The actor it assembles *references facts*. **Actors do not RAG.**
 
-`Grants.composer_only` makes that structural: `Conditions` returns **Refuse**,
+`Grants.agent_only` makes that structural: `Conditions` returns **Refuse**,
 not Queue, because no human decision makes a nondeterministic actor
-deterministic. Reason: `actor_claims_composer_only_grant`.
+deterministic. Reason: `actor_claims_agent_only_grant`.
 
-## Kits
+## Roles
 
-A kit is not a preset. A preset is a finished actor you copy; a kit is the parts
+A role is not a preset. A preset is a finished actor you copy; a role is the parts
 that go together plus a statement of what they cannot do.
 
-Kits are validated at construction, because a kit is the thing that gets
+Roles are validated at construction, because a role is the thing that gets
 *reused* — a mistake in one propagates into every actor built from it:
 
-- **no composer-only grants.** The stock `bad_researcher` kit exists as a
-  fixture for exactly this: the mistake a kit author makes is granting the actor
-  the retrieval the composer used to design it.
-- **a terminal phase must exist**, or the kit cannot finish. Worse than
-  failing: it burns budget until `Terms` cuts it off and the outcome reads
+- **no agent-only grants.** The stock `bad_researcher` role exists as a
+  fixture for exactly this: the mistake a role author makes is granting the actor
+  the retrieval the agent used to design it.
+- **a terminal phase must exist**, or the role cannot finish. Worse than
+  failing: it burns budget until `Obligations` cuts it off and the outcome reads
   `budget_exceeded` rather than as the design error it is.
 - **a stated purpose**, non-empty.
 
@@ -55,7 +55,7 @@ Kits are validated at construction, because a kit is the thing that gets
 ### Why it deserves one
 
 The gate, the ledger, the confidence rule and the human **all have far more
-range of view than the AI does.** They see across every gig, every form, every
+range of view than the AI does.** They see across every commission, every form, every
 verdict, the whole history at once. The AI sees a window.
 
 So the one place it sees and they do not is a partial correction to that
@@ -109,7 +109,7 @@ producing anything any of them could consume — no score, no weight, no export.
 
 There is no citation path, on purpose. It proposes a composition with a
 prediction, through the same gate as anything else, and that stands or falls on
-its own terms. The introspection is what led there — not evidence filed in
+its own obligations. The introspection is what led there — not evidence filed in
 support.
 
 ### I built this wrong three times

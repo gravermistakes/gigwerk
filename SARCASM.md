@@ -143,7 +143,7 @@ or above zero and usually a high one. **Valence's sign is doing most of the
 discriminating work** — measured: dread vs elation scores 0.396 with *identical
 magnitudes*, purely because the sign flips.
 
-That is defensible on its own terms — grief resonates with grief, and a triumph
+That is defensible on its own obligations — grief resonates with grief, and a triumph
 should not remind you of a disaster merely because both were loud. But it means
 the other five tones separate less than the design implies, and resonance is
 closer to a valence-match with magnitude modulation than to a six-way

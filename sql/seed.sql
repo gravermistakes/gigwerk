@@ -12,7 +12,7 @@
 --           only when a human authors one that covers it. This is the fit check
 --           being load-bearing rather than decorative.
 --   scribe  claims a capability whose requires_booking is 1, so Conditions
---           returns Queue and no terms are ever issued. Agent provenance, so it
+--           returns Queue and no obligations are ever issued. Agent provenance, so it
 --           also exercises tier_matches.
 
 INSERT OR IGNORE INTO capability (name, ctor, envelope, side_effecting, requires_booking)
@@ -22,7 +22,7 @@ VALUES
   ('fs_read',      'Caps.fs_read',   '/home/claude/gigwerk/work', 0, 0),
   ('sqlite_query', 'Caps.sqlite_ro', 'gigwerk.db',                0, 0),
   -- Side-effecting AND booking-gated: the one capability in the seed that a
-  -- human has to approve per gig.
+  -- human has to approve per commission.
   ('fs_write',     'Caps.fs_write',  '/home/claude/gigwerk/work', 1, 1);
 
 INSERT OR IGNORE INTO entity (name, preset, provenance, created_at)
@@ -31,7 +31,7 @@ VALUES
   ('critic', 'critic',  'human', strftime('%s','now')),
   ('scribe', 'scribe',  'agent', strftime('%s','now'));
 
--- c_state.shape must agree with the kit's state_shape or the composition does
+-- c_state.shape must agree with the role's state_shape or the composition does
 -- not resolve; booking.ml's shape_wellformed reads this row.
 INSERT OR IGNORE INTO c_state (entity_id, shape, initial)
 SELECT id, 'last_message', '{}' FROM entity WHERE name = 'echo';
@@ -41,7 +41,7 @@ INSERT OR IGNORE INTO c_state (entity_id, shape, initial)
 SELECT id, 'notes', '{}'        FROM entity WHERE name = 'scribe';
 
 -- Wall clock is the bound the child cannot lie about, so it is per entity and
--- not per kit: booking takes min(kit ask, terms remaining) and the runner takes
+-- not per role: booking takes min(role ask, obligations remaining) and the runner takes
 -- min of that and this.
 INSERT OR IGNORE INTO c_budget (entity_id, wall_ms)
 SELECT id, 250   FROM entity WHERE name = 'echo';

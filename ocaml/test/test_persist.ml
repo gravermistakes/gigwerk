@@ -39,10 +39,10 @@ let persist_sql = find_repo_file "sql/persist.sql"
 let soul_sql = find_repo_file "sql/soul.sql"
 let memory_sql = find_repo_file "sql/memory.sql"
 
-(* A fresh, real sqlite file per test run -- not :memory:, because Store
-   shells out to a NEW sqlite3 process per call (see store.ml's `sh`), and an
+(* A fresh, real sqlite file per test run -- not :memory:, because Agency
+   shells out to a NEW sqlite3 process per call (see agency.ml's `sh`), and an
    in-memory database does not survive past the process that created it. A
-   real temp file is the only kind of database Store's design can actually
+   real temp file is the only kind of database Agency's design can actually
    see twice. *)
 let fresh_db () =
   let db = Filename.temp_file "gigwerk_persist_test" ".sqlite3" in
@@ -51,7 +51,7 @@ let fresh_db () =
       (Filename.quote (".read " ^ schema_sql))
       (Filename.quote (".read " ^ persist_sql)) in
   if Sys.command cmd <> 0 then failwith "test_persist: schema load failed";
-  Store.db_path := db
+  Agency.db_path := db
 
 let dummy_doc = Reconstruct.doc ~id:"__MISSING__" "__MISSING__"
 let or_dummy_doc = function Some d -> d | None -> dummy_doc
@@ -83,7 +83,7 @@ let () =
   check "a nonexistent id loads back as None" (Persist.load_doc "no-such-doc" = None);
 
   let long = "The full original text, considerably longer than its digest, \
-              with apostrophes like it's and don't to exercise Store.esc." in
+              with apostrophes like it's and don't to exercise Agency.esc." in
   let contracted = Reconstruct.doc ~id:"contracted-1" ~full:long
       "A short digest of the above, with [[plain-1]] linked in." in
   Persist.save_doc contracted;
@@ -247,27 +247,27 @@ let () =
   print_string "\npersist: trace spans into the ledger's own span table\n";
   (* =================================================================== *)
 
-  (* span.gig_id is a real foreign key onto gig(id), and gig.entity_id is a
+  (* span.commission_id is a real foreign key onto commission(id), and commission.entity_id is a
      real foreign key onto entity(id) -- populate both for real, or a
      silently-failed insert would leave this section proving nothing. *)
-  Store.exec
+  Agency.exec
     "INSERT INTO entity (id, name, provenance, created_at) \
        VALUES (1, 'trace-test-entity', 'agent', 0); \
-     INSERT INTO gig (id, entity_id, composition_sig, booked_at, tier) \
+     INSERT INTO commission (id, entity_id, composition_sig, booked_at, tier) \
        VALUES (1, 1, 'sig', 0, 'in_process');";
-  check "the fixture gig row is really there (or the span rows below are meaningless)"
-    (Store.query "SELECT id FROM gig WHERE id = 1;" = [ [ "1" ] ]);
+  check "the fixture commission row is really there (or the span rows below are meaningless)"
+    (Agency.query "SELECT id FROM commission WHERE id = 1;" = [ [ "1" ] ]);
 
-  let tr = Trace.create ~gig:"a human label, not gig.id" in
-  let root = Trace.open_ tr "gig" in
+  let tr = Trace.create ~commission:"a human label, not commission.id" in
+  let root = Trace.open_ tr "commission" in
   let a = Trace.open_ tr ~parent:root ~phase:"read" "fs_read" in
   Trace.close tr ~outcome:"ok" a;
   let b = Trace.open_ tr ~parent:root ~phase:"checked" "balance_check" in
   Trace.close tr ~breach:"budget exhausted" b;
   (* root is deliberately left unclosed *)
 
-  Persist.save_trace ~gig_id:1 tr;
-  let rows = Persist.load_spans ~gig_id:1 in
+  Persist.save_trace ~commission_id:1 tr;
+  let rows = Persist.load_spans ~commission_id:1 in
 
   check "every span was written -- same count as Trace.to_rows produced"
     (List.length rows = List.length (Trace.to_rows tr));
@@ -328,7 +328,7 @@ let () =
   (* =================================================================== *)
   print_string "\ncontext: a soul body is a DOCUMENT, not a row\n";
   (* =================================================================== *)
-  (* Store.query splits output on '\n' into rows and on '|' into columns. Right
+  (* Agency.query splits output on '\n' into rows and on '|' into columns. Right
      for tabular results, silently wrong for one text column holding a document:
      the real soul (soul/adopt_v1.sql) is ~50 lines, so it came back as ~50
      one-column rows, matched no [[body]] pattern, and pinned NOTHING.
@@ -347,7 +347,7 @@ let () =
       (Filename.quote (".read " ^ memory_sql))
   in
   if Sys.command cmd <> 0 then failwith "test_persist: context schema load failed";
-  Store.db_path := cdb;
+  Agency.db_path := cdb;
   let body =
     "# soul v1\n\nYou compose actors.\nYou do not write tools.\n\nA line with a | pipe."
   in
@@ -364,11 +364,11 @@ let () =
     (Printf.sprintf
       "INSERT INTO soul (version, body, parent, proposed_at, rationale, \
         agent_signature, agent_signed_at, human_signature, human_signed_at) \
-       VALUES ('tv1', '%s', NULL, 0, 'r', 'composer', 0, 'human', 0);" body);
+       VALUES ('tv1', '%s', NULL, 0, 'r', 'agent', 0, 'human', 0);" body);
   must_run "ruling insert"
     "INSERT INTO mem_ruling (subject, predicate, object, rationale, at) \
      VALUES ('actors', 'may_not_hold', 'retrieve', 'r', 1);";
-  if Store.query_scalar "SELECT count(*) FROM v_soul_current" <> Some "1" then
+  if Agency.query_scalar "SELECT count(*) FROM v_soul_current" <> Some "1" then
     failwith "test_persist: soul row did not land";
 
   let ctx = Context.assemble ~floor:1 ~immediate_ceiling:100_000 () in

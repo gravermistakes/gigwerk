@@ -63,7 +63,7 @@ let () =
      An acceptance is a closed variant, and this is where the shell died.
 
      Verifier used to hand this text to /bin/sh -c. The specification is
-     written by the composer, the one thing here that calls a model, so
+     written by the agent, the one thing here that calls a model, so
      free text in this field was a path from model output to a shell.
      Every case below must fail to PARSE; none of them may reach Verifier.
      ------------------------------------------------------------------ *)

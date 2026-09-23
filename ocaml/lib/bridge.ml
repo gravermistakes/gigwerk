@@ -201,8 +201,8 @@ type capability = {
 
 type composition = {
   entity : string;
-  (* (capability name, scope) pairs -- the exact shape Store.claims already
-     returns, so a caller holding `Store.claims ~entity` can pass it straight
+  (* (capability name, scope) pairs -- the exact shape Agency.claims already
+     returns, so a caller holding `Agency.claims ~entity` can pass it straight
      through without reshaping it. *)
   claims : (string * string) list;
   (* Prolog/elpi predicate names (sql/schema.sql's c_policy.predicate), carried
