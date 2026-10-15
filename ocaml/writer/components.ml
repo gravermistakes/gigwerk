@@ -23,7 +23,7 @@ exception Undefined
 
 let a = TGen 0 and b = TGen 1 and c = TGen 2
 
-let apply f x = match f with Value.Fun g -> g x | _ -> raise Undefined
+let apply f x = match Value.as_function f with Some g -> g x | None -> raise Undefined
 let apply2 f x y = apply (apply f x) y
 
 let int = function Value.Int n -> n | _ -> raise Undefined

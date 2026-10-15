@@ -52,7 +52,7 @@ let rec eval env e : Value.t =
   | App (f, args) ->
       let fv = eval env f in
       List.fold_left (fun f a ->
-          match f with Value.Fun g -> tick (); g (eval env a) | _ -> raise Stuck) fv args
+          match Value.as_function f with Some g -> tick (); g (eval env a) | None -> raise Stuck) fv args
   | Lam (xs, body) -> closure env xs body
   | Con (c, args) -> Value.Con (c, List.map (eval env) args)
   | Poly (c, None) -> Value.Poly (c, None)

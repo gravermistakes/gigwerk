@@ -142,7 +142,8 @@ let point_test (c : cand) =
       | _ -> false)
 
 let add cfg b c =
-  if not (first_order c.ty) then false
+  (* functions enter a bank only as the parameters that hold them *)
+  if not (first_order c.ty) && (match c.expr with Expr.Var _ -> false | _ -> true) then false
   else if point_test c then false
   else
     let k = key c.ty ^ "\x01" ^ vec_key c.vec in
@@ -207,6 +208,13 @@ let ctor_comps (decls : decl list) =
       | t -> t in go t in
   let self d = TCon (d.name, List.mapi (fun i _ -> TGen i) d.params) in
   let builtin = [
+    (* calling a function the part was given *)
+    { cname = "__app1"; scheme = arrows [ arrow (TGen 0) (TGen 1); TGen 0 ] (TGen 1);
+      build = (fun a -> match a with [ f; x ] -> Expr.App (f, [ x ]) | _ -> assert false);
+      run = (function [ f; x ] -> Components.apply f x | _ -> raise Components.Undefined) };
+    { cname = "__app2"; scheme = arrows [ arrows [ TGen 0; TGen 1 ] (TGen 2); TGen 0; TGen 1 ] (TGen 2);
+      build = (fun a -> match a with [ f; x; y ] -> Expr.App (f, [ x; y ]) | _ -> assert false);
+      run = (function [ f; x; y ] -> Components.apply2 f x y | _ -> raise Components.Undefined) };
     { cname = "Some"; scheme = arrow (TGen 0) (t_option (TGen 0));
       build = (fun a -> Expr.Con ("Some", a)); run = (fun a -> Value.Con ("Some", a)) };
     { cname = "Ok"; scheme = arrow (TGen 0) (t_result (TGen 0) (TGen 1));
@@ -562,7 +570,20 @@ and grow s b n ~lambda_depth =
                     check { expr = comp.build exprs; size; ty = rty; vec }
                   end
               | ((i, sch), sz) :: rest ->
+                  (* a function parameter of the right type can go here as is *)
                   (match repr sch with
+                   | TArrow _ ->
+                       List.iter (fun (cty, cands) ->
+                           match mtch subst sch cty with
+                           | None -> ()
+                           | Some subst' ->
+                               List.iter (fun c -> match c.expr with
+                                   | Expr.Var _ -> pick subst' ((i, c.expr, c.vec) :: chosen) rest
+                                   | _ -> ()) cands)
+                         (if sz = 1 then at b 1 else [])
+                   | _ -> ());
+                  (match repr sch with
+                   | TArrow _ when String.length comp.cname > 5 && String.sub comp.cname 0 5 = "__app" -> ()
                    | TArrow _ when lambda_depth > 0 ->
                        let pargs, pres = unarrow sch in
                        let ptys = List.map (fun (_, t) -> subst_apply subst t) pargs in

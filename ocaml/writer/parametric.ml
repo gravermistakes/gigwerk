@@ -87,12 +87,20 @@ let symmetric ~(params : (string * ty) list) (examples : Spec.example list) =
      || List.exists (fun t -> t <> List.hd tys) tys then None
   else
     let sorted ex = List.sort Value.compare ex.Spec.args in
+    (* an empty or zero argument makes a coincidental pair (append l [] and
+       append [] l agree), so such pairs are not evidence *)
+    let trivial v = match v with Value.List [] | Value.Int 0 | Value.String "" -> true | _ -> false in
     let related = List.filter (fun (a, b) -> a != b
+        && List.for_all2 Value.equal (sorted a) (sorted b)
+        && not (List.for_all2 Value.equal a.Spec.args b.Spec.args)
+        && not (List.exists trivial a.Spec.args)) 
+        (List.concat_map (fun a -> List.map (fun b -> (a, b)) examples) examples) in
+    let all_related = List.filter (fun (a, b) -> a != b
         && List.for_all2 Value.equal (sorted a) (sorted b)
         && not (List.for_all2 Value.equal a.Spec.args b.Spec.args))
         (List.concat_map (fun a -> List.map (fun b -> (a, b)) examples) examples) in
-    let agree = List.for_all (fun (a, b) -> Value.equal a.Spec.out b.Spec.out) related in
-    if List.length related < 2 || not agree then None
+    let agree = List.for_all (fun (a, b) -> Value.equal a.Spec.out b.Spec.out) all_related in
+    if List.length related < 4 || not agree then None
     else
       let all = List.concat_map (fun ex ->
           List.map (fun args -> { ex with Spec.args }) (permutations ex.Spec.args)) examples in

@@ -108,6 +108,7 @@ let rec gen decls pool (t : ty) (seen : Value.t list) : Value.t =
        | Some { kind = Alias t; _ } -> gen decls pool t seen
        | _ -> Value.Int (next () mod 10))
   | TVar _ -> Value.Int (next () mod 10)
+  | TArrow _ -> (match seen with [] -> Value.Unit | _ -> pick seen)   (* the test's own functions *)
   | _ -> Value.Unit
 
 let call_source ~name ~labels args =

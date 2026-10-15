@@ -215,7 +215,8 @@ let parse_args s =
   if s = "" then Some []
   else
     let parts = String.split_on_char '\031' s in
-    let vs = List.map Literal.of_string_opt parts in
+    let vs = List.map (fun p -> if p = "<unprintable>" then Some (Value.String "<unprintable>")
+                        else Literal.of_string_opt p) parts in
     if List.for_all Option.is_some vs then Some (List.map Option.get vs) else None
 
 (* Run the probe for one exercise directory, in a scratch copy. *)
@@ -244,11 +245,36 @@ let run ~env ~scratch ~exercise_dir ~slug =
     let _, runlog = run_cmd ~cwd:(Filename.concat dir "_build/default")
         [| "./test.exe" |] in
     let out = try read (Filename.concat dir "_build/default/gw_probe.out") with _ -> "" in
+    (* An argument the probe could not print (a function) is read back from
+       the call site's own source, when the call is direct. *)
+    Source_term.read_helpers str;
+    let fill id target (args : Value.t list) =
+      match List.find_opt (fun st -> st.id = id) sites,
+            List.find_opt (fun v -> v.Iface.vname = target) iface.Iface.values with
+      | Some st, Some v ->
+          let params, _ = unarrow v.Iface.vty in
+          let call_args = match st.got.pexp_desc with Pexp_apply (_, a) -> a | _ -> [] in
+          let unlabeled = ref (List.filter_map (fun (l, a) -> if l = Asttypes.Nolabel then Some a else None) call_args) in
+          let ast_for (l, _) = match l with
+            | Nolabel -> (match !unlabeled with a :: r -> unlabeled := r; Some a | [] -> None)
+            | Labelled n | Optional n ->
+                List.find_map (fun (l', a) -> match l' with
+                    | Asttypes.Labelled m | Asttypes.Optional m when m = n -> Some a | _ -> None) call_args in
+          let asts = List.map ast_for params in
+          (try Some (List.map2 (fun v ast -> match v, ast with
+               | Value.String "<unprintable>", Some a ->
+                   (match Source_term.value_of_source (Format.asprintf "%a" Pprintast.expression a) with
+                    | Some f -> f | None -> raise Exit)
+               | Value.String "<unprintable>", None -> raise Exit
+               | v, _ -> v) args asts)
+           with _ -> None)
+      | _ -> Some args in
     let examples = List.filter_map (fun line ->
         match String.split_on_char '\t' line with
-        | [ _id; target; args; exp ] ->
+        | [ id; target; args; exp ] ->
             let unq s = try Scanf.sscanf s "%S" (fun x -> x) with _ -> s in
             let args = if args = "" then Some [] else parse_args (unq args) in
+            let args = Option.bind args (fill (try int_of_string id with _ -> -1) target) in
             (match args, Literal.of_string_opt (unq exp) with
              | Some args, Some out -> Some (target, { Spec.args; out })
              | _ -> None)

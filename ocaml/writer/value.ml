@@ -18,6 +18,11 @@ type t =
 
 exception Not_comparable
 
+(* A function argument a part's test passes (List-ops' ~f:(fun x -> x + 1))
+   is kept as its source, Con ("#fun", [String src]), with its meaning here:
+   it prints as the source it came from and compares by that source. *)
+let funs : (string, t -> t) Hashtbl.t = Hashtbl.create 8
+
 (* How OCaml's own compare orders constructors: every constant constructor
    (an immediate) before every one carrying values (a block), and within each
    group by declaration order. Ordering by name instead would make sorting
@@ -98,6 +103,7 @@ let rec to_ocaml = function
   | List xs -> "[" ^ String.concat "; " (List.map to_ocaml xs) ^ "]"
   | Array xs -> "[|" ^ String.concat "; " (Array.to_list (Array.map to_ocaml xs)) ^ "|]"
   | Tuple xs -> "(" ^ String.concat ", " (List.map to_ocaml xs) ^ ")"
+  | Con ("#fun", [ String src ]) -> "(" ^ src ^ ")"
   | Con (c, []) -> c
   | Con (c, [ x ]) -> "(" ^ c ^ " " ^ to_ocaml x ^ ")"
   | Con (c, xs) -> "(" ^ c ^ " (" ^ String.concat ", " (List.map to_ocaml xs) ^ "))"
@@ -108,3 +114,8 @@ let rec to_ocaml = function
   | Fun _ -> "<fun>"
 
 let to_string = to_ocaml
+
+let as_function = function
+  | Fun g -> Some g
+  | Con ("#fun", [ String src ]) -> Hashtbl.find_opt funs src
+  | _ -> None

@@ -44,14 +44,11 @@ let derive ?cfg (iface : Iface.t) (examples : (string * Spec.example) list) (v :
     let ty = Iface.expand decls v.Iface.vty in
     let args, out = unarrow ty in
     let params = param_names args in
-    if List.exists (fun (_, _, t) -> not (Synth.first_order t)) params then
-      Declined { name = v.Iface.vname; why = "takes a function argument, which the examples cannot show" }
-    else
-      match Topdown.solve_param ?cfg ~self:v.Iface.vname ~decls ~params:(List.map (fun (n, _, t) -> (n, t)) params) ~out_ty:out exs with
-      | Topdown.Solved (body, considered) ->
-          Derived { name = v.Iface.vname; params = List.map (fun (n, l, _) -> (n, l)) params; body; considered }
-      | Topdown.Gave_up why -> Declined { name = v.Iface.vname; why }
-      | exception Out_of_memory ->
+    match Topdown.solve_param ?cfg ~self:v.Iface.vname ~decls ~params:(List.map (fun (n, _, t) -> (n, t)) params) ~out_ty:out exs with
+    | Topdown.Solved (body, considered) ->
+        Derived { name = v.Iface.vname; params = List.map (fun (n, l, _) -> (n, l)) params; body; considered }
+    | Topdown.Gave_up why -> Declined { name = v.Iface.vname; why }
+    | exception Out_of_memory ->
           if Sys.getenv_opt "GW_DEBUG" <> None then Printexc.print_backtrace stderr;
           Declined { name = v.Iface.vname; why = "memory bound reached" }
 

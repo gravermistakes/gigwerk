@@ -909,8 +909,14 @@ and solve_param_all ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~param
     | Solved _ as r -> r
     | Gave_up _ -> solve_top ~cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty exs in
   let ordinary () =
-    (* a recursion whose traces the examples themselves complete comes first:
-       it is the structure the examples show, not a fit to their values *)
+    (* a small term the bank already holds comes first; then a recursion
+       whose traces the examples themselves complete, which is the structure
+       the examples show rather than a fit to their values; then the rest *)
+    match (try solve_top ~cfg:base ?bank_size ?lambda_bank_size ~depth:1 ?self ~recursion_allowed:false
+                 ~decls ~params ~out_ty examples
+           with Exhausted | Out_of_steps -> Gave_up "") with
+    | Solved _ as r -> r
+    | Gave_up _ ->
     match (try traced_recursion ~cfg:base ~self:(Option.value self ~default:"f") ~decls ~params ~out_ty examples
            with Exhausted | Out_of_steps -> None) with
     | Some e -> Solved (e, 0)
