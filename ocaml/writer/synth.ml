@@ -291,7 +291,13 @@ let constants (spec_examples : Spec.example list) (target_out : ty) (decls : dec
       List.filter_map (function Value.Char c -> Some c | _ -> None)
         (subvalues ex.Spec.out @ List.concat_map subvalues ex.Spec.args)) spec_examples) in
   let chars = List.sort_uniq compare (' ' :: chars) in
-  let strings = "" :: string_fragments spec_examples in
+  (* punctuation the inputs use, as one-character strings: "?" is how a
+     question ends, and nothing else would offer it *)
+  let punct = List.sort_uniq compare (List.concat_map (fun ex -> List.concat_map (fun a ->
+      List.filter_map (function
+          | Value.Char c when (c >= '!' && c <= '/') || (c >= ':' && c <= '@') -> Some (String.make 1 c)
+          | _ -> None) (subvalues a)) ex.Spec.args) spec_examples) in
+  let strings = "" :: string_fragments spec_examples @ punct in
   let strings = List.sort_uniq compare (strings
       @ recurring (List.filter_map (fun ex -> match ex.Spec.out with
           | Value.String s when String.length s <= 60 -> Some s | _ -> None) spec_examples)) in
@@ -315,6 +321,11 @@ let data_constants (examples : Spec.example list) =
   let vs = List.concat_map (fun ex -> List.concat_map subvalues (ex.Spec.out :: ex.Spec.args)) examples in
   let frags = List.map (fun s -> Value.String s) (string_fragments examples) in
   let frags = frags @ List.map (fun n -> Value.Int n) (inferred_divisors examples) in
+  let punct = List.sort_uniq compare (List.concat_map (fun ex -> List.concat_map (fun a ->
+      List.filter_map (function
+          | Value.Char c when (c >= '!' && c <= '/') || (c >= ':' && c <= '@') -> Some (Value.String (String.make 1 c))
+          | _ -> None) (subvalues a)) ex.Spec.args) examples) in
+  let frags = frags @ punct in
   List.map (fun v -> (Expr.Lit v, v, t_unit)) (dedupe (vs @ frags))
 
 (* Empty containers and None at each type the search may need. *)

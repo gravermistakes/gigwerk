@@ -131,6 +131,19 @@ let all : t list = [
     (bin (fun n f -> let n = int n in
            if n < 0 || n > 10_000 then raise Undefined
            else Value.String (String.init n (fun i -> chr (apply f (Value.Int i))))));
+  fn "String.exists" (arrows [ arrow t_char t_bool; t_string ] t_bool)
+    (bin (fun f s -> Value.Bool (String.exists (fun c -> bool (apply f (Value.Char c))) (str s))));
+  fn "String.for_all" (arrows [ arrow t_char t_bool; t_string ] t_bool)
+    (bin (fun f s -> Value.Bool (String.for_all (fun c -> bool (apply f (Value.Char c))) (str s))));
+  mk "String.starts_with" (arrows [ t_string; t_string ] t_bool)
+    (bin (fun p s -> Value.Bool (String.starts_with ~prefix:(str p) (str s))))
+    (function [ p; s ] -> "(String.starts_with ~prefix:" ^ p ^ " " ^ s ^ ")" | _ -> assert false);
+  mk "String.ends_with" (arrows [ t_string; t_string ] t_bool)
+    (bin (fun p s -> Value.Bool (String.ends_with ~suffix:(str p) (str s))))
+    (function [ p; s ] -> "(String.ends_with ~suffix:" ^ p ^ " " ^ s ^ ")" | _ -> assert false);
+  fn "String.index_opt" (arrows [ t_string; t_char ] (t_option t_int))
+    (bin (fun s c -> match String.index_opt (str s) (chr c) with
+         | Some i -> Value.Con ("Some", [ Value.Int i ]) | None -> Value.Con ("None", [])));
   fn "string_of_int" (arrow t_int t_string) (un (fun x -> Value.String (string_of_int (int x))));
   fn "int_of_string_opt" (arrow t_string (t_option t_int))
     (un (fun s -> match int_of_string_opt (str s) with
@@ -179,6 +192,15 @@ let all : t list = [
     (tri (fun f z l -> List.fold_left (apply2 f) z (lst l)));
   fn "List.fold_right" (arrows [ arrows [ a; b ] b; t_list a; b ] b)
     (tri (fun f l z -> List.fold_right (apply2 f) (lst l) z));
+  fn "List.filteri" (arrows [ arrows [ t_int; a ] t_bool; t_list a ] (t_list a))
+    (bin (fun f l -> Value.List (List.filteri (fun i x -> bool (apply2 f (Value.Int i) x)) (lst l))));
+  fn "List.find_map" (arrows [ arrow a (t_option b); t_list a ] (t_option b))
+    (bin (fun f l -> match List.find_map (fun x -> match apply f x with
+         | Value.Con ("Some", [ y ]) -> Some y | _ -> None) (lst l) with
+         | Some y -> Value.Con ("Some", [ y ]) | None -> Value.Con ("None", [])));
+  fn "List.partition" (arrows [ arrow a t_bool; t_list a ] (TTuple [ t_list a; t_list a ]))
+    (bin (fun f l -> let y, n = List.partition (fun x -> bool (apply f x)) (lst l) in
+           Value.Tuple [ Value.List y; Value.List n ]));
   fn "List.exists" (arrows [ arrow a t_bool; t_list a ] t_bool)
     (bin (fun f l -> Value.Bool (List.exists (fun x -> bool (apply f x)) (lst l))));
   fn "List.for_all" (arrows [ arrow a t_bool; t_list a ] t_bool)

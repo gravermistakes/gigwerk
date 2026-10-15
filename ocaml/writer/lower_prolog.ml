@@ -93,6 +93,11 @@ gw_int_of_string_opt(S, R) :- ( catch(number_string(N, S), _, fail), integer(N) 
 gw_char_upper(C, U) :- ( char_type(C, lower(Up)) -> U = Up ; U = C ).
 gw_char_lower(C, L) :- ( char_type(C, upper(Lo)) -> L = Lo ; L = C ).
 gw_chr(N, C) :- N >= 0, N =< 255, char_code(C, N).
+gw_string_exists(F, S, R) :- string_chars(S, Cs), gw_exists(F, Cs, R).
+gw_string_for_all(F, S, R) :- string_chars(S, Cs), gw_for_all(F, Cs, R).
+gw_filteri(F, L, R) :- length(L, N), N1 is N - 1, ( N1 < 0 -> R = [] ; numlist(0, N1, Is),
+    foldl([I, X, A0, A]>>(call(F, I, X, true) -> append(A0, [X], A) ; A = A0), Is, L, [], R) ).
+gw_find_map(F, L, R) :- ( member(X, L), call(F, X, some(Y)) -> R = some(Y) ; R = none ).
 gw_div(A, B, R) :- B =\= 0, R is A // B.
 gw_mod(A, B, R) :- B =\= 0, R is A rem B.
 |}
@@ -154,6 +159,14 @@ let call_goal name args r =
   | "String.contains", [ s; c ] -> Printf.sprintf "gw_contains(%s, %s, %s)" s c r
   | "String.map", [ f; s ] -> Printf.sprintf "gw_string_map(%s, %s, %s)" f s r
   | "String.init", [ n; f ] -> Printf.sprintf "gw_string_init(%s, %s, %s)" n f r
+  | "String.exists", [ f; s ] -> Printf.sprintf "gw_string_exists(%s, %s, %s)" f s r
+  | "String.for_all", [ f; s ] -> Printf.sprintf "gw_string_for_all(%s, %s, %s)" f s r
+  | "String.starts_with", [ p; s ] -> Printf.sprintf "gw_bool(string_concat(%s, _, %s), %s)" p s r
+  | "String.ends_with", [ p; s ] -> Printf.sprintf "gw_bool(string_concat(_, %s, %s), %s)" p s r
+  | "String.index_opt", [ s; c ] -> Printf.sprintf "( sub_atom(%s, I0, 1, _, %s) -> %s = some(I0) ; %s = none )" s c r r
+  | "List.filteri", [ f; l ] -> Printf.sprintf "gw_filteri(%s, %s, %s)" f l r
+  | "List.find_map", [ f; l ] -> Printf.sprintf "gw_find_map(%s, %s, %s)" f l r
+  | "List.partition", [ f; l ] -> Printf.sprintf "( partition([X]>>call(%s, X, true), %s, Y, N), %s = t(Y, N) )" f l r
   | "string_of_int", [ x ] -> Printf.sprintf "number_string(%s, %s)" x r
   | "int_of_string_opt", [ s ] -> Printf.sprintf "gw_int_of_string_opt(%s, %s)" s r
   | "explode", [ s ] -> Printf.sprintf "string_chars(%s, %s)" s r

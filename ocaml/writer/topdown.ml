@@ -171,7 +171,8 @@ let rec solve st (ctx : ctx) (b : bank) (g : goal) depth : sols =
             (fun () -> by_list st ctx b g cs outs depth);
             (fun () -> by_bool st ctx b g cs outs depth);
             (fun () -> by_int st ctx b g cs outs depth);
-            (fun () -> by_cond st ctx b g cs depth);
+            (fun () -> by_decisions st ctx b g cs depth);
+          (fun () -> by_cond st ctx b g cs depth);
           ]))
 
 and sub_solve st ctx b g depth = Seq.memoize (take_seq alternatives (solve st ctx b g depth))
@@ -557,8 +558,68 @@ and by_int st ctx b g cs outs depth : sols =
       ] @ arithmetic |> fun l -> alts l
   | _ -> Seq.empty
 
+(* A decision list over a few fixed answers: peel off the points sharing
+   one answer with a guard that holds on exactly those points among the ones
+   left, then do the same with the rest. Each guard is a boolean goal of its
+   own (so it may be a conjunction); the chain costs one level, not two per
+   case, which is what a classification of five answers needs. *)
+and by_decisions st ctx b g cs depth : sols =
+  let answers = List.map (fun j -> Option.get g.outs.(j)) cs in
+  let distinct = dedupe answers in
+  if List.length distinct < 3 || List.length distinct > 8 || depth < 2 then Seq.empty
+  else
+    (* larger classes first; ties by first appearance *)
+    let count v = List.length (List.filter (Value.equal v) answers) in
+    let order = List.stable_sort (fun a b' -> compare (count b') (count a)) distinct in
+    let rec chain remaining classes : sols =
+      match classes with
+      | [] -> Seq.empty
+      | [ last ] ->
+          (* the rest: one answer, as a constant or any term meeting it *)
+          let lg = { g with outs = Array.mapi (fun j o -> if List.mem j remaining then o else None) g.outs;
+                            defined = Array.map (fun _ -> false) g.defined } in
+          ignore last; sub_solve st ctx b lg (depth - 1)
+      | _ ->
+          (* peel the class with the simplest guard first: find each class's
+             first guard, order the classes by its size *)
+          let guard_size v =
+            let here = List.filter (fun j -> Value.equal (Option.get g.outs.(j)) v) remaining in
+            let bg = { gty = t_bool;
+                       outs = Array.mapi (fun j _ ->
+                           if List.mem j here then Some (Value.Bool true)
+                           else if List.mem j remaining then Some (Value.Bool false) else None) g.outs;
+                       defined = Array.map (fun _ -> false) g.defined } in
+            match sub_solve st ctx b bg (depth - 1) () with
+            | Seq.Cons (e, _) -> Expr.size e
+            | Seq.Nil -> max_int in
+          let sized = List.map (fun v -> (guard_size v, v)) classes in
+          let classes_by_guard = List.map snd (List.stable_sort (fun (a, _) (b', _) -> compare a b')
+                                                 (List.filter (fun (k, _) -> k < max_int) sized)) in
+          Seq.flat_map (fun v ->
+              let here = List.filter (fun j -> Value.equal (Option.get g.outs.(j)) v) remaining in
+              let bg = { gty = t_bool;
+                         outs = Array.mapi (fun j _ ->
+                             if List.mem j here then Some (Value.Bool true)
+                             else if List.mem j remaining then Some (Value.Bool false) else None) g.outs;
+                         defined = Array.map (fun _ -> false) g.defined } in
+              let vg = { g with outs = Array.mapi (fun j o -> if List.mem j here then o else None) g.outs;
+                                defined = Array.map (fun _ -> false) g.defined } in
+              let rest = List.filter (fun j -> not (List.mem j here)) remaining in
+              let others = List.filter (fun w -> not (Value.equal w v)) classes in
+              Seq.flat_map (fun guard ->
+                  Seq.flat_map (fun leaf ->
+                      Seq.map (fun tail -> Expr.If (guard, leaf, tail)) (chain rest others))
+                    (take_seq 1 (sub_solve st ctx b vg 0)))
+                (take_seq 2 (sub_solve st ctx b bg (depth - 1))))
+            (List.to_seq classes_by_guard)
+          |> take_seq 3
+    in
+    chain cs order
+
 and by_cond st ctx b g cs depth : sols =
-  if List.length cs < 2 then Seq.empty
+  (* a boolean is decomposed with && and ||, which say the same thing as a
+     conditional between booleans and overfit less readily *)
+  if List.length cs < 2 || key g.gty = "bool" then Seq.empty
   else
     let tests = List.filter (fun c -> key c.ty = "bool"
         && List.for_all (fun j -> match c.vec.(j) with Some (Value.Bool _) -> true | _ -> false) cs
