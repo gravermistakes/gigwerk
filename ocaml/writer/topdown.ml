@@ -39,6 +39,7 @@ type st = {
   banks : (string, search) Hashtbl.t;  (* per context *)
   bank_size : int;
   lambda_bank_size : int;
+  avoid_in_guards : string list;       (* variables a guard should not ask about first *)
 }
 
 let step_limit = 6_000
@@ -519,6 +520,9 @@ and by_cond st ctx b g cs depth : sols =
            | _ -> true)
       | _ -> false in
     let tests = List.filter (fun c -> not (memorizes c)) tests in
+    (* in a recursion step, ask about the input (h, t) before the result r *)
+    let tests = let avoids c = List.exists (fun v -> Expr.mentions v c.expr) st.avoid_in_guards in
+      List.filter (fun c -> not (avoids c)) tests @ List.filter avoids tests in
     Seq.flat_map (fun c ->
         let yes = restrict (sub g (fun j v -> if c.vec.(j) = Some (Value.Bool true) then Some v else None))
             (fun j -> c.vec.(j) = Some (Value.Bool true)) in
@@ -552,10 +556,11 @@ let edge_inputs (params : (string * ty) list) (points : (string * Value.t) list 
       List.filteri (fun i _ -> i < 6) pts
 
 let solve_top ?(cfg = default) ?(bank_size = 6) ?(lambda_bank_size = 5) ?(depth = 4) ?(self = "f") ?(edges = false)
+    ?(recursion_allowed = true) ?(avoid_in_guards = [])
     ~decls ~params ~out_ty (examples : Spec.example list) =
   Synth.total := 0;
   Synth.pending := [];
-  let st = { cfg; decls; examples; steps = 0; banks = Hashtbl.create 8; bank_size; lambda_bank_size } in
+  let st = { cfg; decls; examples; steps = 0; banks = Hashtbl.create 8; bank_size; lambda_bank_size; avoid_in_guards } in
   let base_points = List.map (fun ex -> List.combine (List.map fst params) ex.Spec.args) examples in
   let edge_points = if edges then edge_inputs params base_points else [] in
   let points = Array.of_list (base_points @ edge_points) in
@@ -592,7 +597,7 @@ let solve_top ?(cfg = default) ?(bank_size = 6) ?(lambda_bank_size = 5) ?(depth 
       (match !first with
        | Some e -> Solved (e, st.steps)
        | None -> Gave_up (Printf.sprintf "no derivation within depth %d (%d steps)" depth st.steps))
-    else if d = 3 && !first = None then
+    else if d = 3 && !first = None && recursion_allowed then
       (match recursion () with
        | Some e -> Solved (e, st.steps)
        | None -> (match scan d with Some e -> Solved (e, st.steps) | None -> deepen (d + 1)))
@@ -613,6 +618,99 @@ let solve_top ?(cfg = default) ?(bank_size = 6) ?(lambda_bank_size = 5) ?(depth 
            | Out_of_steps -> Printf.sprintf "deduction bound reached: %d steps" st.steps
            | _ -> Printf.sprintf "term bound reached: %d terms kept" !Synth.total))
 
+(* ------------------------------------------------------ traced recursion *)
+
+(* What f returns on each suffix of x, under a hypothesis the example itself
+   suggests. None when the hypothesis does not fit the example. *)
+let suffix_outputs hyp (xs : Value.t list) (out : Value.t) : Value.t list option =
+  let n = List.length xs in
+  let drop k l = List.filteri (fun i _ -> i >= k) l in
+  match hyp, out with
+  | `Map, Value.List o when List.length o = n -> Some (List.init (n + 1) (fun i -> Value.List (drop i o)))
+  | (`Sub_left | `Sub_right), Value.List o ->
+      (* positions of out within xs, leftmost or rightmost greedy *)
+      let xa = Array.of_list xs and oa = Array.of_list o in
+      let m = Array.length oa in
+      let pos = Array.make m (-1) in
+      let ok =
+        if hyp = `Sub_left then begin
+          let j = ref 0 in
+          Array.iteri (fun k v -> if !j < m && Value.equal v oa.(!j) then (pos.(!j) <- k; incr j)) xa; !j = m
+        end else begin
+          let j = ref (m - 1) in
+          for k = n - 1 downto 0 do
+            if !j >= 0 && Value.equal xa.(k) oa.(!j) then (pos.(!j) <- k; decr j)
+          done; !j < 0
+        end in
+      if not ok || m = n then None
+      else Some (List.init (n + 1) (fun i ->
+          Value.List (List.filteri (fun k _ -> pos.(k) >= i) o)))
+  | `Chunks, Value.List chunks ->
+      let pieces = List.map (function Value.List l -> Some l | _ -> None) chunks in
+      if List.exists Option.is_none pieces then None
+      else
+        let pieces = List.map Option.get pieces in
+        if List.exists (( = ) []) pieces || not (List.for_all2 Value.equal (List.concat pieces) xs) then None
+        else
+          (* cut the chunk sequence at element i *)
+          let cut i =
+            let rec go k = function
+              | [] -> []
+              | p :: rest ->
+                  let len = List.length p in
+                  if k >= len then go (k - len) rest
+                  else Value.List (drop k p) :: List.map (fun q -> Value.List q) rest in
+            Value.List (go i pieces) in
+          Some (List.init (n + 1) cut)
+  | _ -> None
+
+(* Structural recursion with its traces completed by hypothesis, the step
+   solved by deduction on exact points, the whole program accepted only if
+   running it reproduces the original examples. *)
+let traced_recursion ?(cfg = default) ~self ~decls ~(params : (string * ty) list) ~out_ty
+    (examples : Spec.example list) =
+  let pnames = List.map fst params in
+  match repr out_ty with
+  | TCon ("list", _) ->
+      List.find_map (fun (x, xty) ->
+          match repr xty with
+          | TCon ("list", [ te ]) ->
+              let xi = let rec idx i = function [] -> 0 | p :: r -> if p = x then i else idx (i + 1) r in idx 0 pnames in
+              List.find_map (fun hyp ->
+                  let traces = List.map (fun ex ->
+                      match List.nth ex.Spec.args xi with
+                      | Value.List xs -> Option.map (fun outs -> (ex, xs, outs)) (suffix_outputs hyp xs ex.Spec.out)
+                      | _ -> None) examples in
+                  if List.exists Option.is_none traces then None
+                  else
+                    let traces = List.map Option.get traces in
+                    let others = List.filter (fun (p, _) -> p <> x) params in
+                    let step_examples = List.concat_map (fun (ex, xs, outs) ->
+                        List.mapi (fun i h ->
+                            let t = List.filteri (fun k _ -> k > i) xs in
+                            let other_args = List.filteri (fun k _ -> k <> xi) ex.Spec.args in
+                            { Spec.args = [ h; Value.List t; List.nth outs (i + 1) ] @ other_args;
+                              out = List.nth outs i }) xs) traces in
+                    (* one input, one output *)
+                    let consistent = List.for_all (fun a -> List.for_all (fun b ->
+                        not (List.for_all2 Value.equal a.Spec.args b.Spec.args) || Value.equal a.Spec.out b.Spec.out)
+                        step_examples) step_examples in
+                    let step_examples = List.fold_left (fun acc ex ->
+                        if List.exists (fun e -> List.for_all2 Value.equal e.Spec.args ex.Spec.args) acc then acc
+                        else acc @ [ ex ]) [] step_examples in
+                    if not consistent || step_examples = [] then None
+                    else
+                      let sparams = [ ("h", te); ("t", xty); ("r", out_ty) ] @ others in
+                      match solve_top ~cfg ~depth:6 ~recursion_allowed:false ~avoid_in_guards:[ "r" ]
+                              ~decls ~params:sparams ~out_ty step_examples with
+                      | Gave_up _ -> None
+                      | Solved (s, _) ->
+                          let body = Recur.program ~self ~pnames ~x (Expr.Lit (Value.List [])) s in
+                          if Recur.runs ~self ~pnames body examples then Some body else None)
+                [ `Map; `Sub_right; `Sub_left; `Chunks ]
+          | _ -> None) params
+  | _ -> None
+
 (* The strict parametric reading first (free-theorem examples, no comparison
    of a rigid 'a), then the ordinary one. *)
 let solve_param ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty examples =
@@ -621,7 +719,13 @@ let solve_param ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~o
     match solve_top ~cfg ?bank_size ?lambda_bank_size ?depth ?self ~edges:true ~decls ~params ~out_ty exs with
     | Solved _ as r -> r
     | Gave_up _ -> solve_top ~cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty exs in
-  let ordinary () = attempt base examples in
+  let ordinary () =
+    (* a recursion whose traces the examples themselves complete comes first:
+       it is the structure the examples show, not a fit to their values *)
+    match (try traced_recursion ~cfg:base ~self:(Option.value self ~default:"f") ~decls ~params ~out_ty examples
+           with Exhausted | Out_of_steps -> None) with
+    | Some e -> Solved (e, 0)
+    | None -> attempt base examples in
   (* The collapsing theorem is only safe to lean on when the output carries
      a 'a: a function to a 'a-free type (a test, a count) that never looks
      at its elements depends on shape alone, which the parts asking for one

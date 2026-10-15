@@ -641,7 +641,24 @@ let build_search ?(cfg = default) ~(decls : decl list) ~(examples : Spec.example
   List.iter (fun d -> match d.kind with
       | Variant ctors -> Value.declare_variant (List.map (fun (c, a) -> (c, List.length a)) ctors)
       | _ -> ()) decls;
-  let comps = List.map of_component Components.all @ ctor_comps decls @ sibling_comps () in
+  (* Only components whose base types the part ever mentions: a string
+     operation can never apply to a problem about 'a lists, and offering it
+     only fills the banks. int and bool are always in reach (lengths, tests). *)
+  let mentioned = List.concat_map types_in (types @ List.map snd ctx.vars)
+                  @ List.concat_map (fun d -> match d.kind with
+                      | Variant cs -> List.concat_map (fun (_, ts) -> List.concat_map types_in ts) cs
+                      | Record fs -> List.concat_map (fun (_, t) -> types_in t) fs
+                      | Alias t -> types_in t | _ -> []) decls in
+  let bases = List.sort_uniq compare ("int" :: "bool" :: "list" :: "option" :: List.filter_map (fun t ->
+      match repr t with TCon (n, _) -> Some n | _ -> None) mentioned) in
+  let in_reach (c : comp) =
+    let rec ok t = match repr t with
+      | TCon (n, ts) -> List.mem n bases && List.for_all ok ts
+      | TTuple ts -> List.for_all ok ts
+      | TArrow (_, a, b) -> ok a && ok b
+      | _ -> true in
+    ok c.scheme in
+  let comps = List.filter in_reach (List.map of_component Components.all) @ ctor_comps decls @ sibling_comps () in
   let all_types = List.sort_uniq (fun a b -> compare (key a) (key b))
       (List.concat_map types_in types @ List.concat_map (fun (_, t) -> types_in t) ctx.vars
        @ [ t_list t_int; t_list t_char; t_list t_string ]) in
