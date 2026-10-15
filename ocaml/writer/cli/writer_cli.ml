@@ -1,0 +1,119 @@
+(* writer: drive the OCaml-writing talent's components from the command line. *)
+open Writer
+
+let env () =
+  match Sys.getenv_opt "GW_OPAM_SWITCH" with
+  | Some sw ->
+      [| "env"; "OPAMROOT=" ^ (try Sys.getenv "OPAMROOT" with Not_found -> "/home/user/.opam-gw");
+         "opam"; "exec"; "--switch"; sw; "--" |]
+  | None -> [||]
+
+let scratch () =
+  match Sys.getenv_opt "GW_SCRATCH" with
+  | Some d -> d
+  | None -> Filename.concat (Filename.get_temp_dir_name ()) "gw-writer"
+
+(* One word for a part's outcome, and the evidence behind it. A part is
+   verified only when its own check passes AND the derived program agrees with
+   the reference on every fresh input in the reference's domain. *)
+let classify ~suite ~diff ~declined =
+  match suite, diff with
+  | `Not_run _, _ -> ("declined", String.concat " | " declined)
+  | `Failed _, _ -> ("own-check-failed", "")
+  | `Passed, Some (Ok v) when v.Verify.disagreements = [] && v.Verify.compared > 0 ->
+      ("verified", Printf.sprintf "%d/%d fresh inputs" v.Verify.agreed v.Verify.compared)
+  | `Passed, Some (Ok v) when v.Verify.compared = 0 -> ("unconfirmed", "no fresh input in the reference's domain")
+  | `Passed, Some (Ok v) ->
+      ("overfit", Printf.sprintf "%d/%d; %s" v.Verify.agreed v.Verify.compared
+         (match v.Verify.disagreements with d :: _ -> d | [] -> ""))
+  | `Passed, Some (Error e) -> ("unconfirmed", "differential not run: " ^ String.sub e 0 (min 100 (String.length e)))
+  | `Passed, None -> ("unconfirmed", "")
+
+let () =
+  match Array.to_list Sys.argv with
+  | _ :: "probe" :: dir :: _ ->
+      let slug = Filename.basename dir in
+      let sc = scratch () in
+      (try Unix.mkdir sc 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+      let o = Probe.run ~env:(env ()) ~scratch:sc ~exercise_dir:dir ~slug in
+      Printf.printf "%s: %d sites, %d examples\n" slug o.Probe.sites (List.length o.Probe.examples);
+      List.iter (fun (t, ex) -> print_endline ("  " ^ Spec.example_to_string t ex)) o.Probe.examples;
+      if o.Probe.examples = [] then print_endline o.Probe.log
+  | _ :: "solve" :: dir :: _ ->
+      let slug = Filename.basename dir in
+      let sc = scratch () in
+      (try Unix.mkdir sc 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+      let r = Part.solve ~env:(env ()) ~scratch:sc ~exercise_dir:dir ~slug () in
+      List.iter (function
+          | Part.Derived { name; considered; _ } -> Printf.printf "  derived  %s (%d terms considered)\n" name considered
+          | Part.Declined { name; why } -> Printf.printf "  declined %s: %s\n" name why) r.Part.derivations;
+      (match r.Part.source with Some s -> print_string s | None -> ());
+      (match r.Part.tests with
+       | `Passed -> Printf.printf "%s: PASSED its own test suite\n" slug
+       | `Failed log -> Printf.printf "%s: FAILED its test suite\n%s\n" slug
+                          (String.concat "\n" (List.filteri (fun i _ -> i < 25) (String.split_on_char '\n' log)))
+       | `Not_run why -> Printf.printf "%s: not tested (%s)\n" slug why);
+      let declined = List.filter_map (function
+          | Part.Declined { name; why } -> Some (name ^ ": " ^ why) | _ -> None) r.Part.derivations in
+      at_exit (fun () ->
+          let verdict, detail = classify ~suite:r.Part.tests ~diff:r.Part.differential ~declined in
+          Printf.printf "VERDICT\t%s\t%s\t%s\n" slug verdict detail);
+      (match r.Part.differential with
+       | None -> ()
+       | Some (Error e) -> Printf.printf "%s: differential not run: %s\n" slug
+                             (String.concat "\n" (List.filteri (fun i _ -> i < 15) (String.split_on_char '\n' e)))
+       | Some (Ok v) ->
+           Printf.printf "%s: agrees with the reference on %d of %d fresh inputs\n" slug v.Verify.agreed v.Verify.compared;
+           List.iter (fun d -> print_endline ("    counterexample: " ^ d)) (List.filteri (fun i _ -> i < 5) v.Verify.disagreements))
+  | _ :: "org" :: path :: _ ->
+      let r = Ocamlorg.solve ~path () in
+      let declined = List.filter_map (function
+          | Part.Declined { name; why } -> Some (name ^ ": " ^ why) | _ -> None) r.Ocamlorg.derivations in
+      at_exit (fun () ->
+          let verdict, detail = classify ~suite:r.Ocamlorg.replay ~diff:r.Ocamlorg.differential ~declined in
+          Printf.printf "VERDICT\t%s\t%s\t%s\n" r.Ocamlorg.slug verdict detail);
+      List.iter (function
+          | Part.Derived { name; considered; _ } -> Printf.printf "  derived  %s (%d steps)\n" name considered
+          | Part.Declined { name; why } -> Printf.printf "  declined %s: %s\n" name why) r.Ocamlorg.derivations;
+      (match r.Ocamlorg.source with Some s -> print_endline s | None -> ());
+      (match r.Ocamlorg.replay with
+       | `Passed -> Printf.printf "%s: statement replay PASSED\n" r.Ocamlorg.slug
+       | `Failed why -> Printf.printf "%s: statement replay FAILED: %s\n" r.Ocamlorg.slug why
+       | `Not_run why -> Printf.printf "%s: replay not run (%s)\n" r.Ocamlorg.slug why);
+      (match r.Ocamlorg.differential with
+       | None -> ()
+       | Some (Error e) -> Printf.printf "%s: differential not run: %s\n" r.Ocamlorg.slug e
+       | Some (Ok v) ->
+           Printf.printf "%s: agrees with the Solution on %d of %d fresh inputs\n" r.Ocamlorg.slug v.Verify.agreed v.Verify.compared;
+           List.iter (fun d -> print_endline ("    counterexample: " ^ d)) (List.filteri (fun i _ -> i < 4) v.Verify.disagreements))
+  | _ :: "batch" :: kind :: src :: out :: only ->
+      (* Every part, each in its own process under a memory limit, one line of
+         verdict each. A part that exhausts memory or time loses only itself. *)
+      (try Unix.mkdir out 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+      let entries = Sys.readdir src |> Array.to_list |> List.sort compare in
+      let items = match kind with
+        | "exercism" -> List.filter (fun d -> Sys.is_directory (Filename.concat src d)) entries
+        | _ -> List.filter (fun f -> Filename.check_suffix f ".md") entries in
+      let items = List.filter (fun d -> only = [] || List.mem (Filename.remove_extension d) only) items in
+      let tsv = open_out_gen [ Open_append; Open_creat ] 0o644 (Filename.concat out "results.tsv") in
+      List.iter (fun item ->
+          let slug = Filename.remove_extension item in
+          let t0 = Unix.gettimeofday () in
+          let cmd = if kind = "exercism" then "solve" else "org" in
+          let o = Gigwerk.Proc.run ~root:(Sys.getcwd ()) ~timeout_s:1200.
+              [| "prlimit"; "--as=6000000000"; Sys.executable_name; cmd; Filename.concat src item |] in
+          let log = o.Gigwerk.Proc.stdout ^ o.Gigwerk.Proc.stderr in
+          let oc = open_out (Filename.concat out (slug ^ ".log")) in output_string oc log; close_out oc;
+          let verdict = List.find_map (fun l ->
+              match String.split_on_char '\t' l with
+              | "VERDICT" :: _ :: v :: rest -> Some (v, String.concat " " rest) | _ -> None)
+              (String.split_on_char '\n' o.Gigwerk.Proc.stdout) in
+          let v, d = match verdict, o.Gigwerk.Proc.exit_status with
+            | Some vd, _ -> vd
+            | None, None -> ("error", "timed out")
+            | None, Some n -> ("error", Printf.sprintf "exited %d" n) in
+          let line = Printf.sprintf "%s\t%s\t%.0fs\t%s\n" slug v (Unix.gettimeofday () -. t0)
+              (String.map (fun c -> if c = '\n' || c = '\t' then ' ' else c) d) in
+          print_string line; flush stdout; output_string tsv line; flush tsv) items;
+      close_out tsv
+  | _ -> prerr_endline "writer probe|solve <exercise-dir> | org <exercise.md> | batch exercism|org <src-dir> <out-dir> [slug...]"; exit 2

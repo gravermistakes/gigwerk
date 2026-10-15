@@ -1,0 +1,95 @@
+(* One Exercism part, end to end: read it, derive each value it asks for, write
+ * the module, and run the part's own test suite against what was written.
+ *
+ * A value with no examples is declined, in words: the writer does not guess
+ * at a function nobody has shown it. A part with any declined value is not
+ * delivered, since a module missing a value does not compile against its
+ * interface, and stubbing one would be handing in work that is not there. *)
+
+open Types
+
+type derivation =
+  | Derived of { name : string; params : (string * label) list; body : Expr.t; considered : int }
+  | Declined of { name : string; why : string }
+
+type report = {
+  slug : string;
+  derivations : derivation list;
+  source : string option;          (* the module, when every value was derived *)
+  tests : [ `Passed | `Failed of string | `Not_run of string ];
+  differential : (Verify.verdict, string) result option;
+}
+
+let param_names args =
+  let used = Hashtbl.create 8 in
+  List.mapi (fun i (l, t) ->
+      let base = match l with
+        | Labelled s | Optional s -> s
+        | Nolabel -> (match i with 0 -> "x" | 1 -> "y" | 2 -> "z" | n -> "a" ^ string_of_int n) in
+      let name = if Hashtbl.mem used base then base ^ string_of_int i else base in
+      Hashtbl.replace used name ();
+      let t = match l with Optional _ -> t_option t | _ -> t in
+      (name, l, t)) args
+
+let derive ?cfg (iface : Iface.t) (examples : (string * Spec.example) list) (v : Iface.value_spec) =
+  let decls = iface.Iface.decls in
+  let exs = List.filter_map (fun (t, ex) -> if t = v.Iface.vname then Some ex else None) examples in
+  (* the same call asked twice is one example *)
+  let exs = List.fold_left (fun acc ex ->
+      if List.exists (fun e -> List.for_all2 Value.equal e.Spec.args ex.Spec.args) acc then acc
+      else acc @ [ ex ]) [] exs in
+  if exs = [] then Declined { name = v.Iface.vname; why = "no example of it could be read from the tests" }
+  else
+    let ty = Iface.expand decls v.Iface.vty in
+    let args, out = unarrow ty in
+    let params = param_names args in
+    if List.exists (fun (_, _, t) -> not (Synth.first_order t)) params then
+      Declined { name = v.Iface.vname; why = "takes a function argument, which the examples cannot show" }
+    else
+      match Topdown.solve_top ?cfg ~decls ~params:(List.map (fun (n, _, t) -> (n, t)) params) ~out_ty:out exs with
+      | Topdown.Solved (body, considered) ->
+          Derived { name = v.Iface.vname; params = List.map (fun (n, l, _) -> (n, l)) params; body; considered }
+      | Topdown.Gave_up why -> Declined { name = v.Iface.vname; why }
+
+let run_tests ~env ~scratch ~exercise_dir ~slug ~source =
+  let dir = Filename.concat scratch (slug ^ "-accept") in
+  ignore (Probe.run_cmd ~cwd:"/" [| "rm"; "-rf"; dir |]);
+  ignore (Probe.run_cmd ~cwd:"/" [| "cp"; "-r"; exercise_dir; dir |]);
+  ignore (Probe.run_cmd ~cwd:dir [| "rm"; "-rf"; ".meta"; "_build" |]);
+  Probe.write (Filename.concat dir (Probe.module_name slug ^ ".ml")) source;
+  match Probe.run_cmd ~cwd:dir (Array.append env [| "dune"; "runtest" |]) with
+  | Some 0, _ -> `Passed
+  | _, log -> `Failed log
+
+let solve ?cfg ~env ~scratch ~exercise_dir ~slug () =
+  let m = Probe.module_name slug in
+  let mli_src = Iface.read_file (Filename.concat exercise_dir (m ^ ".mli")) in
+  let iface = Iface.parse_string mli_src in
+  let probe = Probe.run ~env ~scratch ~exercise_dir ~slug in
+  let derivations =
+    if iface.Iface.unreadable <> [] then
+      [ Declined { name = "(interface)"; why = "cannot represent: " ^ String.concat " / " iface.Iface.unreadable } ]
+    else if List.exists (fun d -> d.kind = Abstract) iface.Iface.decls then
+      [ Declined { name = "(interface)";
+                   why = "an abstract type needs a representation the writer would have to invent" } ]
+    else List.map (derive ?cfg iface probe.Probe.examples) iface.Iface.values in
+  let all_derived = derivations <> [] && List.for_all (function Derived _ -> true | Declined _ -> false) derivations in
+  let source =
+    if not all_derived then None
+    else
+      let defs = List.filter_map (function
+          | Derived { name; params; body; _ } -> Some (Lower_ocaml.definition ~name ~params body)
+          | Declined _ -> None) derivations in
+      Some (Lower_ocaml.module_source ~mli_src ~definitions:defs)
+  in
+  let tests = match source with
+    | None -> `Not_run "not every value was derived"
+    | Some source -> run_tests ~env ~scratch ~exercise_dir ~slug ~source in
+  (* The reference is read here, by the verifier, after the module is written. *)
+  let differential = match source with
+    | None -> None
+    | Some source ->
+        let reference = Iface.read_file (Filename.concat exercise_dir ".meta/example.ml") in
+        Some (Verify.differential ~env ~scratch ~exercise_dir ~slug ~iface
+                ~examples:probe.Probe.examples ~source ~reference ()) in
+  { slug; derivations; source; tests; differential }

@@ -1,0 +1,3 @@
+(library
+ (name writer)
+ (libraries gigwerk compiler-libs.common unix str))
