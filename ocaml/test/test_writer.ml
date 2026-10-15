@@ -101,5 +101,54 @@ let () =
     (try ignore (Str.search_forward (Str.regexp_string "secret_solution x = x * 7") (Transcript.reference md) 0); true
      with Not_found -> false);
 
+  print_endline "\nthe writer as talent -- booked, walked, admitted";
+  let stage ?(meta = false) () =
+    let root = Filename.temp_file "gw_writer_actor" "" in
+    Sys.remove root; Unix.mkdir root 0o755;
+    at_exit (fun () -> ignore (Gigwerk.Proc.run ~root:"/" ~timeout_s:10. [| "rm"; "-rf"; root |]));
+    let dir = Filename.concat root "twice" in
+    Unix.mkdir dir 0o755;
+    let put f c = let oc = open_out (Filename.concat dir f) in output_string oc c; close_out oc in
+    put "twice.mli" "val twice : int -> int\n";
+    put "test.ml" "open OUnit2\nopen Twice\nlet ae exp got _ = assert_equal exp got ~printer:string_of_int\n\
+                   let tests = [ \"1\" >:: ae 2 (twice 1); \"5\" >:: ae 10 (twice 5); \"0\" >:: ae 0 (twice 0);\n\
+                   \"-3\" >:: ae (-6) (twice (-3)); \"7\" >:: ae 14 (twice 7) ]\n\
+                   let () = run_test_tt_main (\"twice\" >::: tests)\n";
+    put "dune" "(executable (name test) (libraries ounit2))\n(rule (alias runtest) (action (run %{exe:test.exe})))\n";
+    put "dune-project" "(lang dune 3.0)\n";
+    if meta then (Unix.mkdir (Filename.concat dir ".meta") 0o755);
+    root in
+  let scratch = Filename.temp_file "gw_writer_scratch" "" in
+  Sys.remove scratch; Unix.mkdir scratch 0o755;
+  at_exit (fun () -> ignore (Gigwerk.Proc.run ~root:"/" ~timeout_s:10. [| "rm"; "-rf"; scratch |]));
+  let actor = Writer_actor.make { Writer_actor.env = [||]; scratch } in
+  let spec = match Gigwerk.Specification.parse "req twice : double a number" with Ok s -> s | Error _ -> failwith "spec" in
+  let obligations = Gigwerk.Obligations.issue ~id:"w"
+      ~grants:(Gigwerk.Grants.make ~entity:"e" ~snapshot:"s" ~actions:[ Gigwerk.Grants.Read; Gigwerk.Grants.Write; Gigwerk.Grants.Spawn ])
+      ~budget:5 ~expires_at:1_000_000L in
+  let now () = 0L in
+  let root = stage () in
+  let r = Gigwerk.Producer.run ~actor ~specification:spec ~workspace:root ~obligations ~now in
+  check "the writer walks its own ladder to checked and signs the module"
+    (match r.Gigwerk.Producer.outcomes with
+     | [ ("twice", Gigwerk.Producer.Produced (a, trail)) ] ->
+         a.Gigwerk.Production.by = "writer"
+         && trail = [ "commissioned"; "specified"; "derived"; "lowered"; "checked" ]
+         && Sys.file_exists (Filename.concat root "twice/twice.ml")
+     | _ -> false);
+  check "...spending exactly the five actions its moves declare"
+    (Gigwerk.Obligations.consumed r.Gigwerk.Producer.obligations = 5);
+  check "the role books it: the writing role's machine is the writer's"
+    (match Gigwerk.Role.writing with Ok role -> role.Gigwerk.Role.machine = Some (let module A = (val actor : Gigwerk.Code_actor.S) in A.machine) | Error _ -> false);
+  check "admission: two stagings, the same trail, the same module bytes"
+    (match Gigwerk.Admission.check ~actor ~specification:spec ~stage:(fun () -> stage ()) ~obligations ~now with
+     | Ok { Gigwerk.Admission.talent = "writer"; _ } -> true
+     | Ok _ -> false
+     | Error e -> prerr_endline (Gigwerk.Admission.rejection_to_string e); false);
+  check "material holding a reference solution is declined before the first move"
+    (match (Gigwerk.Producer.run ~actor ~specification:spec ~workspace:(stage ~meta:true ()) ~obligations ~now).Gigwerk.Producer.status with
+     | Gigwerk.Producer.Refused { words = Some _; _ } -> true
+     | _ -> false);
+
   Printf.printf "writer: %d passed, %d failed\n" !pass !fail;
   if !fail <> 0 then exit 1

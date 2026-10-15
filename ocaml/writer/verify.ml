@@ -206,7 +206,7 @@ let build_and_run ~env ~dir ~exercise_dir ~module_name ~impl ~main =
   Probe.write (Filename.concat dir (module_name ^ ".ml")) impl;
   (* open the part's module the way its own test file does *)
   Probe.write (Filename.concat dir "test.ml") ("open " ^ String.capitalize_ascii module_name ^ "\n" ^ main);
-  match Probe.run_cmd ~cwd:dir (Array.append env [| "dune"; "build"; "./test.exe" |]) with
+  match Probe.run_cmd ~cwd:dir (Array.append env [| "dune"; "build"; "--profile"; "release"; "./test.exe" |]) with
   | Some 0, _ ->
       let _, out = Probe.run_cmd ~cwd:(Filename.concat dir "_build/default") [| "./test.exe" |] in
       Ok (String.split_on_char '\n' out)

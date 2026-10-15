@@ -175,3 +175,17 @@ let synthesis_machine =
         { from_ = "compiled";          input = "test";       to_ = "tests_passed" } ] }
 
 let synthesis_ladder = synthesis_machine.states
+
+(* The OCaml writer's ladder, declared by the writer as Synquid's is by its
+   harness: read the part's own tests into examples, derive each value, write
+   the module, run the part's own check. *)
+let writer_machine =
+  { states =
+      [ phase "commissioned"; phase "specified"; phase "derived"; phase "lowered";
+        phase ~terminal:true "checked" ];
+    initial = "commissioned";
+    delta =
+      [ { from_ = "commissioned"; input = "read";   to_ = "specified" };
+        { from_ = "specified";    input = "derive"; to_ = "derived" };
+        { from_ = "derived";      input = "lower";  to_ = "lowered" };
+        { from_ = "lowered";      input = "check";  to_ = "checked" } ] }

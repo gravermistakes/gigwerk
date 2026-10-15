@@ -143,6 +143,13 @@ let scribe = make ~name:"scribe"
    transcribed from the harness's classify, so what "done" means here is
    tests_passed, never fulfilled: that verdict is on the material.
    Three moves read, run and write (3 units each), two only run (1 each). *)
+let writing = make_with_machine ~name:"writing"
+  ~purpose:"derive an OCaml module from a part's own tests and deliver it \
+            once the part's own check passes"
+  ~grants:[ Grants.Read; Grants.Write; Grants.Spawn ]
+  ~state_shape:"material_dir" ~machine:Phases.writer_machine
+  ~budget_ms:1_200_000 ~budget_actions:5
+
 let synthesis = make_with_machine ~name:"synthesis"
   ~purpose:"derive a program from a refinement-typed contract and carry it \
             through lowering, the required interface, compilation and the \

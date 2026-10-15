@@ -238,7 +238,7 @@ let run ~env ~scratch ~exercise_dir ~slug =
   write (Filename.concat dir "gw_probe.ml") probe_support;
   write (Filename.concat dir (m ^ ".ml")) (probe_module iface mli_src);
   write (Filename.concat dir "test.ml") (instrument_test iface str');
-  let status, log = run_cmd ~cwd:dir (Array.append env [| "dune"; "build"; "./test.exe" |]) in
+  let status, log = run_cmd ~cwd:dir (Array.append env [| "dune"; "build"; "--profile"; "release"; "./test.exe" |]) in
   if status <> Some 0 then { examples = []; sites = List.length sites; log = "build failed:\n" ^ log }
   else begin
     let _, runlog = run_cmd ~cwd:(Filename.concat dir "_build/default")

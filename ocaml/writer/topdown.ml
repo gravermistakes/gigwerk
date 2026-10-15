@@ -142,7 +142,9 @@ let divisibility b g =
             match solve_for true with
             | Some k -> Some (mk k "=")
             | None -> Option.map (fun k -> mk k "<>") (solve_for false))
-        (take 20 (List.filter (fun c -> key c.ty = "int") (all_terms b)))
+        (* only numbers the part is given: `length mod 12 = 0` is a fit, not a rule *)
+        (take 20 (List.filter (fun c -> key c.ty = "int" && (match c.expr with Expr.Var _ -> true | _ -> false))
+                    (all_terms b)))
   | _ -> None
 
 (* Every combination of one answer per goal, in order. *)

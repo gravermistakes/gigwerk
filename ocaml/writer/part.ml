@@ -88,11 +88,25 @@ let run_tests ~env ~scratch ~exercise_dir ~slug ~source =
   | Some 0, _ -> `Passed
   | _, log -> `Failed log
 
-let solve ?cfg ~env ~scratch ~exercise_dir ~slug () =
+(* The actor's work on a part: read it, derive, write the module. Nothing in
+   here opens .meta; the material may not even contain it. *)
+type written = {
+  w_slug : string;
+  w_iface : Iface.t;
+  w_derivations : derivation list;
+  w_source : string option;
+  w_examples : (string * Spec.example) list;
+}
+
+let rec write ?cfg ~env ~scratch ~exercise_dir ~slug () =
   let m = Probe.module_name slug in
   let mli_src = Iface.read_file (Filename.concat exercise_dir (m ^ ".mli")) in
-  let iface = Iface.parse_string mli_src in
   let probe = Probe.run ~env ~scratch ~exercise_dir ~slug in
+  derive_all ?cfg ~slug ~mli_src probe.Probe.examples
+
+and derive_all ?cfg ~slug ~mli_src examples =
+  let iface = Iface.parse_string mli_src in
+  let probe = { Probe.examples; sites = 0; log = "" } in
   let derivations =
     if iface.Iface.unreadable <> [] then
       [ Declined { name = "(interface)"; why = "cannot represent: " ^ String.concat " / " iface.Iface.unreadable } ]
@@ -117,14 +131,26 @@ let solve ?cfg ~env ~scratch ~exercise_dir ~slug () =
           | Declined _ -> None) derivations in
       Some (Lower_ocaml.module_source ~mli_src ~definitions:defs)
   in
-  let tests = match source with
-    | None -> `Not_run "not every value was derived"
-    | Some source -> run_tests ~env ~scratch ~exercise_dir ~slug ~source in
-  (* The reference is read here, by the verifier, after the module is written. *)
-  let differential = match source with
-    | None -> None
-    | Some source ->
-        let reference = Iface.read_file (Filename.concat exercise_dir ".meta/example.ml") in
-        Some (Verify.differential ~env ~scratch ~exercise_dir ~slug ~iface
-                ~examples:probe.Probe.examples ~source ~reference ()) in
-  { slug; derivations; source; tests; differential; examples = probe.Probe.examples }
+  { w_slug = slug; w_iface = iface; w_derivations = derivations; w_source = source; w_examples = probe.Probe.examples }
+
+(* The part's own check: its published test suite, against what was written. *)
+let own_check ~env ~scratch ~exercise_dir (w : written) =
+  match w.w_source with
+  | None -> `Not_run "not every value was derived"
+  | Some source -> run_tests ~env ~scratch ~exercise_dir ~slug:w.w_slug ~source
+
+(* The Agency's verifier, separate from the actor: the only reader of the
+   reference, after the module is written. *)
+let verify ~env ~scratch ~exercise_dir (w : written) =
+  match w.w_source with
+  | None -> None
+  | Some source ->
+      let reference = Iface.read_file (Filename.concat exercise_dir ".meta/example.ml") in
+      Some (Verify.differential ~env ~scratch ~exercise_dir ~slug:w.w_slug ~iface:w.w_iface
+              ~examples:w.w_examples ~source ~reference ())
+
+let solve ?cfg ~env ~scratch ~exercise_dir ~slug () =
+  let w = write ?cfg ~env ~scratch ~exercise_dir ~slug () in
+  let tests = own_check ~env ~scratch ~exercise_dir w in
+  let differential = verify ~env ~scratch ~exercise_dir w in
+  { slug; derivations = w.w_derivations; source = w.w_source; tests; differential; examples = w.w_examples }
