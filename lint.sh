@@ -211,7 +211,7 @@ fi
 
 # ---------------------------------------------------------------- elpi
 # elpi typechecks on load; there is no separate -typecheck flag in 3.7.2 (it was
-# tried, and it is not an option). Accumulating the file from a driver is
+# tried, and it is not an option), and 1.17.4 has only -no-tc to turn it off. Accumulating the file from a driver is
 # therefore the check. Proven against: changing `type capability string -> ...`
 # to `int -> ...` -> "Cap has type string but capability expects ... int".
 if run elpi; then
@@ -229,10 +229,21 @@ if run elpi; then
     # warning, so a real warning is not lost in noise.
     printf 'accumulate "%s/%s".\npred gw_lint_probe i:list string.\ngw_lint_probe _ :- print "typechecked".\n' \
       "$PWD" "$base" > "$drv"
-    out=$(elpi "$drv" -exec gw_lint_probe 2>&1 \
-          | grep -E "Typechecker:|Fatal error|Parsing error|Undeclared globals" | head -5)
+    # Three conditions, because grepping for error wording alone is
+    # version-bound: elpi 1.17 reports "Error: Cap has type string but is used
+    # with type int" and then "Type error.", which matched none of the 3.x
+    # patterns, so a real type error passed. The exit status is the signal
+    # that holds across versions (1 on a type or parse error), and the probe
+    # printing "typechecked" proves the file was loaded and run at all.
+    full=$(elpi "$drv" -exec gw_lint_probe 2>&1); rc=$?
     rm -f "$drv"
-    [ -z "$out" ] && ok "$f" || { printf '  %s\n' "$out"; bad "$f"; }
+    out=$(printf '%s\n' "$full" \
+          | grep -E "Typechecker:|Fatal error|Parsing error|Undeclared globals|Error:|Type error" | head -5)
+    if [ "$rc" -eq 0 ] && [ -z "$out" ] && printf '%s\n' "$full" | grep -q typechecked; then
+      ok "$f"
+    else
+      printf '  exit %s\n' "$rc"; [ -n "$out" ] && printf '  %s\n' "$out"; bad "$f"
+    fi
   done
 fi
 
