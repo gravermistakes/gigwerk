@@ -123,9 +123,10 @@ let call_source ~name ~labels args =
 (* What every example input has in common, kept in the generated ones: an
    input no test of the part could have looked like says nothing about the
    part. A sorted array for a binary search, a non-negative count, two strands
-   of equal length. Read off the examples, Daikon-style, and only ever used
+   of equal length, a radicand that is a perfect square. Read off the examples, Daikon-style, and only ever used
    to shape inputs, never to excuse a disagreement on them. *)
 type invariant = Sorted of int | Distinct of int | Nonneg of int | Positive of int | Same_length of int * int
+  | Square of int
 
 let elements = function Value.List l -> Some l | Value.Array a -> Some (Array.to_list a) | _ -> None
 
@@ -139,11 +140,16 @@ let invariants (examples : Spec.example list) arity =
     | Some l -> List.length (List.sort_uniq Value.compare l) = List.length l | None -> false in
   let long i = List.exists (fun v -> match elements v with Some l -> List.length l >= 2 | None -> false) (col i) in
   let int_ok p v = match v with Value.Int n -> p n | _ -> false in
+  let isqrt n = int_of_float (Float.sqrt (float_of_int n)) in
+  let square n = n >= 0 && (let r = isqrt n in List.exists (fun k -> k >= 0 && k * k = n) [ r - 1; r; r + 1 ]) in
+  let many_squares i = List.length (List.sort_uniq compare
+      (List.filter_map (function Value.Int n when n > 1 -> Some n | _ -> None) (col i))) >= 3 in
   List.concat (List.init arity (fun i ->
       (if all sorted i && long i then [ Sorted i ] else [])
       @ (if all distinct i && long i then [ Distinct i ] else [])
       @ (if all (int_ok (fun n -> n > 0)) i then [ Positive i ]
          else if all (int_ok (fun n -> n >= 0)) i then [ Nonneg i ] else [])
+      @ (if all (int_ok square) i && many_squares i then [ Square i ] else [])
       @ List.concat (List.init arity (fun j ->
           if j > i && all (fun _ -> true) i
              && List.for_all (fun ex -> match List.nth_opt ex.Spec.args i, List.nth_opt ex.Spec.args j with
@@ -167,6 +173,12 @@ let impose invs (inp : Value.t list) =
               let n = min (List.length x) (List.length y) in
               let cut l = List.filteri (fun k _ -> k < n) l in
               arr.(i) <- rebuild arr.(i) (cut x); arr.(j) <- rebuild arr.(j) (cut y)
+          | _ -> ())
+      | Square i -> (match arr.(i) with
+          | Value.Int n ->
+              let r = int_of_float (Float.sqrt (float_of_int (abs n))) in
+              let r = if r = 0 && List.mem (Positive i) invs then 1 else r in
+              arr.(i) <- Value.Int (r * r)
           | _ -> ())) invs;
   (* sorting after distinct, distinct after sorting: both hold either way *)
   List.iter (function
@@ -201,9 +213,7 @@ let program (iface : Iface.t) calls =
       Printf.sprintf "let () = __gw_run \"%d\" (fun () -> __gw_print_%s %s)" i name src) calls) ^ "\n"
 
 let build_and_run ~env ~dir ~exercise_dir ~module_name ~impl ~main =
-  ignore (Probe.run_cmd ~cwd:"/" [| "rm"; "-rf"; dir |]);
-  ignore (Probe.run_cmd ~cwd:"/" [| "cp"; "-r"; exercise_dir; dir |]);
-  ignore (Probe.run_cmd ~cwd:dir [| "rm"; "-rf"; ".meta"; "_build" |]);
+  Probe.stage_copy ~src:exercise_dir ~dst:dir;
   Probe.write (Filename.concat dir (module_name ^ ".ml")) impl;
   (* open the part's module the way its own test file does *)
   Probe.write (Filename.concat dir "test.ml") ("open " ^ String.capitalize_ascii module_name ^ "\n" ^ main);

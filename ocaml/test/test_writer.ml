@@ -150,5 +150,19 @@ let () =
      | Gigwerk.Producer.Refused { words = Some _; _ } -> true
      | _ -> false);
 
+  print_endline "\nstaging -- a private copy never reaches back into the material";
+  let linked = Filename.temp_file "gw_writer_link" "" in
+  Sys.remove linked; Unix.mkdir linked 0o755;
+  at_exit (fun () -> ignore (Gigwerk.Proc.run ~root:"/" ~timeout_s:10. [| "rm"; "-rf"; linked |]));
+  let real = stage ~meta:true () in
+  Unix.symlink (Filename.concat real "twice") (Filename.concat linked "twice");
+  let copy = Filename.concat linked "copy" in
+  Probe.stage_copy ~src:(Filename.concat linked "twice") ~dst:copy;
+  check "staging through a link copies the files and leaves the original's .meta alone"
+    (Sys.file_exists (Filename.concat real "twice/.meta")
+     && not (Sys.file_exists (Filename.concat copy ".meta"))
+     && Sys.file_exists (Filename.concat copy "test.ml")
+     && (Unix.lstat copy).Unix.st_kind = Unix.S_DIR);
+
   Printf.printf "writer: %d passed, %d failed\n" !pass !fail;
   if !fail <> 0 then exit 1

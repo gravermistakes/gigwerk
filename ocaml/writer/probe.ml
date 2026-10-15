@@ -211,6 +211,24 @@ let run_cmd ~cwd argv =
   let o = Gigwerk.Proc.run ~root:cwd ~timeout_s:300. argv in
   (o.Gigwerk.Proc.exit_status, o.Gigwerk.Proc.stdout ^ o.Gigwerk.Proc.stderr)
 
+(* A private copy of an exercise to build in. The copy holds the files
+   themselves, links followed, so nothing done inside it can reach the
+   material it came from; anything else is refused before a file is
+   removed. *)
+let stage_copy ~src ~dst =
+  ignore (run_cmd ~cwd:"/" [| "rm"; "-rf"; dst |]);
+  Unix.mkdir dst 0o755;
+  ignore (run_cmd ~cwd:"/" [| "cp"; "-rL"; Filename.concat src "."; dst |]);
+  (match (Unix.lstat dst).Unix.st_kind with
+   | Unix.S_DIR -> ()
+   | _ -> failwith ("staging copy is not a plain directory: " ^ dst));
+  List.iter (fun d ->
+      let p = Filename.concat dst d in
+      if Sys.file_exists p then
+        match (Unix.lstat p).Unix.st_kind with
+        | Unix.S_LNK -> Sys.remove p
+        | _ -> ignore (run_cmd ~cwd:dst [| "rm"; "-rf"; d |])) [ ".meta"; "_build" ]
+
 let parse_args s =
   if s = "" then Some []
   else
@@ -233,9 +251,7 @@ let run ~env ~scratch ~exercise_dir ~slug =
   let helpers = helpers ~targets str in
   let sites, str' = find_sites ~targets ~constants ~helpers str in
   let dir = Filename.concat scratch slug in
-  ignore (run_cmd ~cwd:"/" [| "rm"; "-rf"; dir |]);
-  ignore (run_cmd ~cwd:"/" [| "cp"; "-r"; exercise_dir; dir |]);
-  ignore (run_cmd ~cwd:dir [| "rm"; "-rf"; ".meta"; "_build" |]);
+  stage_copy ~src:exercise_dir ~dst:dir;
   write (Filename.concat dir "gw_probe.ml") probe_support;
   write (Filename.concat dir (m ^ ".ml")) (probe_module iface mli_src);
   write (Filename.concat dir "test.ml") (instrument_test iface str');

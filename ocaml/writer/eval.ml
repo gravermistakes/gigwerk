@@ -10,7 +10,11 @@ exception Out_of_fuel
 
 let fuel = ref 0
 
-let tick () = decr fuel; if !fuel < 0 then raise Out_of_fuel
+(* Every evaluation step taken, across runs: with the terms built, the
+   measure of what a derivation cost. *)
+let spent = ref 0
+
+let tick () = decr fuel; incr spent; if !fuel < 0 then raise Out_of_fuel
 
 let components : (string, Components.t) Hashtbl.t =
   let t = Hashtbl.create 128 in

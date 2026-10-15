@@ -111,6 +111,13 @@ let new_bank ctx = { ctx; by_size = Hashtbl.create 16; seen = Hashtbl.create 102
 
 let total = ref 0
 
+(* Terms built over a whole derivation, every search it opens included: the
+   bound that makes a part's cost a count rather than a wall-clock guess. *)
+let work = ref 0
+let work_cap = ref max_int
+let spend_cap = ref max_int
+let over_budget () = !work > !work_cap || !Eval.spent > !spend_cap
+
 let level b n =
   match Hashtbl.find_opt b.by_size n with
   | Some l -> l
@@ -152,7 +159,8 @@ let add cfg b c =
       Hashtbl.replace b.seen k ();
       b.count <- b.count + 1;
       incr total;
-      if b.count > cfg.max_cands || !total > global_cap then raise Exhausted;
+      incr work;
+      if b.count > cfg.max_cands || !total > global_cap || over_budget () then raise Exhausted;
       let lv = level b c.size in
       let tk = key c.ty in
       (match List.find_opt (fun (k', _, _) -> k' = tk) !lv with
@@ -310,6 +318,8 @@ let inferred_divisors (spec_examples : Spec.example list) =
       (List.sort (fun (c1, g1) (c2, g2) -> if c1 <> c2 then compare c2 c1 else compare g2 g1) counted)) in
   gcds
 
+let alphabet = "abcdefghijklmnopqrstuvwxyz"
+
 let constants (spec_examples : Spec.example list) (target_out : ty) (decls : decl list) =
   let ints = [ 0; 1; 2; 3; 4; 5; 10; 100; 1000 ] in
   (* A value that is one example's answer is not vocabulary: offering it back
@@ -321,9 +331,14 @@ let constants (spec_examples : Spec.example list) (target_out : ty) (decls : dec
       | Value.Int n when abs n <= 1000 -> Some n | _ -> None) (subvalues ex.Spec.out))) spec_examples) in
   let gcds = inferred_divisors spec_examples in
   let ints = List.sort_uniq compare (ints @ out_ints @ deep_ints @ gcds) in
+  (* characters: those the answers contain, and the inputs' non-letters
+     (separators, punctuation, digits). A letter of an input as a constant
+     is a way to point at that input: contains x 'f' *)
+  let letter c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') in
   let chars = List.sort_uniq compare (List.concat_map (fun ex ->
-      List.filter_map (function Value.Char c -> Some c | _ -> None)
-        (subvalues ex.Spec.out @ List.concat_map subvalues ex.Spec.args)) spec_examples) in
+      List.filter_map (function Value.Char c -> Some c | _ -> None) (subvalues ex.Spec.out)
+      @ List.filter_map (function Value.Char c when not (letter c) -> Some c | _ -> None)
+          (List.concat_map subvalues ex.Spec.args)) spec_examples) in
   let chars = List.sort_uniq compare (' ' :: chars) in
   (* punctuation the inputs use, as one-character strings: "?" is how a
      question ends, and nothing else would offer it *)
@@ -332,6 +347,12 @@ let constants (spec_examples : Spec.example list) (target_out : ty) (decls : dec
           | Value.Char c when (c >= '!' && c <= '/') || (c >= ':' && c <= '@') -> Some (String.make 1 c)
           | _ -> None) (subvalues a)) ex.Spec.args) spec_examples) in
   let strings = "" :: string_fragments spec_examples @ punct in
+  (* the letters, for parts whose inputs are text: a vocabulary item, like
+     Char.lowercase_ascii, not anything a part supplied *)
+  let texty = List.exists (fun ex -> List.exists (fun a ->
+      List.exists (function Value.String _ | Value.Char _ -> true | _ -> false) (subvalues a)) ex.Spec.args)
+      spec_examples in
+  let strings = if texty then alphabet :: strings else strings in
   let strings = List.sort_uniq compare (strings
       @ recurring (List.filter_map (fun ex -> match ex.Spec.out with
           | Value.String s when String.length s <= 60 -> Some s | _ -> None) spec_examples)) in
@@ -448,7 +469,16 @@ let rec samples (ctx : ctx) (t : ty) =
     | TVar _, _ -> true
     | _ -> false in
   let vs = dedupe (List.filter fits vals) in
+  (* characters drawn one from each kind first, so a test that cares about
+     case or digits is told apart from one that does not *)
+  let kind = function
+    | Value.Char c when c >= 'a' && c <= 'z' -> 0 | Value.Char c when c >= 'A' && c <= 'Z' -> 1
+    | Value.Char c when c >= '0' && c <= '9' -> 2 | Value.Char ' ' -> 3 | _ -> 4 in
+  let rec round_robin groups =
+    let heads = List.filter_map (function x :: _ -> Some x | [] -> None) groups in
+    if heads = [] then [] else heads @ round_robin (List.map (function _ :: r -> r | [] -> []) groups) in
   let vs = match repr t with
+    | TCon ("char", []) -> round_robin (List.init 5 (fun k -> List.filter (fun v -> kind v = k) vs))
     | TCon ("int", []) -> dedupe (vs @ [ Value.Int 0; Value.Int 1 ])
     | TCon ("bool", []) -> [ Value.Bool true; Value.Bool false ]
     | _ -> vs in
@@ -472,7 +502,21 @@ let lambda_ctx (outer : ctx) (ptys : ty list) =
   let tuples = product (List.map (samples outer) ptys) in
   let tuples = List.filteri (fun i _ -> i < 12) tuples in
   let outer_ids = List.filteri (fun i _ -> i < 4) (List.init (Array.length outer.points) Fun.id) in
-  let pts = List.concat_map (fun oi -> List.map (fun tup -> (oi, tup)) tuples) outer_ids in
+  (* and, for each outer point, values of the parameter's type taken from
+     that point, with neighbours for integers: two functions that agree only
+     because no sample came near the point's own values (p < y and y <> 0,
+     when every sample is below y) are told apart *)
+  let near oi = match ptys with
+    | [ t ] ->
+        let own = List.concat_map (fun (_, v) -> subvalues v) outer.points.(oi) in
+        let own = match repr t with
+          | TCon ("int", []) ->
+              List.concat_map (function Value.Int n -> [ Value.Int (n - 1); Value.Int n; Value.Int (n + 1) ] | _ -> [])
+                (List.filteri (fun i _ -> i < 4) (List.filter (function Value.Int _ -> true | _ -> false) own))
+          | _ -> [] in
+        List.filter (fun tup -> not (List.mem tup tuples)) (List.map (fun v -> [ v ]) (dedupe own))
+    | _ -> [] in
+  let pts = List.concat_map (fun oi -> List.map (fun tup -> (oi, tup)) (tuples @ near oi)) outer_ids in
   let points = Array.of_list (List.map (fun (oi, tup) ->
       List.combine names tup @ outer.points.(oi)) pts) in
   let back = Array.of_list (List.map fst pts) in
@@ -489,6 +533,7 @@ let literal_cost s (v : Value.t) =
   | Value.Int (0 | 1) | Value.Bool _ | Value.List [] | Value.Unit | Value.Con (_, []) | Value.Poly (_, None) -> 0
   | Value.Char ' ' | Value.String "" -> 0
   | _ when from_data -> 1
+  | Value.String a when a = alphabet -> 1
   | Value.Int 2 -> 1
   | Value.Int n when abs n <= 10 -> 2
   | Value.Int _ -> 3
@@ -560,14 +605,42 @@ and grow s b n ~lambda_depth =
                                           let var = function Expr.Var _ -> true | _ -> false in
                                           (var e1 && lit e2) || (lit e1 && var e2)
                                       | _ -> false) in
-                  let invented = invented || compares_var || memorizes in
+                  (* the other side may be computed: String.length x = 5 points
+                     at an example just the same when it singles one out *)
+                  let computed_lookup = (comp.cname = "=" || comp.cname = "<>")
+                                        && (match chosen with
+                                            | [ (_, e1, _); (_, e2, _) ] ->
+                                                let lit = function
+                                                  | Expr.Lit (Value.Int (0 | 1)) | Expr.Lit (Value.String "") -> false
+                                                  | Expr.Lit (Value.Int _ | Value.String _) -> true
+                                                  | _ -> false in
+                                                let computed = function Expr.Lit _ | Expr.Var _ -> false | e -> not (closed e) in
+                                                (computed e1 && lit e2) || (lit e1 && computed e2)
+                                            | _ -> false) in
+                  (* "abc" <= x: dictionary order on text or lists cuts the
+                     examples wherever they happen to fall, a lookup again *)
+                  let orders_compound = List.mem comp.cname [ "<"; ">"; "<="; ">="; "max"; "min"; "compare" ]
+                                        && (match Option.map repr (List.assoc_opt 0 subst) with
+                                            | Some (TCon (("string" | "list" | "array" | "option" | "result"), _))
+                                            | Some (TTuple _) -> true
+                                            | _ -> false) in
+                  (* List.map f [], x @ []: a function of the empty list is
+                     a constant spelled the long way *)
+                  let of_empty = is_component comp && not (List.mem comp.cname [ "::"; "List.fold_left"; "List.fold_right" ])
+                                 && List.exists (fun (_, e, _) -> e = Expr.Lit (Value.List [])) chosen in
+                  let invented = invented || compares_var || memorizes || orders_compound || of_empty in
                   if not (has_gen rty) && not invented then begin
                     let chosen = List.sort (fun (i, _, _) (j, _, _) -> compare i j) chosen in
                     let exprs = List.map (fun (_, e, _) -> e) chosen in
                     let vecs = List.map (fun (_, _, v) -> v) chosen in
                     let size = n in
                     let vec = apply_at s.cfg comp.run vecs npoints in
-                    check { expr = comp.build exprs; size; ty = rty; vec }
+                    let singles_out =
+                      computed_lookup && npoints >= 3
+                      && (let t = Array.fold_left (fun k v -> if v = Some (Value.Bool true) then k + 1 else k) 0 vec
+                          and f = Array.fold_left (fun k v -> if v = Some (Value.Bool false) then k + 1 else k) 0 vec in
+                          (t = 1 && f >= 2) || (f = 1 && t >= 2)) in
+                    if not singles_out then check { expr = comp.build exprs; size; ty = rty; vec }
                   end
               | ((i, sch), sz) :: rest ->
                   (* a function parameter of the right type can go here as is *)
@@ -724,6 +797,10 @@ let build_search ?(cfg = default) ~(decls : decl list) ~(examples : Spec.example
                       | Alias t -> types_in t | _ -> []) decls in
   let bases = List.sort_uniq compare ("int" :: "bool" :: "list" :: "option" :: List.filter_map (fun t ->
       match repr t with TCon (n, _) -> Some n | _ -> None) mentioned) in
+  (* a string is made of chars: a part whose inputs are text reaches them *)
+  let texty = List.exists (fun (_, t) -> List.exists (fun t -> match repr t with
+      | TCon ("string", []) -> true | _ -> false) (types_in t)) ctx.vars in
+  let bases = if texty then "char" :: bases else bases in
   let in_reach (c : comp) =
     let rec ok t = match repr t with
       | TCon (n, ts) -> List.mem n bases && List.for_all ok ts
