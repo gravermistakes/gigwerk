@@ -113,8 +113,9 @@ bash synquid-validation/run-ocaml-tests.sh          # BST, with negative control
 cd gigwerk-exercises/scripts && python3 -B test_status.py && python3 -B test_runner.py
 ```
 
-`lint.sh` reports one failure without `swipl` installed, which is the checker
-working. Every checker in it has been proven able to fail on a real fault; keep
+`lint.sh` reports one failure for each of `swipl` and `elpi` that is not
+installed, which is the checker working: a section whose tool is missing fails
+rather than passing on nothing. Every checker in it has been proven able to fail on a real fault; keep
 it that way, and mutation-verify anything new before claiming it passes.
 
 Verified on OCaml 4.14.1 with dune 3.14.

@@ -18,6 +18,11 @@ run() { [ "$want" = all ] || [ "$want" = "$1" ]; }
 say() { printf '\n== %s\n' "$1"; }
 bad() { printf '  FAIL %s\n' "$1"; fails=$((fails + 1)); }
 ok()  { printf '  ok   %s\n' "$1"; }
+# A section whose tool is missing FAILS rather than passing on nothing. Each
+# check below greps the tool's output for an error, and a shell's "not found"
+# matches none of those patterns, so without this gate a missing elpi printed
+# ok for every file, and a missing swipl printed ok for the whole test suite.
+need() { command -v "$1" >/dev/null 2>&1 || { bad "$1 not installed, so $2 did not run"; return 1; }; }
 
 OCAMLLIB="$(ocamlc -where 2>/dev/null || echo /usr/lib/ocaml)"
 
@@ -190,6 +195,7 @@ fi
 # `p(X) :- q(1).` -> "Singleton variables: [X]".
 if run prolog; then
   say "prolog -- swipl consult + check/0"
+  if need swipl "consult, check/0 and the test suite"; then
   for f in prolog/*.pl; do
     out=$(swipl -q -g "consult('$f'), check" -t halt 2>&1 | grep -vE '^\s*$')
     [ -z "$out" ] && ok "$f" || { printf '  %s\n' "$out" | head -20; bad "$f"; }
@@ -200,6 +206,7 @@ if run prolog; then
     *failed*|*error*) printf '  %s\n' "$out"; bad "confidence.pl tests" ;;
     *) ok "confidence.pl tests" ;;
   esac
+  fi
 fi
 
 # ---------------------------------------------------------------- elpi
@@ -209,6 +216,7 @@ fi
 # to `int -> ...` -> "Cap has type string but capability expects ... int".
 if run elpi; then
   say "elpi -- typecheck on accumulate"
+  need elpi "the typecheck" &&
   for f in elpi/gate.elpi elpi/hoas.elpi; do
     [ -f "$f" ] || continue
     base=$(printf '%s' "$f" | sed 's/\.elpi$//')

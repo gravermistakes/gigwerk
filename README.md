@@ -132,5 +132,8 @@ dune build && dune test          # in ocaml/
 ./lint.sh                        # c, sql, prolog, elpi
 ```
 
-`lint.sh` reports one failure without `swipl` installed, which is the checker
-working.
+`lint.sh` reports one failure for each of `swipl` and `elpi` that is not
+installed, which is the checker working. Until this commit a missing `elpi`
+printed `ok` for both files and a missing `swipl` printed `ok` for the Prolog
+test suite: each check greps the tool's output for an error, and a shell's
+"not found" matched none of the patterns.
