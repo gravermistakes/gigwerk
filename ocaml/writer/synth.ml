@@ -23,7 +23,7 @@ open Types
 
 type point = (string * Value.t) list
 
-type cand = { expr : Expr.t; size : int; ty : ty; vec : Value.t option array }
+type cand = { mutable expr : Expr.t; size : int; ty : ty; vec : Value.t option array }
 
 type ctx = {
   vars : (string * ty) list;
@@ -33,7 +33,7 @@ type ctx = {
 type bank = {
   ctx : ctx;
   by_size : (int, (string * ty * cand list ref) list ref) Hashtbl.t;
-  seen : (string, unit) Hashtbl.t;
+  seen : (string, cand) Hashtbl.t;
   mutable count : int;
 }
 
@@ -154,9 +154,18 @@ let add cfg b c =
   else if point_test c then false
   else
     let k = key c.ty ^ "\x01" ^ vec_key c.vec in
-    if Hashtbl.mem b.seen k then false
-    else begin
-      Hashtbl.replace b.seen k ();
+    match Hashtbl.find_opt b.seen k with
+    | Some old ->
+        (* the same behaviour at the same size: keep the term that names
+           more of the part's variables. With one example y is 2 at every
+           point, and 1 < p would otherwise stand for y <= p *)
+        if old.size = c.size then begin
+          let named e = List.length (List.filter (fun (x, _) -> Expr.mentions x e) b.ctx.vars) in
+          if named c.expr > named old.expr then old.expr <- c.expr
+        end;
+        false
+    | None -> begin
+      Hashtbl.replace b.seen k c;
       b.count <- b.count + 1;
       incr total;
       incr work;

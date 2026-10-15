@@ -107,6 +107,10 @@ type env = {
   n : int ref;                       (* shared by every copy of the env *)
   self : string;
   arity : int;
+  locals : (string * (string * string list)) list;
+                                     (* local recursive function -> its predicate,
+                                        and the outer variables it is passed *)
+  aux : string list ref;             (* clauses lifted out of the definition *)
 }
 
 let fresh env = incr env.n; "V" ^ string_of_int !(env.n)
@@ -250,6 +254,11 @@ let rec expr env (e : Expr.t) : string list * string =
       let gs, rs = args_of env args in
       let r = fresh env in
       (gs @ [ call_goal name rs r ], r)
+  | App (Var f, args) when List.mem_assoc f env.locals ->
+      let pred, outer = List.assoc f env.locals in
+      let gs, rs = args_of env args in
+      let r = fresh env in
+      (gs @ [ pred ^ "(" ^ String.concat ", " (List.map (var env) outer @ rs @ [ r ]) ^ ")" ], r)
   | App (Var f, args) when f = env.self ->
       let gs, rs = args_of env args in
       let r = fresh env in
@@ -297,7 +306,21 @@ let rec expr env (e : Expr.t) : string list * string =
       let ga, ra = expr env a in
       let gb, rb = expr { env with vars = (x, ra) :: env.vars } b in
       (ga @ gb, rb)
-  | Let (true, _, _, _) -> raise (Unsupported "local recursion")
+  | Let (true, g, Lam (ps, gbody), b) ->
+      (* lifted: a predicate of its own, given the variables in scope *)
+      let pred = env.self ^ "_" ^ String.map (fun c -> if c = '\'' then '_' else c) g ^ string_of_int (List.length !(env.aux)) in
+      let outer = List.map fst env.vars in
+      let locals = (g, (pred, outer)) :: env.locals in
+      let inner = { env with vars = []; locals } in
+      let ovars = List.map (fun _ -> fresh inner) outer in
+      let pvars = List.map (fun _ -> fresh inner) ps in
+      let inner = { inner with vars = List.combine ps pvars @ List.combine outer ovars } in
+      let gs, r = expr inner gbody in
+      env.aux := !(env.aux) @ [ Printf.sprintf "%s(%s) :-\n    %s.\n" pred
+                                   (String.concat ", " (ovars @ pvars @ [ "Out" ]))
+                                   (String.concat ",\n    " (gs @ [ "Out = " ^ r ])) ];
+      expr { env with locals } b
+  | Let (true, _, _, _) -> raise (Unsupported "local recursion of a non-function")
 
 and args_of env args =
   List.fold_left (fun (gs, rs) a -> let g, r = expr env a in (gs @ g, rs @ [ r ])) ([], []) args
@@ -307,7 +330,7 @@ let predicate_name name = "gw_" ^ name
 (* One OCaml definition as one Prolog clause. *)
 let definition ~name ~(params : string list) body =
   let self = predicate_name name in
-  let env = { vars = []; n = ref 0; self; arity = List.length params + 1 } in
+  let env = { vars = []; n = ref 0; self; arity = List.length params + 1; locals = []; aux = ref [] } in
   let pvars = List.map (fun _ -> fresh env) params in
   let env = { env with vars = List.combine params pvars } in
   (* the derivation calls itself by the OCaml name *)
@@ -329,3 +352,4 @@ let definition ~name ~(params : string list) body =
   let out = "Out" in
   Printf.sprintf "%s(%s) :-\n    %s.\n" self (String.concat ", " (pvars @ [ out ]))
     (String.concat ",\n    " (gs @ [ out ^ " = " ^ r ]))
+  ^ String.concat "" !(env.aux)

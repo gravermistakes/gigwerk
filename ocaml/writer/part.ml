@@ -34,8 +34,20 @@ let param_names args =
 
 (* What one value's derivation may cost, all its searches together: terms
    built and evaluation steps taken. Counts, so a decline is reproducible. *)
-let default_work = 10_000_000
-let default_spend = 3_000_000_000
+let default_work = 6_000_000
+let default_spend = 1_500_000_000
+
+(* One derivation under the bounds, counted from zero. *)
+let bounded f =
+  let cap var d = match Option.bind (Sys.getenv_opt var) int_of_string_opt with Some n -> n | None -> d in
+  Synth.work := 0; Eval.spent := 0;
+  Synth.work_cap := cap "GW_WORK" default_work;
+  Synth.spend_cap := cap "GW_SPEND" default_spend;
+  match f () with
+  | Topdown.Gave_up why when Synth.over_budget () ->
+      Topdown.Gave_up (Printf.sprintf "work bound reached: %d terms built, %d evaluation steps (%s)"
+                         !Synth.work !Eval.spent why)
+  | r -> r
 
 let derive ?cfg (iface : Iface.t) (examples : (string * Spec.example) list) (v : Iface.value_spec) =
   let decls = iface.Iface.decls in
@@ -49,22 +61,14 @@ let derive ?cfg (iface : Iface.t) (examples : (string * Spec.example) list) (v :
     let ty = Iface.expand decls v.Iface.vty in
     let args, out = unarrow ty in
     let params = param_names args in
-    let cap var d = match Option.bind (Sys.getenv_opt var) int_of_string_opt with Some n -> n | None -> d in
-    Synth.work := 0; Eval.spent := 0;
-    Synth.work_cap := cap "GW_WORK" default_work;
-    Synth.spend_cap := cap "GW_SPEND" default_spend;
-    let result =
-      try Topdown.solve_param ?cfg ~self:v.Iface.vname ~decls ~params:(List.map (fun (n, _, t) -> (n, t)) params) ~out_ty:out exs
-      with Out_of_memory -> Topdown.Gave_up "memory bound reached" in
+    let result = bounded (fun () ->
+        try Topdown.solve_param ?cfg ~self:v.Iface.vname ~decls ~params:(List.map (fun (n, _, t) -> (n, t)) params) ~out_ty:out exs
+        with Out_of_memory -> Topdown.Gave_up "memory bound reached") in
     if Sys.getenv_opt "GW_DEBUG" <> None then
       Printf.eprintf "  [%s: %d terms built, %d evaluation steps]\n%!" v.Iface.vname !Synth.work !Eval.spent;
     match result with
     | Topdown.Solved (body, considered) ->
         Derived { name = v.Iface.vname; params = List.map (fun (n, l, _) -> (n, l)) params; body; considered }
-    | Topdown.Gave_up why when Synth.over_budget () ->
-        Declined { name = v.Iface.vname;
-                   why = Printf.sprintf "work bound reached: %d terms built, %d evaluation steps (%s)"
-                       !Synth.work !Eval.spent why }
     | Topdown.Gave_up why -> Declined { name = v.Iface.vname; why }
 
 (* A derived value becomes a component for the part's later values. *)

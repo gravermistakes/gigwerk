@@ -387,6 +387,50 @@ and by_list st ctx b g cs outs depth : sols =
                    | _ -> []) cs lists) in
                Seq.map (fun p -> Expr.Call ("List.filter", [ p; c.expr ]))
                  (lambda_goal st ctx [ te ] rows t_bool depth)) (List.to_seq (take 6 cands)));
+        (* List.filteri p l: kept or dropped by position as well as value,
+           every n-th, a slice, all but one. Positions are read off the
+           first way the output fits in l *)
+        (fun () ->
+           let subseq small big =
+             let rec go acc i s bg = match s, bg with
+               | [], rest -> Some (List.rev acc @ List.mapi (fun k x -> (i + k, x, false)) rest)
+               | _, [] -> None
+               | x :: s', y :: bg' ->
+                   if Value.equal x y then go ((i, y, true) :: acc) (i + 1) s' bg'
+                   else go ((i, y, false) :: acc) (i + 1) s bg' in
+             go [] 0 small big in
+           let cands = List.filter (fun c -> key c.ty = key g.gty
+               && List.for_all2 (fun j l -> match c.vec.(j) with
+                   | Some (Value.List l') -> subseq l l' <> None | _ -> false) cs lists
+               && List.exists2 (fun j l -> match c.vec.(j) with
+                   | Some (Value.List l') -> List.length l' > List.length l | _ -> false) cs lists) list_terms in
+           (* an output that fits in more than one way (repeated elements)
+              says nothing about which positions were kept *)
+           let unique small big =
+             match subseq small big, subseq (List.rev small) (List.rev big) with
+             | Some a, Some b ->
+                 let n = List.length big in
+                 let b = List.rev_map (fun (i, x, k) -> (n - 1 - i, x, k)) b in
+                 if a = b then Some a else None
+             | _ -> None in
+           Seq.flat_map (fun c ->
+               let rows = List.concat (List.map2 (fun j l -> match c.vec.(j) with
+                   | Some (Value.List l') ->
+                       (match unique l l' with
+                        | Some flags -> List.map (fun (i, x, keep) -> (j, [ Value.Int i; x ], Value.Bool keep)) flags
+                        | None -> [])
+                   | _ -> []) cs lists) in
+               let meets_all e =
+                 List.for_all2 (fun j l -> match Eval.run ~budget:200_000 ctx.points.(j) e with
+                     | Some v -> Value.equal v (Value.List l) | None -> false) cs lists in
+               if rows = [] then Seq.empty
+               else
+                 Seq.filter_map (function
+                     | Expr.Lam ([ i; _ ], body) as p when Expr.mentions i body ->
+                         let e = Expr.Call ("List.filteri", [ p; c.expr ]) in
+                         if meets_all e then Some e else None
+                     | _ -> None)
+                   (lambda_goal st ctx [ t_int; te ] rows t_bool depth)) (List.to_seq (take 6 cands)));
         (* List.concat_map f l, when every element of l accounts for an equal
            share of the output: the shares are f's examples *)
         (fun () ->
@@ -846,11 +890,18 @@ let solve_top ?(cfg = default) ?(bank_size = 6) ?(lambda_bank_size = 5) ?(depth 
                 | Some _, None | None, Some _ -> true
                 | None, None -> false) alts) examples
         || List.length alts < 2) (List.init (List.length params) Fun.id) in
+  (* the whole term, not just its leaves, must have a value at each edge
+     input: List.map over List.init with List.nth inside reads past an
+     empty list however its parts were judged *)
+  let total e =
+    Expr.mentions self e
+    || List.for_all (fun p -> Eval.run ~budget:20_000 p e <> None) edge_points in
   let first = ref None and first_depth = ref None in
   let scan d =
     let seen = ref 0 in
     let rec go s = match s () with
       | Seq.Nil -> None
+      | Seq.Cons (e, rest) when not (total e) -> incr seen; if !seen >= 40 then None else go rest
       | Seq.Cons (e, rest) ->
           if !first = None then first := Some e;
           incr seen;
@@ -1033,35 +1084,41 @@ let rec solve_cegis ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~param
    of a rigid 'a), then the ordinary one. *)
 and solve_param_all ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty examples =
   let base = match cfg with Some c -> c | None -> default in
-  let attempt cfg exs =
-    match solve_top ~cfg ?bank_size ?lambda_bank_size ?depth ?self ~edges:true ~decls ~params ~out_ty exs with
-    | Solved _ as r -> r
-    | Gave_up _ -> solve_top ~cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty exs in
-  let ordinary () =
-    (* a small term the bank already holds comes first; then a recursion
-       whose traces the examples themselves complete, which is the structure
-       the examples show rather than a fit to their values; then the rest *)
-    match (try solve_top ~cfg:base ?bank_size ?lambda_bank_size ~depth:1 ?self ~recursion_allowed:false
-                 ~edges:true ~decls ~params ~out_ty examples
-           with Exhausted | Out_of_steps -> Gave_up "") with
-    | Solved _ as r -> r
-    | Gave_up _ ->
-    match (try traced_recursion ~cfg:base ~self:(Option.value self ~default:"f") ~decls ~params ~out_ty examples
-           with Exhausted | Out_of_steps -> None) with
-    | Some e -> Solved (e, 0)
-    | None -> attempt base examples in
+  let top ?(edges = false) cfg exs =
+    try solve_top ~cfg ?bank_size ?lambda_bank_size ?depth ?self ~edges ~decls ~params ~out_ty exs
+    with Exhausted | Out_of_steps -> Gave_up "" in
   (* The collapsing theorem is only safe to lean on when the output carries
      a 'a: a function to a 'a-free type (a test, a count) that never looks
      at its elements depends on shape alone, which the parts asking for one
      rarely mean; is_palindrome compares, and collapsing would lie about it. *)
-  match (if Parametric.has_var out_ty then Parametric.augment ~params ~out_ty examples else None) with
-  | None -> ordinary ()
-  | Some more ->
-      (match attempt { base with strict = true } more with
-       | Solved _ as r -> r
-       | Gave_up why ->
-           if Sys.getenv_opt "GW_DEBUG" <> None then prerr_endline ("  strict reading gave up: " ^ why);
-           ordinary ())
+  let strict = if Parametric.has_var out_ty then Parametric.augment ~params ~out_ty examples else None in
+  (* In order: every reading that must also be total at the edge inputs
+     before any that need not be, since a partial program that fits is the
+     commonest way to fit by accident. Within that, the strict parametric
+     reading; then a small term the bank already holds; then a recursion
+     whose traces the examples themselves complete, which is the structure
+     the examples show rather than a fit to their values; then the rest. *)
+  let steps = [
+    (fun () -> match strict with Some more -> top ~edges:true { base with strict = true } more | None -> Gave_up "");
+    (fun () ->
+       try solve_top ~cfg:base ?bank_size ?lambda_bank_size ~depth:1 ?self ~recursion_allowed:false
+             ~edges:true ~decls ~params ~out_ty examples
+       with Exhausted | Out_of_steps -> Gave_up "");
+    (fun () ->
+       match (try traced_recursion ~cfg:base ~self:(Option.value self ~default:"f") ~decls ~params ~out_ty examples
+              with Exhausted | Out_of_steps -> None) with
+       | Some e -> Solved (e, 0)
+       | None -> Gave_up "");
+    (fun () -> top ~edges:true base examples);
+    (fun () -> match strict with Some more -> top { base with strict = true } more | None -> Gave_up "");
+    (fun () -> top base examples);
+  ] in
+  let rec go last = function
+    | [] -> last
+    | f :: rest -> (match f () with Solved _ as r -> r | Gave_up "" -> go last rest | Gave_up _ as g -> go g rest) in
+  match go (Gave_up "") steps with
+  | Gave_up "" -> Gave_up (Printf.sprintf "no derivation within depth %d" (Option.value depth ~default:4))
+  | r -> r
 
 let solve_param ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty examples =
   match Parametric.symmetric ~params examples with

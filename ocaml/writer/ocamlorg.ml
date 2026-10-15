@@ -37,8 +37,9 @@ let derive_target ?cfg (p : Transcript.part) (name, stated, examples) =
   let attempt ty =
     let args, out = unarrow ty in
     let params = Part.param_names args in
-    match Topdown.solve_param ?cfg ~self:name ~decls:p.Transcript.decls
-            ~params:(List.map (fun (n, _, t) -> (n, t)) params) ~out_ty:out examples with
+    match Part.bounded (fun () ->
+        Topdown.solve_param ?cfg ~self:name ~decls:p.Transcript.decls
+          ~params:(List.map (fun (n, _, t) -> (n, t)) params) ~out_ty:out examples) with
     | Topdown.Solved (body, n) ->
         Some (Part.Derived { name; params = List.map (fun (n, l, _) -> (n, l)) params; body; considered = n }, ty)
     | Topdown.Gave_up why -> reasons := (Types.to_string ty ^ ": " ^ why) :: !reasons; None
