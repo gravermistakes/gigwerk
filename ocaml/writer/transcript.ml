@@ -209,10 +209,15 @@ let stated_types text =
   in
   List.filter_map (fun (n, t) -> Option.map (fun t -> (n, t)) (type_of_text t)) (go 0 [])
 
-let read ~slug md : part =
+let read ?(context : part option) ~slug md : part =
   let st = section "Statement" md in
   let blocks = code_blocks st in
-  let decls = ref [] and decl_src = ref [] and bindings = ref [] and unread = ref [] in
+  (* what earlier Statements declared and named, carried forward: the
+     problems build on one another ("the tree t of the previous problem") *)
+  let decls = ref (match context with Some c -> c.decls | None -> [])
+  and decl_src = ref (match context with Some c -> c.decl_source | None -> [])
+  and bindings = ref (match context with Some c -> c.bindings | None -> [])
+  and unread = ref [] in
   let examples : (string * Spec.example) list ref = ref [] in
   List.iter (fun b ->
       (* a block of plain definitions, with no prompt, still declares types *)
@@ -229,13 +234,20 @@ let read ~slug md : part =
                          decls := !decls @ List.map Iface.decl_of tds;
                          decl_src := !decl_src @ [ Format.asprintf "%a" Pprintast.structure [ item ] ]
                        with _ -> unread := ex.phrase :: !unread)
-                  | Pstr_value (_, [ vb ]) ->
-                      (match vb.pvb_pat.ppat_desc, split_response ex.response with
-                       | Parsetree.Ppat_var { txt; _ }, Some (Some _, _, v) ->
-                           (match Literal.of_string_opt v with
-                            | Some v -> bindings := (txt, v) :: !bindings
-                            | None -> unread := ex.phrase :: !unread)
-                       | _ -> unread := ex.phrase :: !unread)
+                  | Pstr_value (_, vbs) ->
+                      List.iter (fun (vb : Parsetree.value_binding) ->
+                          match vb.pvb_pat.ppat_desc, split_response ex.response with
+                          | Parsetree.Ppat_var { txt; _ }, Some (Some _, _, v) ->
+                              (match Literal.of_string_opt v with
+                               | Some v -> bindings := (txt, v) :: !bindings
+                               | None -> unread := ex.phrase :: !unread)
+                          | Parsetree.Ppat_var { txt; _ }, _ ->
+                              (* a definition with no toplevel answer is still a
+                                 value when its right-hand side is a literal *)
+                              (match arg_value !bindings vb.pvb_expr with
+                               | Some v -> bindings := (txt, v) :: !bindings
+                               | None -> unread := ex.phrase :: !unread)
+                          | _ -> unread := ex.phrase :: !unread) vbs
                   | Pstr_eval (e, _) ->
                       (* `not (f args)` shown as true says f args is false *)
                       let e, negate = match e.pexp_desc with
@@ -379,3 +391,13 @@ let reference_with_context ~dir ~slug md =
   (* in the order they appeared *)
   let ordered = List.filter (fun p -> List.mem p deps) phrases in
   String.concat "\n" (List.map (fun (ph, _) -> ph ^ ";;") ordered) ^ "\n" ^ own
+
+(* The context a problem inherits: every earlier Statement in its directory,
+   read in order, Statements only. *)
+let context_before ~dir ~slug =
+  let earlier = Sys.readdir dir |> Array.to_list
+                |> List.filter (fun f -> Filename.check_suffix f ".md" && Filename.remove_extension f < slug)
+                |> List.sort compare in
+  List.fold_left (fun ctx f ->
+      let p = read ?context:ctx ~slug:(Filename.remove_extension f) (read_file (Filename.concat dir f)) in
+      Some { p with targets = []; unread = [] }) None earlier

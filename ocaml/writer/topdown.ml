@@ -228,6 +228,72 @@ and by_string st ctx b g cs outs depth : sols =
                    | _ -> None) in
                Seq.map (fun e -> Expr.Call ("^", [ c.expr; e ])) (sub_solve st ctx b rest (depth - 1)))
              (List.to_seq (take 12 prefixes)));
+        (* Optional fragments in a fixed order: every output is some of the
+           data's string fragments, concatenated in one order, or (at other
+           points) something else. Each fragment's presence is a boolean
+           goal; the other points, if any, are the goal for when none is
+           present:  let s = (if g1 then F1 else "") ^ ... in
+                     if s = "" then other else s *)
+        (fun () ->
+           let index f s =
+             let n = String.length f and h = String.length s in
+             let rec find i = if i + n > h then None else if String.sub s i n = f then Some i else find (i + 1) in
+             find 0 in
+           (* a fragment recurs: one example's whole answer is not vocabulary *)
+           let frags = List.filter_map (fun c -> match c.expr with
+               | Expr.Lit (Value.String f) when String.length f >= 2
+                   && List.length (List.filter (fun s -> index f s <> None) strs) >= 2 -> Some f
+               | _ -> None) (terms_of b t_string) in
+           let frags = List.sort_uniq compare frags in
+           (* the order the outputs themselves put fragments in: where two
+              occur together, that order; otherwise first appearance *)
+           let first f = let rec go i = function [] -> max_int | s :: r -> if index f s <> None then i else go (i + 1) r in go 0 strs in
+           let before a b =
+             match List.find_map (fun s -> match index a s, index b s with
+                 | Some i, Some j -> Some (compare i j) | _ -> None) strs with
+             | Some k -> k
+             | None -> compare (first a) (first b) in
+           let frags = List.stable_sort before frags in
+           let rec parse s fs = (* which fragments, in order, make s *)
+             if s = "" then Some []
+             else match fs with
+               | [] -> None
+               | f :: rest ->
+                   let n = String.length f in
+                   (if String.length s >= n && String.sub s 0 n = f then
+                      Option.map (fun l -> f :: l) (parse (String.sub s n (String.length s - n)) rest)
+                    else None)
+                   |> (function Some l -> Some l | None -> parse s rest) in
+           if List.length frags < 2 then Seq.empty
+           else
+             let parsed = List.map (fun s -> parse s frags) strs in
+             let others = List.filter_map (fun (j, p) -> if p = None then Some j else None) (List.combine cs parsed) in
+             let present = List.filter_map (fun (j, p) -> match p with Some l -> Some (j, l) | None -> None) (List.combine cs parsed) in
+             if List.length present < 2 then Seq.empty
+             else
+               let bool_goal f = { gty = t_bool;
+                                   outs = Array.mapi (fun j _ -> match List.assoc_opt j present with
+                                       | Some l -> Some (Value.Bool (List.mem f l))
+                                       | None -> if List.mem j others then Some (Value.Bool false) else None) g.outs;
+                                   defined = g.defined } in
+               let used = List.filter (fun f -> List.exists (fun (_, l) -> List.mem f l) present) frags in
+               let guards = List.map (fun f -> sub_solve st ctx b (bool_goal f) (depth - 1)) used in
+               let concat gs = List.fold_left (fun acc (f, g) ->
+                   let piece = Expr.If (g, Expr.Lit (Value.String f), Expr.Lit (Value.String "")) in
+                   match acc with None -> Some piece | Some a -> Some (Expr.Call ("^", [ a; piece ]))) None
+                   (List.combine used gs) |> Option.get in
+               let og = { g with outs = Array.mapi (fun j o -> if List.mem j others then o else None) g.outs;
+                                 defined = Array.map (fun _ -> false) g.defined } in
+               let other_sols = if others = [] then Seq.empty else sub_solve st ctx b og (depth - 1) in
+               Seq.flat_map (fun gs ->
+                   let body = concat gs in
+                   if others = [] then Seq.return body
+                   else
+                     Seq.map (fun e ->
+                         Expr.Let (false, "s", body,
+                                   Expr.If (Expr.Call ("=", [ Expr.Var "s"; Expr.Lit (Value.String "") ]), e, Expr.Var "s")))
+                       other_sols)
+                 (product guards));
         (* String.concat sep pieces, for a separator that occurs *)
         (fun () ->
            let seps = List.filter (fun sep -> List.exists (fun s -> List.length (split_on s sep) > 1) strs)
@@ -583,7 +649,28 @@ let solve_top ?(cfg = default) ?(bank_size = 6) ?(lambda_bank_size = 5) ?(depth 
      probably fitting a coincidence (replicate's one example has a list of
      length 3 and a count of 3). The first solution that uses all of them is
      preferred; failing that, the first solution at all. *)
-  let uses_all e = List.for_all (fun (p, _) -> Expr.mentions p e) params in
+  (* Relevance is semantic: naming a parameter in dead code does not use it.
+     Each parameter is varied over values drawn from the examples themselves
+     (no reference, no oracle), and some variation must change the answer. *)
+  let alternatives_for i =
+    dedupe (List.filter_map (fun ex -> List.nth_opt ex.Spec.args i) examples
+            @ List.concat_map (fun ex -> List.filter_map (fun v ->
+                if List.length (dedupe [ v; List.nth ex.Spec.args i ]) = 2 then Some v else None)
+                (List.filteri (fun k _ -> k < 6) (samples ctx (List.nth (List.map snd params) i)))) examples) in
+  let uses_all e =
+    List.for_all (fun (p, _) -> Expr.mentions p e) params
+    && List.for_all (fun i ->
+        let alts = alternatives_for i in
+        List.exists (fun ex ->
+            let run args = Eval.run ~budget:20_000 (List.combine (List.map fst params) args) e in
+            let base = run ex.Spec.args in
+            List.exists (fun a ->
+                let args = List.mapi (fun k v -> if k = i then a else v) ex.Spec.args in
+                match run args, base with
+                | Some v, Some b -> not (Value.equal v b)
+                | Some _, None | None, Some _ -> true
+                | None, None -> false) alts) examples
+        || List.length alts < 2) (List.init (List.length params) Fun.id) in
   let first = ref None and first_depth = ref None in
   let scan d =
     let seen = ref 0 in
@@ -612,7 +699,12 @@ let solve_top ?(cfg = default) ?(bank_size = 6) ?(lambda_bank_size = 5) ?(depth 
            | Some _, Some d0 when d > d0 -> deepen (depth + 1)
            | _ -> deepen (d + 1))
   in
-  try deepen 0 with
+  let debug r =
+    if Sys.getenv_opt "GW_DEBUG" <> None then
+      Printf.eprintf "  [solve_top %d examples, %d params: %d steps, %d terms kept, %d banks]\n%!"
+        (List.length examples) (List.length params) st.steps !Synth.total (Hashtbl.length st.banks);
+    r in
+  debug @@ try deepen 0 with
   | Out_of_steps | Exhausted as ex ->
       (match !first with
        | Some e -> Solved (e, st.steps)
@@ -713,9 +805,43 @@ let traced_recursion ?(cfg = default) ~self ~decls ~(params : (string * ty) list
           | _ -> None) params
   | _ -> None
 
+(* Does a derived body reproduce an example? Run as the recursive
+   definition it will be printed as. *)
+let reproduces ~self ~params body (ex : Spec.example) =
+  let names = List.map fst params in
+  match Eval.run ~budget:200_000 []
+          (Expr.Let (true, self, Expr.Lam (names, body),
+                     Expr.App (Expr.Var self, List.map (fun v -> Expr.Lit v) ex.Spec.args))) with
+  | Some v -> Value.equal v ex.Spec.out
+  | None -> false
+
+(* Counterexample-guided use of the part's own examples: derive from a small
+   spread of them, run the result on all, add the first it gets wrong, and go
+   again. Every judgement is still against all the examples; the search just
+   stops paying for twenty points where four decide. *)
+let rec solve_cegis ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty examples =
+  let n = List.length examples in
+  if n <= 6 then solve_param_all ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty examples
+  else
+    let spread k = List.sort_uniq compare (List.init k (fun i -> i * (n - 1) / (k - 1))) in
+    let pick idx = List.filteri (fun i _ -> List.mem i idx) examples in
+    let self_name = Option.value self ~default:"f" in
+    let rec loop idx rounds =
+      let subset = pick idx in
+      match solve_param_all ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty subset with
+      | Gave_up _ as g -> if List.length idx >= n then g else loop (List.init n Fun.id) (rounds + 1)
+      | Solved (e, k) ->
+          (match List.find_opt (fun i -> not (reproduces ~self:self_name ~params e (List.nth examples i)))
+                   (List.init n Fun.id) with
+           | None -> Solved (e, k)
+           | Some i when rounds < 10 -> loop (List.sort_uniq compare (i :: idx)) (rounds + 1)
+           | Some _ -> solve_param_all ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty examples)
+    in
+    loop (spread 5) 0
+
 (* The strict parametric reading first (free-theorem examples, no comparison
    of a rigid 'a), then the ordinary one. *)
-let solve_param ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty examples =
+and solve_param_all ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty examples =
   let base = match cfg with Some c -> c | None -> default in
   let attempt cfg exs =
     match solve_top ~cfg ?bank_size ?lambda_bank_size ?depth ?self ~edges:true ~decls ~params ~out_ty exs with
@@ -740,3 +866,5 @@ let solve_param ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~o
        | Gave_up why ->
            if Sys.getenv_opt "GW_DEBUG" <> None then prerr_endline ("  strict reading gave up: " ^ why);
            ordinary ())
+
+let solve_param = solve_cegis

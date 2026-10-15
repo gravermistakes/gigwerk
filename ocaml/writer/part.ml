@@ -51,7 +51,9 @@ let derive ?cfg (iface : Iface.t) (examples : (string * Spec.example) list) (v :
       | Topdown.Solved (body, considered) ->
           Derived { name = v.Iface.vname; params = List.map (fun (n, l, _) -> (n, l)) params; body; considered }
       | Topdown.Gave_up why -> Declined { name = v.Iface.vname; why }
-      | exception Out_of_memory -> Declined { name = v.Iface.vname; why = "memory bound reached" }
+      | exception Out_of_memory ->
+          if Sys.getenv_opt "GW_DEBUG" <> None then Printexc.print_backtrace stderr;
+          Declined { name = v.Iface.vname; why = "memory bound reached" }
 
 (* A derived value becomes a component for the part's later values. *)
 let register_sibling (iface : Iface.t) name params body =

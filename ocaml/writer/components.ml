@@ -52,6 +52,13 @@ let cmp name f = op name (arrows [ a; a ] t_bool)
 let farith name f = op name (arrows [ t_float; t_float ] t_float)
     (bin (fun x y -> Value.Float (f (flt x) (flt y))))
 
+(* Results past this size are not values the search can afford: a step that
+   doubles a string along a 64-step recursion would otherwise exhaust memory
+   before any check could reject it. *)
+let cap = 50_000
+let small_s s = if String.length s > cap then raise Undefined else Value.String s
+let small_l l = if List.length l > cap then raise Undefined else Value.List l
+
 let explode s = List.init (String.length s) (fun i -> Value.Char s.[i])
 let implode l = String.init (List.length l) (fun i -> chr (List.nth l i))
 
@@ -86,7 +93,9 @@ let all : t list = [
   fn "Int64.of_int" (arrow t_int t_int64) (un (fun x -> Value.Int64 (Int64.of_int (int x))));
   fn "Int64.to_int" (arrow t_int64 t_int) (un (fun x -> Value.Int (Int64.to_int (i64 x))));
   (* strings and chars *)
-  op "^" (arrows [ t_string; t_string ] t_string) (bin (fun x y -> Value.String (str x ^ str y)));
+  op "^" (arrows [ t_string; t_string ] t_string)
+    (bin (fun x y -> if String.length (str x) + String.length (str y) > cap then raise Undefined
+           else Value.String (str x ^ str y)));
   fn "String.length" (arrow t_string t_int) (un (fun s -> Value.Int (String.length (str s))));
   mk "String.get" (arrows [ t_string; t_int ] t_char)
     (bin (fun s i -> let s = str s and i = int i in
@@ -100,7 +109,10 @@ let all : t list = [
     (bin (fun n ch -> let n = int n in
            if n < 0 || n > 10_000 then raise Undefined else Value.String (String.make n (chr ch))));
   fn "String.concat" (arrows [ t_string; t_list t_string ] t_string)
-    (bin (fun sep l -> Value.String (String.concat (str sep) (List.map str (lst l)))));
+    (bin (fun sep l ->
+         let parts = List.map str (lst l) in
+         if List.fold_left (fun n p -> n + String.length p + String.length (str sep)) 0 parts > cap then raise Undefined
+         else Value.String (String.concat (str sep) parts)));
   fn "String.uppercase_ascii" (arrow t_string t_string)
     (un (fun s -> Value.String (String.uppercase_ascii (str s))));
   fn "String.lowercase_ascii" (arrow t_string t_string)
@@ -135,8 +147,10 @@ let all : t list = [
   fn "Char.uppercase_ascii" (arrow t_char t_char) (un (fun ch -> Value.Char (Char.uppercase_ascii (chr ch))));
   fn "Char.lowercase_ascii" (arrow t_char t_char) (un (fun ch -> Value.Char (Char.lowercase_ascii (chr ch))));
   (* lists *)
-  op "::" (arrows [ a; t_list a ] (t_list a)) (bin (fun x l -> Value.List (x :: lst l)));
-  op "@" (arrows [ t_list a; t_list a ] (t_list a)) (bin (fun x y -> Value.List (lst x @ lst y)));
+  op "::" (arrows [ a; t_list a ] (t_list a)) (bin (fun x l -> small_l (x :: lst l)));
+  op "@" (arrows [ t_list a; t_list a ] (t_list a))
+    (bin (fun x y -> if List.length (lst x) + List.length (lst y) > cap then raise Undefined
+           else Value.List (lst x @ lst y)));
   fn "List.length" (arrow (t_list a) t_int) (un (fun l -> Value.Int (List.length (lst l))));
   fn "List.rev" (arrow (t_list a) (t_list a)) (un (fun l -> Value.List (List.rev (lst l))));
   fn "List.hd" (arrow (t_list a) a) (un (fun l -> match lst l with x :: _ -> x | [] -> raise Undefined));
@@ -160,7 +174,7 @@ let all : t list = [
     (bin (fun f l -> Value.List (List.filter_map (fun x -> match apply f x with
          | Value.Con ("Some", [ y ]) -> Some y | _ -> None) (lst l))));
   fn "List.concat_map" (arrows [ arrow a (t_list b); t_list a ] (t_list b))
-    (bin (fun f l -> Value.List (List.concat_map (fun x -> lst (apply f x)) (lst l))));
+    (bin (fun f l -> small_l (List.concat_map (fun x -> lst (apply f x)) (lst l))));
   fn "List.fold_left" (arrows [ arrows [ b; a ] b; b; t_list a ] b)
     (tri (fun f z l -> List.fold_left (apply2 f) z (lst l)));
   fn "List.fold_right" (arrows [ arrows [ a; b ] b; t_list a; b ] b)
@@ -171,7 +185,7 @@ let all : t list = [
     (bin (fun f l -> Value.Bool (List.for_all (fun x -> bool (apply f x)) (lst l))));
   fn "List.mem" (arrows [ a; t_list a ] t_bool)
     (bin (fun x l -> Value.Bool (List.exists (Value.equal x) (lst l))));
-  fn "List.concat" (arrow (t_list (t_list a)) (t_list a)) (un (fun l -> Value.List (List.concat_map lst (lst l))));
+  fn "List.concat" (arrow (t_list (t_list a)) (t_list a)) (un (fun l -> small_l (List.concat_map lst (lst l))));
   fn "List.init" (arrows [ t_int; arrow t_int a ] (t_list a))
     (bin (fun n f -> let n = int n in
            if n < 0 || n > 10_000 then raise Undefined
@@ -222,6 +236,7 @@ let all : t list = [
 
 let find name = List.find (fun c -> c.name = name) all
 let _ = c
+let _ = small_s
 
 (* Values the part itself has already been given, offered back as vocabulary
    for its later values: `difference_of_squares` may call `square_of_sum`. They

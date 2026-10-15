@@ -138,7 +138,8 @@ let differential (p : Transcript.part) ~examples ~source ~reference ~slug ~targe
 let solve ?cfg ?library ~path () =
   let md = Iface.read_file path in
   let slug = Filename.remove_extension (Filename.basename path) in
-  let p = Transcript.read ~slug md in
+  let context = Transcript.context_before ~dir:(Filename.dirname path) ~slug in
+  let p = Transcript.read ?context ~slug md in
   Hashtbl.reset Components.siblings;
   let lib = match library with
     | None -> []
