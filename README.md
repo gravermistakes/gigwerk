@@ -70,6 +70,19 @@ machine reached its terminal state, which is a different question from whether
 the work was worth doing, and that question does not resolve downstream of a
 schema.
 
+A refusal is its own outcome, `refused`, not a kind of `failed`. When an Actor
+declines the part in `prepare`, the Producer reports `Refused` with the actor's
+words if it gave any; `note` stays NULL when it gave none. Aleph exports a
+refusal as neither a good nor a bad example, and `v_phase_cost` leaves it out
+of the completion rate, because a declined part was never performed.
+
+`v_answer` joins each outcome to the prediction it settles. A new session
+starts with no knowledge of what ran since the last one, so the SessionStart
+hook in `.claude/settings.json` runs `gigwerk answers`, which prints every
+answer not yet delivered, oldest first, in sqlite's own line mode, and records
+the delivery in `answer_delivery` in the same transaction. No session
+identifier is stored.
+
 ## What is not true yet
 
 Stated here because a document that claims a boundary it does not hold is worse
@@ -92,6 +105,12 @@ the engine runs for real. No acceptance verb fits synthesis material, since
 the closed variant is dune verbs only, so a synthesis booking reports itself
 unverified rather than passed.
 
+Nothing on the CLI writes a `refused` row yet. `Producer.outcome_word` maps a
+production to the word, but no verb runs a `Code_actor` booking through to
+`commission_outcome`. The hook reads `gigwerk.db` at the repository root; a
+cloud session's container is cloned fresh and has no store, so there it
+reports that nothing has been answered.
+
 The labor tier starts processes through `Proc`, with no shell. The Agency's
 sqlite access (`agency.ml`), `caps.ml`, `bridge.ml` and the `doctor` verb
 still go through one.
@@ -103,7 +122,7 @@ the one-way YAML discipline above is a rule the CLI cannot yet carry out.
 
 ## Build
 
-30 modules, 24 tables, 13 views, 8 CLI verbs. 342 checks across ten binaries,
+31 modules, 25 tables, 14 views, 9 CLI verbs. 359 checks across eleven binaries,
 plus 32 SQL cases in `test_memory.sql` and `test_confidence.sql`. Verified on
 OCaml 4.14.1 with dune 3.14. The SWI suite is not counted here because it does
 not run without `swipl`.

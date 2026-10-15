@@ -140,13 +140,28 @@ CREATE TABLE commission_prediction (
   made_at         INTEGER NOT NULL
 );
 
+-- 'refused' is the actor declining the part: range, not failure. note holds
+-- its words when it gave any and stays NULL when it did not; nothing else
+-- may fill that in on the actor's behalf.
 CREATE TABLE commission_outcome (
   commission_id      INTEGER PRIMARY KEY REFERENCES commission(id) ON DELETE CASCADE,
   outcome     TEXT    NOT NULL CHECK (outcome IN
-                ('completed','failed','human_rejected','budget_exceeded','starved')),
+                ('completed','failed','human_rejected','budget_exceeded','starved',
+                 'refused')),
   matched     TEXT    NOT NULL CHECK (matched IN ('yes','partial','no')),
   observed_at INTEGER NOT NULL,
   note        TEXT
+);
+
+-- An answer is a prediction together with the outcome that settled it. A
+-- session starts with no memory of the commissions run since the last one,
+-- so the SessionStart hook prints every answer not yet delivered (gigwerk
+-- answers) and records the delivery here. One row per answer, delivered once.
+-- No session identifier is stored: what is recorded is that the answer went
+-- out, not which conversation took it.
+CREATE TABLE answer_delivery (
+  commission_id INTEGER PRIMARY KEY REFERENCES commission(id) ON DELETE CASCADE,
+  delivered_at  INTEGER NOT NULL
 );
 
 -- Booking verdicts, including refusals. The refusals are the training signal
@@ -232,11 +247,37 @@ SELECT g.id                AS commission_id,
        gp.predicts IS NOT NULL AS had_prediction,
        go.matched          AS matched,
        go.outcome          AS outcome,
-       (go.outcome = 'completed') AS good
+       -- A refusal is labeled by its outcome and is neither a good nor a bad
+       -- example of the shape, so it exports as unknown rather than as a 0.
+       CASE WHEN go.outcome = 'refused' THEN NULL
+            ELSE (go.outcome = 'completed') END AS good
 FROM commission g
 JOIN entity e ON e.id = g.entity_id
 LEFT JOIN commission_prediction gp ON gp.commission_id = g.id
 LEFT JOIN commission_outcome    go ON go.commission_id = g.id;
+
+-- Each settled commission as the claim and the world's reply to it, raw. The
+-- prediction is LEFT joined so an outcome that answers nothing still shows,
+-- with its prediction NULL, rather than vanishing.
+CREATE VIEW v_answer AS
+SELECT g.id               AS commission_id,
+       e.name             AS entity,
+       g.composition_sig  AS shape,
+       g.tier             AS tier,
+       g.soul_version     AS soul_version,
+       gp.predicts        AS predicts,
+       gp.falsifiable_by  AS falsifiable_by,
+       gp.made_at         AS predicted_at,
+       go.outcome         AS outcome,
+       go.matched         AS matched,
+       go.note            AS note,
+       go.observed_at     AS observed_at,
+       d.delivered_at     AS delivered_at
+FROM commission g
+JOIN entity e ON e.id = g.entity_id
+JOIN commission_outcome go ON go.commission_id = g.id
+LEFT JOIN commission_prediction gp ON gp.commission_id = g.id
+LEFT JOIN answer_delivery d ON d.commission_id = g.id;
 
 -- Acceptance rate, watched in BOTH directions. Under ~0.2 the agent is
 -- thrashing. Over ~0.9 you have become a rubber stamp, which is how HITL
@@ -376,7 +417,10 @@ SELECT s.phase,
        round(avg(s.duration_ms), 1)   AS avg_ms,
        max(s.duration_ms)             AS max_ms,
        sum(s.breach IS NOT NULL)      AS breaches,
-       round(1.0 * sum(o.outcome = 'completed') / count(*), 3) AS completion_rate
+       -- Refused commissions were never performed, so they are not in the
+       -- denominator: a phase is not slow-and-failing because a part was declined.
+       round(1.0 * sum(o.outcome = 'completed')
+             / nullif(sum(o.outcome IS NOT 'refused'), 0), 3) AS completion_rate
 FROM span s
 JOIN commission g ON g.id = s.commission_id
 LEFT JOIN commission_outcome o ON o.commission_id = g.id

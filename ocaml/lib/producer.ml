@@ -1,10 +1,16 @@
 type requirement_outcome =
   | Produced of Production.artifact * string list   (* artifact, phases walked *)
   | Production_failed of string
+  | Production_refused of string option             (* the actor's words, if any *)
 
+(* Refused and Over_budget are not kinds of Failed. A refusal is the actor's
+   range, and the store keeps it as its own outcome so it never reads as a
+   defect; running out of allowance is the booking's sizing, not the work. *)
 type status =
   | Success
   | Failed of string
+  | Over_budget of string
+  | Refused of { requirement : string; words : string option }
 
 type result = {
   outcomes : (string * requirement_outcome) list;
@@ -13,8 +19,13 @@ type result = {
   status : status;
 }
 
-let actor_error_string = function
-  | Code_actor.Workspace_error s | Code_actor.Actor_error s -> s
+(* The commission_outcome.outcome word for a production. *)
+let outcome_word r =
+  match r.status with
+  | Success -> "completed"
+  | Failed _ -> "failed"
+  | Over_budget _ -> "budget_exceeded"
+  | Refused _ -> "refused"
 
 let run ~(actor : (module Code_actor.S)) ~specification ~workspace ~obligations
     ~now =
@@ -51,7 +62,11 @@ let run ~(actor : (module Code_actor.S)) ~specification ~workspace ~obligations
                   failed ~outcomes:((requirement.id, Production_failed why) :: outcomes) ob why
                 in
                 match A.prepare requirement ws with
-                | Error e -> fail (actor_error_string e)
+                | Error (Code_actor.Workspace_error e) -> fail e
+                | Error (Code_actor.Refused words) ->
+                    { outcomes = List.rev ((requirement.id, Production_refused words) :: outcomes);
+                      verification = None; obligations = ob;
+                      status = Refused { requirement = requirement.id; words } }
                 | Ok s0 ->
                     let p = Actor.run_machine A.machine ~obligations:ob ~now
                         ~cost:A.cost ~choose:A.choose ~perform:A.perform s0 in
@@ -73,6 +88,10 @@ let run ~(actor : (module Code_actor.S)) ~specification ~workspace ~obligations
                         else
                           produce (requirement.id :: completed)
                             ((requirement.id, Produced (artifact, p.Actor.trail)) :: outcomes) ob
+                    | Actor.Breached { breach = Obligations.(Exhausted _ | Expired _); _ } as halt ->
+                        let why = Actor.halt_to_string halt in
+                        { outcomes = List.rev ((requirement.id, Production_failed why) :: outcomes);
+                          verification = None; obligations = ob; status = Over_budget why }
                     | halt -> fail (Actor.halt_to_string halt)
           in
           produce [] [] obligations

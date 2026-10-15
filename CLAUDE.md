@@ -63,6 +63,10 @@ falsifier.
 
 ## Rules that are not style
 
+**NO LLM AI WILL EVER WRITE PRODUCTION CODE THROUGH THIS HARNESS.** Every
+artifact the harness delivers is derived by a deterministic Actor. A model may
+choose the booking; it never supplies the work, in whole or in part.
+
 **Query is exact; Retrieve is ranked.** An Actor holding Retrieve is no longer
 deterministic code, and every claim resting on that determinism dies with it. It
 is composer-only, and `Conditions` returns Refuse rather than Queue, because no
@@ -95,7 +99,7 @@ online. Either take authorship or do not; there is no "generated" terminology.
 ## Build
 
 ```
-cd ocaml && dune build && dune test     # 342 checks across ten binaries
+cd ocaml && dune build && dune test     # 359 checks across eleven binaries
 ./lint.sh                               # c, sql, prolog, elpi
 ```
 

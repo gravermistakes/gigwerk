@@ -59,8 +59,8 @@ module Make (I : sig val instruments : instruments end) : Code_actor.S = struct
   let prepare (r : Production.requirement) ws =
     let id = r.Production.id in
     if not (valid_module_name id) then
-      Error (Code_actor.Actor_error
-               (Printf.sprintf "%S cannot name an OCaml module" id))
+      Error (Code_actor.Refused
+               (Some (Printf.sprintf "%S cannot name an OCaml module" id)))
     else
       let missing =
         List.filter (fun f -> Result.is_error (Workspace.read ws ~path:(Filename.concat id f)))
@@ -73,9 +73,9 @@ module Make (I : sig val instruments : instruments end) : Code_actor.S = struct
         match Workspace.read ws ~path:(Filename.concat id "contract.sq") with
         | Error _ -> Error (Code_actor.Workspace_error "contract.sq unreadable")
         | Ok c when not (has_hole c) ->
-            Error (Code_actor.Actor_error
-                     "contract leaves no hole: the implementation was supplied, \
-                      so there is nothing here to perform")
+            Error (Code_actor.Refused
+                     (Some "contract leaves no hole: the implementation was supplied, \
+                            so there is nothing here to perform"))
         | Ok _ ->
             Ok { ws; id; dir = Filename.concat ws.Workspace.root id }
 

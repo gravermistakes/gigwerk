@@ -33,6 +33,7 @@ let usage () =
      gigwerk caps [--entity NAME]\n\
      gigwerk introspect list|read <id>|add|forget <id>|rewrite <id>\n\
     \\              [--text S] [--tag a,b] [--link 1,2] [--db FILE]\n\
+     gigwerk answers [--db FILE]\n\
      gigwerk doctor\n\
    \n\
    propose runs the whole path -- conditions, obligations, role fit, then the commission.\n\
@@ -575,6 +576,15 @@ let cmd_introspect argv =
             | Ok () -> persist_then (Printf.sprintf "rewrote entry %d" id) 0))
   | _ -> usage ()
 
+(* answers: every outcome the store holds that no session has been shown yet,
+   beside the prediction it settles. The SessionStart hook runs this, so a new
+   session reads what happened before it reads its own plans. *)
+let cmd_answers argv =
+  Agency.db_path := arg "--db" !Agency.db_path argv;
+  match Answers.deliver ~db:!Agency.db_path with
+  | Ok d -> print_string (Answers.render d)
+  | Error e -> Printf.eprintf "gigwerk answers: %s\n" e; exit 1
+
 let cmd_doctor argv =
   Agency.db_path := arg "--db" !Agency.db_path argv;
   Printf.printf "openat2 + RESOLVE_BENEATH : %s\n"
@@ -596,5 +606,6 @@ let () =
   | _ :: "context" :: rest -> cmd_context rest
   | _ :: "caps" :: rest -> cmd_caps rest
   | _ :: "introspect" :: rest -> cmd_introspect rest
+  | _ :: "answers" :: rest -> cmd_answers rest
   | _ :: "doctor" :: rest -> cmd_doctor rest
   | _ -> usage ()

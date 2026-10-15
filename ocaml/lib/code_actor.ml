@@ -9,10 +9,15 @@
  * So the Actor declares its own machine and its own policy over it, and the
  * Agency only walks it (Actor.run_machine): the actor picks each input, the
  * machine says whether that input exists, Obligations says whether it is
- * affordable. `deliver` is read only at a terminal phase. *)
+ * affordable. `deliver` is read only at a terminal phase.
+ *
+ * Refused is the actor declining the part. It is range, not failure, and it is
+ * recorded as its own outcome. The words are optional: an actor that declines
+ * without saying why has still declined, and an absent reason is stored as
+ * absent rather than filled in by whoever reads the refusal. *)
 type error =
   | Workspace_error of string
-  | Actor_error of string
+  | Refused of string option
 
 module type S = sig
   (* Whose work this is. Stamped on every artifact the actor produces, so the
@@ -22,7 +27,7 @@ module type S = sig
   (* What each input spends. Declared by the actor, charged by the Agency. *)
   val cost : string -> Grants.action list
   type state
-  (* Read the part. An error here is the actor declining before it starts. *)
+  (* Read the part. Refused here is the actor declining before it starts. *)
   val prepare : Production.requirement -> Workspace.t -> (state, error) result
   val choose : state -> string -> string option
   val perform : state -> string -> (state, string) result

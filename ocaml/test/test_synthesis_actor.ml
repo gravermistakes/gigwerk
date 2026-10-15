@@ -207,7 +207,7 @@ let () =
   let supplied =
     "data BST a where\n  Empty :: BST a\n\ninsert :: x: a -> t: BST a -> BST a\ninsert = \\x . \\t . t\n" in
   (match walk (stage ~contract_text:supplied ()) with
-   | Error (Code_actor.Actor_error _) ->
+   | Error (Code_actor.Refused (Some _)) ->
        check "a contract with the implementation already in it is declined before the first move"
          (!engine_calls = 0)
    | _ -> check "a contract with no hole was performed anyway" false);
@@ -248,7 +248,44 @@ let () =
          a.Production.by = "synquid" && trail = full_ladder
      | _ -> false);
   check "...and with no acceptance declared, the booking is unverified, not passed"
-    (r.Producer.status = Producer.Failed "verification failed");
+    (r.Producer.status = Producer.Failed "verification failed"
+     && Producer.outcome_word r = "failed");
+
+  (* ------------------------------------------- refusal is its own outcome --- *)
+  engine_calls := 0;
+  let r = Producer.run ~actor:(Synthesis_actor.make (instruments ()))
+      ~specification:(spec_of ()) ~workspace:(stage ~contract_text:supplied ())
+      ~obligations:(obligations ()) ~now in
+  check "an actor declining the part is recorded as refused, in its own words, not as failed"
+    (match r.Producer.outcomes, r.Producer.status with
+     | [ ("bst", Producer.Production_refused (Some _)) ],
+       Producer.Refused { requirement = "bst"; words = Some _ } ->
+         Producer.outcome_word r = "refused" && !engine_calls = 0
+     | _ -> false);
+  let module Mute = struct
+    let name = "mute"
+    let machine = Phases.synthesis_machine
+    let cost _ = []
+    type state = unit
+    let prepare _ _ = Error (Code_actor.Refused None)
+    let choose () _ = None
+    let perform () _ = Ok ()
+    let deliver () = { Production.requirement_id = "bst"; paths = []; by = name }
+  end in
+  let r = Producer.run ~actor:(module Mute : Code_actor.S) ~specification:(spec_of ())
+      ~workspace:(stage ()) ~obligations:(obligations ()) ~now in
+  check "a refusal with no words is still a refusal, and its reason stays absent"
+    (match r.Producer.status with
+     | Producer.Refused { requirement = "bst"; words = None } ->
+         Producer.outcome_word r = "refused"
+     | _ -> false);
+  let r = Producer.run ~actor:(Synthesis_actor.make (instruments ()))
+      ~specification:(spec_of ()) ~workspace:(stage ())
+      ~obligations:(obligations ~budget:3 ()) ~now in
+  check "running out of allowance is budget_exceeded, the booking's sizing, not a refusal"
+    (match r.Producer.status with
+     | Producer.Over_budget _ -> Producer.outcome_word r = "budget_exceeded"
+     | _ -> false);
 
   (* ----------------------------------- cognition decides who, by booking --- *)
   print_endline "\ncasting -- the booking names the part, the roster names the talent";
