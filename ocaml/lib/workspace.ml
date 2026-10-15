@@ -14,7 +14,11 @@ let create root =
     match canonical root with
     | Ok root -> Ok { root }
     | Error e -> Error (Invalid_root e)
-  with Sys_error e -> Error (Invalid_root e)
+  with
+  | Sys_error e -> Error (Invalid_root e)
+  (* mkdir raises Unix_error, not Sys_error. Uncaught, a root that cannot be
+     made escaped Producer.run as an exception instead of a refused stage. *)
+  | Unix.Unix_error (e, _, _) -> Error (Invalid_root (Unix.error_message e))
 
 let components path = String.split_on_char '/' path
 
@@ -27,9 +31,19 @@ let resolve t path =
   if not (valid_relative path) then Error (Invalid_path path)
   else
     let candidate = Filename.concat t.root path in
+    (* Confinement is checked on the nearest ancestor that EXISTS. Checking the
+       parent itself made realpath fail for any directory not yet created, so
+       write's mkdir_p was unreachable and no actor could write into a new
+       subdirectory. A component that does not exist cannot be a symlink, and
+       `..` is already refused, so the existing ancestor decides where the
+       path lands. *)
+    let rec existing dir =
+      if Sys.file_exists dir || Filename.dirname dir = dir then dir
+      else existing (Filename.dirname dir)
+    in
     try
       let parent = Filename.dirname candidate in
-      let parent_real = Unix.realpath parent in
+      let parent_real = Unix.realpath (existing parent) in
       let prefix = t.root ^ "/" in
       if parent_real <> t.root && not (String.length parent_real > String.length prefix && String.sub parent_real 0 (String.length prefix) = prefix) then
         Error (Invalid_path path)

@@ -287,6 +287,16 @@ let () =
      | Producer.Over_budget _ -> Producer.outcome_word r = "budget_exceeded"
      | _ -> false);
 
+  (* ------------------------------------------------------------ admission --- *)
+  check "the synthesis actor is admitted: two stagings, the same trail, the same bytes"
+    (match Admission.check ~actor:(Synthesis_actor.make (instruments ()))
+             ~specification:(spec_of ()) ~stage:(fun () -> stage ())
+             ~obligations:(obligations ()) ~now with
+     | Ok { Admission.talent = "synquid"; artifacts } ->
+         List.map fst artifacts = [ "bst/bst.ml"; "bst/candidate.out" ]
+     | Ok _ -> false
+     | Error r -> prerr_endline (Admission.rejection_to_string r); false);
+
   (* ----------------------------------- cognition decides who, by booking --- *)
   print_endline "\ncasting -- the booking names the part, the roster names the talent";
   let synthesis_role = Role.synthesis in

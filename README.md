@@ -83,6 +83,13 @@ answer not yet delivered, oldest first, in sqlite's own line mode, and records
 the delivery in `answer_delivery` in the same transaction. No session
 identifier is stored.
 
+`Admission.check` performs a talent's part twice, each on a freshly staged copy
+of the material in a different directory, and admits it only if the two agree
+on the phases walked, the paths delivered and every byte of every file. Two
+runs can catch a nondeterministic talent; they cannot prove one deterministic,
+so admitted means not caught. An artifact that embeds where it was performed
+fails, by design. The synthesis actor is admitted with Synquid replayed.
+
 ## What is not true yet
 
 Stated here because a document that claims a boundary it does not hold is worse
@@ -111,6 +118,9 @@ production to the word, but no verb runs a `Code_actor` booking through to
 cloud session's container is cloned fresh and has no store, so there it
 reports that nothing has been answered.
 
+Admission is not yet a condition of casting: `Booking.cast` takes any talent on
+the roster, admitted or not.
+
 The labor tier starts processes through `Proc`, with no shell. The Agency's
 sqlite access (`agency.ml`), `caps.ml`, `bridge.ml` and the `doctor` verb
 still go through one.
@@ -122,7 +132,7 @@ the one-way YAML discipline above is a rule the CLI cannot yet carry out.
 
 ## Build
 
-31 modules, 25 tables, 14 views, 9 CLI verbs. 359 checks across eleven binaries,
+32 modules, 25 tables, 14 views, 9 CLI verbs. 377 checks across thirteen binaries,
 plus 32 SQL cases in `test_memory.sql` and `test_confidence.sql`. Verified on
 OCaml 4.14.1 with dune 3.14. The SWI suite is not counted here because it does
 not run without `swipl`.

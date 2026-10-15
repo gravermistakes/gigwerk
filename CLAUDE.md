@@ -99,7 +99,7 @@ online. Either take authorship or do not; there is no "generated" terminology.
 ## Build
 
 ```
-cd ocaml && dune build && dune test     # 359 checks across eleven binaries
+cd ocaml && dune build && dune test     # 377 checks across thirteen binaries
 ./lint.sh                               # c, sql, prolog, elpi
 ```
 
