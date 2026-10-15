@@ -18,6 +18,7 @@ type report = {
   replay : [ `Passed | `Failed of string | `Not_run of string ];
   differential : (Verify.verdict, string) result option;
   unread : string list;
+  examples : (string * Spec.example) list;
 }
 
 let toplevel ~stdin_text =
@@ -35,11 +36,12 @@ let derive_target ?cfg (p : Transcript.part) (name, stated, examples) =
   let attempt ty =
     let args, out = unarrow ty in
     let params = Part.param_names args in
-    match Topdown.solve_top ?cfg ~decls:p.Transcript.decls
+    match Topdown.solve_param ?cfg ~self:name ~decls:p.Transcript.decls
             ~params:(List.map (fun (n, _, t) -> (n, t)) params) ~out_ty:out examples with
     | Topdown.Solved (body, n) ->
         Some (Part.Derived { name; params = List.map (fun (n, l, _) -> (n, l)) params; body; considered = n }, ty)
     | Topdown.Gave_up why -> reasons := (Types.to_string ty ^ ": " ^ why) :: !reasons; None
+    | exception Out_of_memory -> reasons := (Types.to_string ty ^ ": memory bound reached") :: !reasons; None
   in
   let types = match stated with
     | Some t -> [ t ]
@@ -97,14 +99,14 @@ let differential (p : Transcript.part) ~examples ~source ~reference ~slug ~targe
       let args, _ = unarrow ty in
       let labels = List.map fst args in
       (* concrete argument types for generation: a rigid 'a draws ints *)
-      List.map (fun inp -> (name, Verify.call_source ~name ~labels inp))
+      List.map (fun inp -> (name, Verify.call_source ~name ~labels inp, inp))
         (Verify.inputs_for decls { Iface.vname = name; vty = ty } exs 200)) targets in
   if calls = [] then Error "no input could be generated"
   else
     let iface = { Iface.decls; values = List.map (fun (n, t) -> { Iface.vname = n; vty = t }) targets;
                   unreadable = []; opens = [] } in
     let printers = Probe.result_printers iface in
-    let body = String.concat "\n" (List.mapi (fun i (name, src) ->
+    let body = String.concat "\n" (List.mapi (fun i (name, src, _) ->
         Printf.sprintf "let () = (try print_endline (\"%d\\t\" ^ __gw_print_%s %s) with e -> print_endline (\"%d\\t!\" ^ Printexc.to_string e));;"
           i name src i) calls) in
     let run impl =
@@ -116,18 +118,21 @@ let differential (p : Transcript.part) ~examples ~source ~reference ~slug ~targe
     let wt = run (decl_src ^ "\n" ^ source) and rt = run (decl_src ^ "\n" ^ reference) in
     if rt = [] then Error "the Solution did not run beside the generated calls"
     else
-      let compared = ref 0 and agreed = ref 0 and dis = ref [] in
-      List.iteri (fun i (_, src) ->
+      let compared = ref 0 and agreed = ref 0 and dis = ref [] and samples = ref [] in
+      List.iteri (fun i (name, src, inp) ->
           let id = string_of_int i in
           match List.assoc_opt id rt, List.assoc_opt id wt with
           | Some rv, _ when String.length rv > 0 && rv.[0] = '!' -> ()
-          | Some rv, Some wv ->
+          | Some rv, w ->
               incr compared;
-              if Verify.close_enough wv rv then incr agreed
-              else dis := Printf.sprintf "%s = %s, reference %s" src wv rv :: !dis
-          | Some rv, None -> incr compared; dis := Printf.sprintf "%s: no output, reference %s" src rv :: !dis
+              (match Literal.of_string_opt rv with
+               | Some v -> samples := (name, inp, v) :: !samples | None -> ());
+              (match w with
+               | Some wv when Verify.close_enough wv rv -> incr agreed
+               | Some wv -> dis := Printf.sprintf "%s = %s, reference %s" src wv rv :: !dis
+               | None -> dis := Printf.sprintf "%s: no output, reference %s" src rv :: !dis)
           | None, _ -> ()) calls;
-      Ok { Verify.compared = !compared; agreed = !agreed; disagreements = List.rev !dis }
+      Ok { Verify.compared = !compared; agreed = !agreed; disagreements = List.rev !dis; samples = List.rev !samples }
 
 let solve ?cfg ~path () =
   let md = Iface.read_file path in
@@ -157,4 +162,5 @@ let solve ?cfg ~path () =
         let examples = List.concat_map (fun (n, _, exs) -> List.map (fun e -> (n, e)) exs) p.Transcript.targets in
         Some (differential p ~examples ~source:s ~reference:(Transcript.reference md) ~slug ~targets:types) in
   { slug; derivations; source = Option.map (fun s -> decl_src ^ "\n" ^ s) source; replay = replay_v;
-    differential; unread = p.Transcript.unread }
+    differential; unread = p.Transcript.unread;
+    examples = List.concat_map (fun (n, _, exs) -> List.map (fun e -> (n, e)) exs) p.Transcript.targets }

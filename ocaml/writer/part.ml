@@ -18,6 +18,7 @@ type report = {
   source : string option;          (* the module, when every value was derived *)
   tests : [ `Passed | `Failed of string | `Not_run of string ];
   differential : (Verify.verdict, string) result option;
+  examples : (string * Spec.example) list;
 }
 
 let param_names args =
@@ -46,10 +47,36 @@ let derive ?cfg (iface : Iface.t) (examples : (string * Spec.example) list) (v :
     if List.exists (fun (_, _, t) -> not (Synth.first_order t)) params then
       Declined { name = v.Iface.vname; why = "takes a function argument, which the examples cannot show" }
     else
-      match Topdown.solve_top ?cfg ~decls ~params:(List.map (fun (n, _, t) -> (n, t)) params) ~out_ty:out exs with
+      match Topdown.solve_param ?cfg ~self:v.Iface.vname ~decls ~params:(List.map (fun (n, _, t) -> (n, t)) params) ~out_ty:out exs with
       | Topdown.Solved (body, considered) ->
           Derived { name = v.Iface.vname; params = List.map (fun (n, l, _) -> (n, l)) params; body; considered }
       | Topdown.Gave_up why -> Declined { name = v.Iface.vname; why }
+      | exception Out_of_memory -> Declined { name = v.Iface.vname; why = "memory bound reached" }
+
+(* A derived value becomes a component for the part's later values. *)
+let register_sibling (iface : Iface.t) name params body =
+  match List.find_opt (fun v -> v.Iface.vname = name) iface.Iface.values with
+  | None -> ()
+  | Some v when params <> [] ->
+      let ty = Iface.expand iface.Iface.decls v.Iface.vty in
+      let args, out = unarrow ty in
+      let args = List.map (fun (l, t) -> match l with Optional _ -> t_option t | _ -> t) args in
+      let rec gen t = match repr t with
+        | TVar x -> TGen (Hashtbl.hash x land 0xff)
+        | TCon (n, ts) -> TCon (n, List.map gen ts)
+        | TTuple ts -> TTuple (List.map gen ts)
+        | TArrow (l, a, b) -> TArrow (l, gen a, gen b)
+        | t -> t in
+      let names = List.map fst params in
+      let impl vals =
+        match Eval.run ~budget:!Eval.fuel (List.combine names vals)
+                (Expr.Let (true, name, Expr.Lam (names, body), Expr.App (Expr.Var name, List.map (fun v -> Expr.Lit v) vals))) with
+        | Some v -> v | None -> raise Components.Undefined in
+      Hashtbl.replace Eval.components name
+        { Components.name; scheme = gen (arrows args out); impl;
+          ocaml = (fun a -> "(" ^ String.concat " " (name :: a) ^ ")") };
+      Hashtbl.replace Components.siblings name (List.length params)
+  | Some _ -> ()
 
 let run_tests ~env ~scratch ~exercise_dir ~slug ~source =
   let dir = Filename.concat scratch (slug ^ "-accept") in
@@ -72,7 +99,15 @@ let solve ?cfg ~env ~scratch ~exercise_dir ~slug () =
     else if List.exists (fun d -> d.kind = Abstract) iface.Iface.decls then
       [ Declined { name = "(interface)";
                    why = "an abstract type needs a representation the writer would have to invent" } ]
-    else List.map (derive ?cfg iface probe.Probe.examples) iface.Iface.values in
+    else begin
+      Hashtbl.reset Components.siblings;
+      List.map (fun v ->
+          let d = derive ?cfg iface probe.Probe.examples v in
+          (match d with
+           | Derived { name; params; body; _ } -> register_sibling iface name params body
+           | Declined _ -> ());
+          d) iface.Iface.values
+    end in
   let all_derived = derivations <> [] && List.for_all (function Derived _ -> true | Declined _ -> false) derivations in
   let source =
     if not all_derived then None
@@ -92,4 +127,4 @@ let solve ?cfg ~env ~scratch ~exercise_dir ~slug () =
         let reference = Iface.read_file (Filename.concat exercise_dir ".meta/example.ml") in
         Some (Verify.differential ~env ~scratch ~exercise_dir ~slug ~iface
                 ~examples:probe.Probe.examples ~source ~reference ()) in
-  { slug; derivations; source; tests; differential }
+  { slug; derivations; source; tests; differential; examples = probe.Probe.examples }

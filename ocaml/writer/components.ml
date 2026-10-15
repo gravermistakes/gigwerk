@@ -60,6 +60,9 @@ let all : t list = [
   iarith "+" ( + ); iarith "-" ( - ); iarith "*" ( * );
   iarith "/" (fun x y -> if y = 0 then raise Undefined else x / y);
   iarith "mod" (fun x y -> if y = 0 then raise Undefined else x mod y);
+  iarith "land" ( land ); iarith "lor" ( lor ); iarith "lxor" ( lxor );
+  iarith "lsl" (fun x y -> if y < 0 || y > 62 then raise Undefined else x lsl y);
+  iarith "lsr" (fun x y -> if y < 0 || y > 62 then raise Undefined else x lsr y);
   fn "abs" (arrow t_int t_int) (un (fun x -> Value.Int (abs (int x))));
   mk "~-" (arrow t_int t_int) (un (fun x -> Value.Int (- (int x))))
     (function [ x ] -> "(- " ^ x ^ ")" | _ -> assert false);
@@ -219,3 +222,9 @@ let all : t list = [
 
 let find name = List.find (fun c -> c.name = name) all
 let _ = c
+
+(* Values the part itself has already been given, offered back as vocabulary
+   for its later values: `difference_of_squares` may call `square_of_sum`. They
+   are the part's own interface, not outside help, and they are cleared with
+   each part. *)
+let siblings : (string, int) Hashtbl.t = Hashtbl.create 4

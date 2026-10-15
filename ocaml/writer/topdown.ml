@@ -22,7 +22,14 @@
 open Types
 open Synth
 
-type goal = { gty : ty; outs : Value.t option array }
+(* outs: the value wanted at each point, or None for any. defined: points
+   with no particular value wanted, where the term must still have one; these
+   are the edge inputs (an empty list, zero) the examples never showed, and
+   they make a total program win over one that crashes there. *)
+type goal = { gty : ty; outs : Value.t option array; defined : bool array }
+
+let restrict g keep = { g with defined = Array.mapi (fun j d -> d && keep j) g.defined }
+let nodef n = Array.make n false
 
 type st = {
   cfg : config;
@@ -64,15 +71,26 @@ let meets (c : cand) g =
       | Some o -> (match c.vec.(j) with
           | Some v when Value.equal v o -> ()
           | _ -> ok := false)) g.outs;
+  Array.iteri (fun j d -> if d && g.outs.(j) = None && c.vec.(j) = None then ok := false) g.defined;
   !ok
 
 let cared g = List.filter (fun j -> g.outs.(j) <> None) (List.init (Array.length g.outs) Fun.id)
 
-let lookup b g = List.find_opt (fun c -> meets c g) (terms_of b g.gty)
+(* Solutions are lazy sequences: a strategy yields its answers one at a time,
+   smallest first within it, so the top can turn one down (a parameter left
+   unused) and draw the next without the search having been run twice. *)
+type sols = Expr.t Seq.t
+
+let lazy_seq (f : unit -> sols) : sols = fun () -> f () ()
+let alts (fs : (unit -> sols) list) : sols = Seq.flat_map lazy_seq (List.to_seq fs)
+let of_opt = function Some e -> Seq.return e | None -> Seq.empty
+let take_seq n (s : 'a Seq.t) : 'a Seq.t = Seq.take n s
+let alternatives = 3      (* answers kept per subgoal *)
+
+let lookup b g = List.to_seq (List.filter (fun c -> meets c g) (terms_of b g.gty))
+                 |> Seq.map (fun c -> c.expr) |> take_seq alternatives
 
 let take n l = List.filteri (fun i _ -> i < n) l
-
-let first_some fs = List.fold_left (fun acc f -> match acc with Some _ -> acc | None -> f ()) None fs
 
 let is_prefix p s = String.length p <= String.length s && String.sub s 0 (String.length p) = p
 
@@ -126,38 +144,45 @@ let divisibility b g =
         (take 20 (List.filter (fun c -> key c.ty = "int") (all_terms b)))
   | _ -> None
 
-let rec solve st (ctx : ctx) (b : bank) (g : goal) depth : Expr.t option =
-  match (match lookup b g with Some c -> Some c.expr | None -> divisibility b g) with
-  | Some e -> Some e
-  | None when depth <= 0 -> None
-  | None ->
-      tick st;
-      let cs = cared g in
-      if cs = [] then None
-      else
-        let outs = List.map (fun j -> Option.get g.outs.(j)) cs in
-        first_some [
-          (fun () -> by_constructor st ctx b g cs outs depth);
-          (fun () -> by_string st ctx b g cs outs depth);
-          (fun () -> by_list st ctx b g cs outs depth);
-          (fun () -> by_bool st ctx b g cs outs depth);
-          (fun () -> by_int st ctx b g cs outs depth);
-          (fun () -> by_cond st ctx b g cs depth);
-        ]
+(* Every combination of one answer per goal, in order. *)
+let rec product (seqs : sols list) : Expr.t list Seq.t =
+  match seqs with
+  | [] -> Seq.return []
+  | s :: rest ->
+      let rest = Seq.memoize (product rest) in
+      Seq.flat_map (fun e -> Seq.map (fun es -> e :: es) rest) s
+
+let rec solve st (ctx : ctx) (b : bank) (g : goal) depth : sols =
+  let leaves = Seq.append (lookup b g) (lazy_seq (fun () -> of_opt (divisibility b g))) in
+  if depth <= 0 then leaves
+  else
+    Seq.append leaves (lazy_seq (fun () ->
+        tick st;
+        let cs = cared g in
+        if cs = [] then Seq.empty
+        else
+          let outs = List.map (fun j -> Option.get g.outs.(j)) cs in
+          alts [
+            (fun () -> by_constructor st ctx b g cs outs depth);
+            (fun () -> by_string st ctx b g cs outs depth);
+            (fun () -> by_list st ctx b g cs outs depth);
+            (fun () -> by_bool st ctx b g cs outs depth);
+            (fun () -> by_int st ctx b g cs outs depth);
+            (fun () -> by_cond st ctx b g cs depth);
+          ]))
+
+and sub_solve st ctx b g depth = Seq.memoize (take_seq alternatives (solve st ctx b g depth))
 
 (* Same goal type, values given at some points. *)
 and sub g f = { g with outs = Array.mapi (fun j o -> match o with None -> None | Some v -> f j v) g.outs }
 
-and by_constructor st ctx b g cs outs depth =
+and by_constructor st ctx b g cs outs depth : sols =
   let with_args ty_args mk extract =
     let goals = List.mapi (fun i t ->
-        { gty = t; outs = Array.map (function None -> None | Some v -> Some (List.nth (extract v) i)) g.outs })
+        { gty = t; outs = Array.map (function None -> None | Some v -> Some (List.nth (extract v) i)) g.outs;
+          defined = g.defined })
         ty_args in
-    let rec all acc = function
-      | [] -> Some (mk (List.rev acc))
-      | sg :: rest -> (match solve st ctx b sg (depth - 1) with
-          | Some e -> all (e :: acc) rest | None -> None) in
-    all [] goals
+    Seq.map mk (product (List.map (fun sg -> sub_solve st ctx b sg (depth - 1)) goals))
   in
   ignore cs;
   match repr g.gty, outs with
@@ -166,10 +191,10 @@ and by_constructor st ctx b g cs outs depth =
   | _, Value.Con (c, args) :: _
     when List.for_all (function Value.Con (c', a) -> c' = c && List.length a = List.length args | _ -> false) outs ->
       (match ctor_arg_types st.decls g.gty c (List.length args) with
-       | Some [] -> Some (Expr.Con (c, []))
+       | Some [] -> Seq.return (Expr.Con (c, []))
        | Some ts -> with_args ts (fun es -> Expr.Con (c, es)) (function Value.Con (_, a) -> a | _ -> [])
-       | None -> None)
-  | _, Value.Record fs :: _ when List.for_all (function Value.Record _ -> true | _ -> false) outs ->
+       | None -> Seq.empty)
+  | _, Value.Record _ :: _ when List.for_all (function Value.Record _ -> true | _ -> false) outs ->
       (match repr g.gty with
        | TCon (name, _) ->
            (match List.find_opt (fun d -> d.name = name) st.decls with
@@ -177,15 +202,15 @@ and by_constructor st ctx b g cs outs depth =
                 with_args (List.map snd fields)
                   (fun es -> Expr.Record (List.combine (List.map fst fields) es))
                   (function Value.Record fs -> List.map snd fs | _ -> [])
-            | _ -> ignore fs; None)
-       | _ -> None)
-  | _ -> None
+            | _ -> Seq.empty)
+       | _ -> Seq.empty)
+  | _ -> Seq.empty
 
-and by_string st ctx b g cs outs depth =
+and by_string st ctx b g cs outs depth : sols =
   match repr g.gty with
   | TCon ("string", []) ->
       let strs = List.map (function Value.String s -> s | _ -> "") outs in
-      first_some [
+      alts [
         (* term ^ rest *)
         (fun () ->
            let prefixes = List.filter (fun c ->
@@ -193,36 +218,34 @@ and by_string st ctx b g cs outs depth =
                List.for_all2 (fun j s -> match c.vec.(j) with
                    | Some (Value.String p) -> if p <> "" then nonempty := true; is_prefix p s
                    | _ -> false) cs strs && !nonempty) (terms_of b t_string) in
-           List.fold_left (fun acc c -> match acc with
-               | Some _ -> acc
-               | None ->
-                   let rest = sub g (fun j v -> match v, c.vec.(j) with
-                       | Value.String s, Some (Value.String p) ->
-                           Some (Value.String (String.sub s (String.length p) (String.length s - String.length p)))
-                       | _ -> None) in
-                   Option.map (fun e -> Expr.Call ("^", [ c.expr; e ])) (solve st ctx b rest (depth - 1)))
-             None (take 12 prefixes));
+           Seq.flat_map (fun c ->
+               let rest = sub g (fun j v -> match v, c.vec.(j) with
+                   | Value.String s, Some (Value.String p) ->
+                       Some (Value.String (String.sub s (String.length p) (String.length s - String.length p)))
+                   | _ -> None) in
+               Seq.map (fun e -> Expr.Call ("^", [ c.expr; e ])) (sub_solve st ctx b rest (depth - 1)))
+             (List.to_seq (take 12 prefixes)));
         (* String.concat sep pieces, for a separator that occurs *)
         (fun () ->
            let seps = List.filter (fun sep -> List.exists (fun s -> List.length (split_on s sep) > 1) strs)
                [ " "; ", "; "\n"; "-"; ","; "; " ] in
-           first_some (List.map (fun sep -> fun () ->
+           Seq.flat_map (fun sep ->
                let lg = sub g (fun _ v -> match v with
                    | Value.String s -> Some (Value.List (List.map (fun x -> Value.String x) (split_on s sep)))
                    | _ -> None) in
                let lg = { lg with gty = t_list t_string } in
-               Option.map (fun e -> Expr.Call ("String.concat", [ Expr.Lit (Value.String sep); e ]))
-                 (solve st ctx b lg (depth - 1))) seps));
+               Seq.map (fun e -> Expr.Call ("String.concat", [ Expr.Lit (Value.String sep); e ]))
+                 (sub_solve st ctx b lg (depth - 1))) (List.to_seq seps));
         (* the string as its characters *)
         (fun () ->
            let lg = { gty = t_list t_char; outs = Array.map (function
                | Some (Value.String s) -> Some (Value.List (List.init (String.length s) (fun i -> Value.Char s.[i])))
-               | _ -> None) g.outs } in
-           Option.map (fun e -> Expr.Call ("implode", [ e ])) (solve st ctx b lg (depth - 1)));
+               | _ -> None) g.outs; defined = g.defined } in
+           Seq.map (fun e -> Expr.Call ("implode", [ e ])) (sub_solve st ctx b lg (depth - 1)));
       ]
-  | _ -> None
+  | _ -> Seq.empty
 
-and lambda_goal st ctx params (rows : (int * Value.t list * Value.t) list) out_ty depth =
+and lambda_goal st ctx params (rows : (int * Value.t list * Value.t) list) out_ty depth : sols =
   (* rows: outer point, parameter values, wanted output. Points that agree on
      everything are one point; points that agree on the inputs but not the
      output make the goal impossible. *)
@@ -235,23 +258,23 @@ and lambda_goal st ctx params (rows : (int * Value.t list * Value.t) list) out_t
       | Some o' -> if Value.equal o o' then None else (Hashtbl.replace tbl k (Value.Con ("#conflict", [])); None)
       | None -> Hashtbl.replace tbl k o; Some (k, env)) rows in
   if Hashtbl.fold (fun _ v acc -> acc || (match v with Value.Con ("#conflict", _) -> true | _ -> false)) tbl false
-  then None
-  else if rows = [] || List.length rows > 400 then None
+  then Seq.empty
+  else if rows = [] || List.length rows > 400 then Seq.empty
   else
     let points = Array.of_list (List.map snd rows) in
     let outs = Array.of_list (List.map (fun (k, _) -> Some (Hashtbl.find tbl k)) rows) in
     let ctx' = { vars = List.combine names params @ ctx.vars; points } in
     let b' = bank_for st ctx' [ out_ty ] st.lambda_bank_size in
-    Option.map (fun body -> Expr.Lam (names, body))
-      (solve st ctx' b' { gty = out_ty; outs } (depth - 1))
+    Seq.map (fun body -> Expr.Lam (names, body))
+      (sub_solve st ctx' b' { gty = out_ty; outs; defined = nodef (Array.length outs) } (depth - 1))
 
-and by_list st ctx b g cs outs depth =
+and by_list st ctx b g cs outs depth : sols =
   match repr g.gty with
   | TCon ("list", [ te ]) ->
       let lists = List.map (function Value.List l -> l | _ -> []) outs in
       let list_terms = List.filter (fun c -> match repr c.ty with TCon ("list", [ _ ]) -> true | _ -> false)
           (all_terms b) in
-      first_some [
+      alts [
         (* List.map f l *)
         (fun () ->
            let cands = List.filter (fun c ->
@@ -259,18 +282,18 @@ and by_list st ctx b g cs outs depth =
                    | Some (Value.List l') -> List.length l' = List.length l
                    | _ -> false) cs lists
                && List.exists (fun l -> l <> []) lists) list_terms in
-           first_some (List.map (fun c -> fun () ->
+           Seq.flat_map (fun c ->
                match repr c.ty with
                | TCon ("list", [ ta ]) ->
                    let rows = List.concat (List.map2 (fun j l -> match c.vec.(j) with
                        | Some (Value.List l') -> List.map2 (fun x o -> (j, [ x ], o)) l' l
                        | _ -> []) cs lists) in
                    (* not the identity, which the bank already had *)
-                   if key ta = key te && List.for_all (fun (_, xs, o) -> Value.equal (List.hd xs) o) rows then None
+                   if key ta = key te && List.for_all (fun (_, xs, o) -> Value.equal (List.hd xs) o) rows then Seq.empty
                    else
-                     Option.map (fun f -> Expr.Call ("List.map", [ f; c.expr ]))
+                     Seq.map (fun f -> Expr.Call ("List.map", [ f; c.expr ]))
                        (lambda_goal st ctx [ ta ] rows te depth)
-               | _ -> None) (take 6 cands)));
+               | _ -> Seq.empty) (List.to_seq (take 6 cands)));
         (* List.filter p l *)
         (fun () ->
            let subseq small big =
@@ -285,77 +308,128 @@ and by_list st ctx b g cs outs depth =
                    | Some (Value.List l') -> subseq l l' <> None | _ -> false) cs lists
                && List.exists2 (fun j l -> match c.vec.(j) with
                    | Some (Value.List l') -> List.length l' > List.length l | _ -> false) cs lists) list_terms in
-           first_some (List.map (fun c -> fun () ->
+           Seq.flat_map (fun c ->
                let rows = List.concat (List.map2 (fun j l -> match c.vec.(j) with
                    | Some (Value.List l') ->
                        (match subseq l l' with
                         | Some flags -> List.map (fun (x, keep) -> (j, [ x ], Value.Bool keep)) flags
                         | None -> [])
                    | _ -> []) cs lists) in
-               Option.map (fun p -> Expr.Call ("List.filter", [ p; c.expr ]))
-                 (lambda_goal st ctx [ te ] rows t_bool depth)) (take 6 cands)));
+               Seq.map (fun p -> Expr.Call ("List.filter", [ p; c.expr ]))
+                 (lambda_goal st ctx [ te ] rows t_bool depth)) (List.to_seq (take 6 cands)));
+        (* List.concat_map f l, when every element of l accounts for an equal
+           share of the output: the shares are f's examples *)
+        (fun () ->
+           let cands = List.filter (fun c ->
+               List.for_all2 (fun j l -> match c.vec.(j) with
+                   | Some (Value.List l') ->
+                       (l' = [] && l = []) || (l' <> [] && List.length l mod List.length l' = 0)
+                   | _ -> false) cs lists
+               && List.exists2 (fun j l -> match c.vec.(j) with
+                   | Some (Value.List l') -> l' <> [] && List.length l <> List.length l'
+                   | _ -> false) cs lists) list_terms in
+           Seq.flat_map (fun c ->
+               match repr c.ty with
+               | TCon ("list", [ ta ]) ->
+                   let rows = List.concat (List.map2 (fun j l -> match c.vec.(j) with
+                       | Some (Value.List l') when l' <> [] ->
+                           let k = List.length l / List.length l' in
+                           List.mapi (fun i x ->
+                               (j, [ x ], Value.List (List.filteri (fun m _ -> m >= i * k && m < (i + 1) * k) l))) l'
+                       | _ -> []) cs lists) in
+                   Seq.map (fun f -> Expr.Call ("List.concat_map", [ f; c.expr ]))
+                     (lambda_goal st ctx [ ta ] rows g.gty depth)
+               | _ -> Seq.empty) (List.to_seq (take 6 cands)));
         (* List.init n f, n the length *)
         (fun () ->
            let ints = List.filter (fun c -> key c.ty = "int"
                && List.for_all2 (fun j l -> c.vec.(j) = Some (Value.Int (List.length l))) cs lists) (all_terms b) in
-           first_some (List.map (fun c -> fun () ->
+           Seq.flat_map (fun c ->
                let rows = List.concat (List.map2 (fun j l ->
                    List.mapi (fun i o -> (j, [ Value.Int i ], o)) l) cs lists) in
-               Option.map (fun f -> Expr.Call ("List.init", [ c.expr; f ]))
-                 (lambda_goal st ctx [ t_int ] rows te depth)) (take 3 ints)));
+               Seq.map (fun f -> Expr.Call ("List.init", [ c.expr; f ]))
+                 (lambda_goal st ctx [ t_int ] rows te depth)) (List.to_seq (take 3 ints)));
         (* List.rev l *)
         (fun () ->
-           if List.for_all (fun l -> List.rev l = l) lists then None
+           if List.for_all (fun l -> List.rev l = l) lists then Seq.empty
            else
              let rg = sub g (fun _ v -> match v with Value.List l -> Some (Value.List (List.rev l)) | _ -> None) in
-             match lookup b rg with
-             | Some c -> Some (Expr.Call ("List.rev", [ c.expr ]))
-             | None -> None);
+             Seq.map (fun e -> Expr.Call ("List.rev", [ e ])) (lookup b rg));
         (* x :: rest *)
         (fun () ->
            if List.for_all (fun l -> l <> []) lists then
-             let hg = { gty = te; outs = Array.map (function Some (Value.List (h :: _)) -> Some h | _ -> None) g.outs } in
+             let hg = { gty = te; outs = Array.map (function Some (Value.List (h :: _)) -> Some h | _ -> None) g.outs;
+                        defined = g.defined } in
              let tg = sub g (fun _ v -> match v with Value.List (_ :: t) -> Some (Value.List t) | _ -> None) in
-             match solve st ctx b hg (depth - 1) with
-             | None -> None
-             | Some h -> Option.map (fun t -> Expr.Call ("::", [ h; t ])) (solve st ctx b tg (depth - 1))
-           else None);
+             Seq.map (function [ h; t ] -> Expr.Call ("::", [ h; t ]) | _ -> assert false)
+               (product [ sub_solve st ctx b hg (depth - 1); sub_solve st ctx b tg (depth - 1) ])
+           else Seq.empty);
       ]
-  | _ -> None
+  | _ -> Seq.empty
 
-and by_bool st ctx b g cs outs depth =
+and by_bool st ctx b g cs outs depth : sols =
   match repr g.gty with
   | TCon ("bool", []) ->
       let bools = List.map (function Value.Bool v -> v | _ -> false) outs in
       let tests = List.filter (fun c -> key c.ty = "bool") (all_terms b) in
       let holds c j = c.vec.(j) = Some (Value.Bool true) in
       let defined c j = match c.vec.(j) with Some (Value.Bool _) -> true | _ -> false in
-      first_some [
+      alts [
         (* a && b: a true wherever the goal is, false somewhere it is not *)
         (fun () ->
            let cands = List.filter (fun c ->
                List.for_all2 (fun j v -> defined c j && (not v || holds c j)) cs bools
                && List.exists2 (fun j v -> not v && not (holds c j)) cs bools) tests in
-           first_some (List.map (fun c -> fun () ->
-               let rest = sub g (fun j v -> if holds c j then Some v else None) in
-               Option.map (fun e -> Expr.Call ("&&", [ c.expr; e ])) (solve st ctx b rest (depth - 1)))
-               (take 8 cands)));
+           Seq.flat_map (fun c ->
+               let rest = restrict (sub g (fun j v -> if holds c j then Some v else None)) (holds c) in
+               Seq.map (fun e -> Expr.Call ("&&", [ c.expr; e ])) (sub_solve st ctx b rest (depth - 1)))
+             (List.to_seq (take 8 cands)));
         (* a || b: a false wherever the goal is, true somewhere it is *)
         (fun () ->
            let cands = List.filter (fun c ->
                List.for_all2 (fun j v -> defined c j && (v || not (holds c j))) cs bools
                && List.exists2 (fun j v -> v && holds c j) cs bools) tests in
-           first_some (List.map (fun c -> fun () ->
-               let rest = sub g (fun j v -> if holds c j then None else Some v) in
-               Option.map (fun e -> Expr.Call ("||", [ c.expr; e ])) (solve st ctx b rest (depth - 1)))
-               (take 8 cands)));
+           Seq.flat_map (fun c ->
+               let rest = restrict (sub g (fun j v -> if holds c j then None else Some v)) (fun j -> not (holds c j)) in
+               Seq.map (fun e -> Expr.Call ("||", [ c.expr; e ])) (sub_solve st ctx b rest (depth - 1)))
+             (List.to_seq (take 8 cands)));
       ]
-  | _ -> None
+  | _ -> Seq.empty
 
-and by_int st ctx b g cs outs _depth =
+and by_int st ctx b g cs outs depth : sols =
   match repr g.gty with
   | TCon ("int", []) ->
       let ns = List.map (function Value.Int n -> n | _ -> min_int) outs in
+      let small_ints = List.filteri (fun i _ -> i < 15)
+          (List.filter (fun c -> key c.ty = "int" && not (closed c.expr)
+                                 && List.for_all (fun j -> c.vec.(j) <> None) cs) (all_terms b)) in
+      let ival c j = match c.vec.(j) with Some (Value.Int n) -> n | _ -> 0 in
+      let isqrt n = if n < 0 then None else
+          let r = int_of_float (Float.sqrt (float_of_int n)) in
+          List.find_opt (fun k -> k >= 0 && k * k = n) [ r - 1; r; r + 1 ] in
+      let arithmetic = [
+        (* e * e, when every output is a perfect square *)
+        (fun () ->
+           if List.exists (fun n -> n > 1) ns && List.for_all (fun n -> isqrt n <> None) ns then
+             let rg = sub g (fun _ v -> match v with
+                 | Value.Int n -> Option.map (fun r -> Value.Int r) (isqrt n) | _ -> None) in
+             Seq.map (fun e -> Expr.Call ("*", [ e; e ])) (sub_solve st ctx b rg (depth - 1))
+           else Seq.empty);
+        (* a * rest, a dividing every output *)
+        (fun () ->
+           Seq.flat_map (fun a ->
+               if List.for_all2 (fun j n -> let k = ival a j in k <> 0 && n mod k = 0) cs ns
+               && List.exists (fun j -> abs (ival a j) > 1) cs then
+                 let rg = sub g (fun j v -> match v with Value.Int n -> Some (Value.Int (n / ival a j)) | _ -> None) in
+                 Seq.map (fun e -> Expr.Call ("*", [ a.expr; e ])) (sub_solve st ctx b rg (depth - 1))
+               else Seq.empty) (List.to_seq small_ints));
+        (* a + rest *)
+        (fun () ->
+           Seq.flat_map (fun a ->
+               let rg = sub g (fun j v -> match v with Value.Int n -> Some (Value.Int (n - ival a j)) | _ -> None) in
+               Seq.map (fun e -> Expr.Call ("+", [ a.expr; e ])) (sub_solve st ctx b rg (depth - 1)))
+             (List.to_seq small_ints));
+      ] in
       let list_terms = List.filter (fun c -> match repr c.ty with TCon ("list", [ _ ]) -> true | _ -> false)
           (all_terms b) in
       (* the functions a lambda bank holds for one parameter of type t *)
@@ -373,15 +447,15 @@ and by_int st ctx b g cs outs _depth =
       let run_lam (lb, lc) j v =
         Eval.run ~budget:st.cfg.fuel ((fst (List.hd lb.params), v) :: ctx.points.(j)) lc.expr in
       let elements c j = match c.vec.(j) with Some (Value.List l) -> Some l | _ -> None in
-      first_some [
+      [
         (* List.length (List.filter p l) *)
         (fun () ->
            let cands = List.filter (fun c -> List.for_all2 (fun j n -> match elements c j with
                | Some l -> n >= 0 && n <= List.length l | None -> false) cs ns) list_terms in
-           first_some (List.map (fun c -> fun () ->
+           Seq.flat_map (fun c ->
                match repr c.ty with
                | TCon ("list", [ te ]) ->
-                   List.find_map (fun (lb, lc) ->
+                   Seq.filter_map (fun (lb, lc) ->
                        let ok = List.for_all2 (fun j n -> match elements c j with
                            | Some l ->
                                let k = List.fold_left (fun k v -> match run_lam (lb, lc) j v with
@@ -390,14 +464,14 @@ and by_int st ctx b g cs outs _depth =
                            | None -> false) cs ns in
                        if ok then Some (Expr.Call ("List.length", [ Expr.Call ("List.filter",
                                                                      [ Expr.Lam (List.map fst lb.params, lc.expr); c.expr ]) ]))
-                       else None) (lambdas te t_bool)
-               | _ -> None) (take 40 cands)));
+                       else None) (List.to_seq (lambdas te t_bool)) |> take_seq 1
+               | _ -> Seq.empty) (List.to_seq (take 40 cands)));
         (* sum over a list of a function of each element *)
         (fun () ->
-           first_some (List.map (fun c -> fun () ->
+           Seq.flat_map (fun c ->
                match repr c.ty with
                | TCon ("list", [ te ]) ->
-                   List.find_map (fun (lb, lc) ->
+                   Seq.filter_map (fun (lb, lc) ->
                        let ok = List.for_all2 (fun j n -> match elements c j with
                            | Some l ->
                                (try List.fold_left (fun acc v -> match run_lam (lb, lc) j v with
@@ -409,16 +483,17 @@ and by_int st ctx b g cs outs _depth =
                          Some (Expr.Call ("List.fold_left", [
                              Expr.Lam ([ "acc"; "e" ], Expr.Call ("+", [ Expr.Var "acc"; Expr.App (f, [ Expr.Var "e" ]) ]));
                              Expr.Lit (Value.Int 0); c.expr ]))
-                       else None) (lambdas te t_int)
-               | _ -> None) (take 40 list_terms)));
-      ]
-  | _ -> None
+                       else None) (List.to_seq (lambdas te t_int)) |> take_seq 1
+               | _ -> Seq.empty) (List.to_seq (take 40 list_terms)));
+      ] @ arithmetic |> fun l -> alts l
+  | _ -> Seq.empty
 
-and by_cond st ctx b g cs depth =
-  if List.length cs < 2 then None
+and by_cond st ctx b g cs depth : sols =
+  if List.length cs < 2 then Seq.empty
   else
     let tests = List.filter (fun c -> key c.ty = "bool"
         && List.for_all (fun j -> match c.vec.(j) with Some (Value.Bool _) -> true | _ -> false) cs
+        && Array.for_all (fun x -> x) (Array.mapi (fun j d -> not d || c.vec.(j) <> None) g.defined)
         && List.exists (fun j -> c.vec.(j) = Some (Value.Bool true)) cs
         && List.exists (fun j -> c.vec.(j) = Some (Value.Bool false)) cs) (all_terms b) in
     (* A guard that splits the points exactly where the outputs change shape
@@ -435,33 +510,127 @@ and by_cond st ctx b g cs depth =
       && List.for_all (fun j -> List.for_all (fun k ->
           (shape j = shape k) = (c.vec.(j) = c.vec.(k))) cs) cs in
     let tests = List.filter separates tests @ List.filter (fun c -> not (separates c)) tests in
-    first_some (List.map (fun c -> fun () ->
-        let yes = sub g (fun j v -> if c.vec.(j) = Some (Value.Bool true) then Some v else None) in
-        let no = sub g (fun j v -> if c.vec.(j) = Some (Value.Bool false) then Some v else None) in
+    (* `if x = 5 then 225` is a lookup table, not a program: a guard that
+       compares a parameter with a literal nothing explains is refused *)
+    let memorizes (c : cand) = match c.expr with
+      | Expr.Call (("=" | "<>"), [ Expr.Var _; Expr.Lit v ]) | Expr.Call (("=" | "<>"), [ Expr.Lit v; Expr.Var _ ]) ->
+          (match v with
+           | Value.Int (0 | 1) | Value.Bool _ | Value.List [] | Value.String "" | Value.Char ' ' -> false
+           | _ -> true)
+      | _ -> false in
+    let tests = List.filter (fun c -> not (memorizes c)) tests in
+    Seq.flat_map (fun c ->
+        let yes = restrict (sub g (fun j v -> if c.vec.(j) = Some (Value.Bool true) then Some v else None))
+            (fun j -> c.vec.(j) = Some (Value.Bool true)) in
+        let no = restrict (sub g (fun j v -> if c.vec.(j) = Some (Value.Bool false) then Some v else None))
+            (fun j -> c.vec.(j) = Some (Value.Bool false)) in
         (* a guard is a question the examples may answer by accident, so a
            conditional costs two levels where a decomposition costs one *)
-        match solve st ctx b yes (depth - 2) with
-        | None -> None
-        | Some a -> Option.map (fun e -> Expr.If (c.expr, a, e)) (solve st ctx b no (depth - 2)))
-        (take 10 tests))
+        Seq.map (function [ a; e ] -> Expr.If (c.expr, a, e) | _ -> assert false)
+          (product [ sub_solve st ctx b yes (depth - 2); sub_solve st ctx b no (depth - 2) ]))
+      (List.to_seq (take 10 tests))
 
 type result = Solved of Expr.t * int | Gave_up of string
 
-let solve_top ?(cfg = default) ?(bank_size = 6) ?(lambda_bank_size = 5) ?(depth = 4)
+(* Inputs at the edge of each parameter's type, in the first example's
+   context: the cases a total program handles and the examples often omit. *)
+let edge_inputs (params : (string * ty) list) (points : (string * Value.t) list list) =
+  match points with
+  | [] -> []
+  | p0 :: _ ->
+      let edges t = match repr t with
+        | TCon ("list", _) -> [ Value.List [] ]
+        | TCon ("string", []) -> [ Value.String "" ]
+        | TCon ("int", []) -> [ Value.Int 0 ]
+        | TCon ("option", _) -> [ Value.Con ("None", []) ]
+        | _ -> [] in
+      let pts = List.concat_map (fun (x, t) ->
+          List.filter_map (fun v ->
+              let p = List.map (fun (y, w) -> if y = x then (y, v) else (y, w)) p0 in
+              if List.exists (fun q -> List.for_all2 (fun (_, a) (_, b) -> Value.equal a b) q p) points then None
+              else Some p) (edges t)) params in
+      List.filteri (fun i _ -> i < 6) pts
+
+let solve_top ?(cfg = default) ?(bank_size = 6) ?(lambda_bank_size = 5) ?(depth = 4) ?(self = "f") ?(edges = false)
     ~decls ~params ~out_ty (examples : Spec.example list) =
   Synth.total := 0;
   Synth.pending := [];
   let st = { cfg; decls; examples; steps = 0; banks = Hashtbl.create 8; bank_size; lambda_bank_size } in
-  let points = Array.of_list (List.map (fun ex -> List.combine (List.map fst params) ex.Spec.args) examples) in
+  let base_points = List.map (fun ex -> List.combine (List.map fst params) ex.Spec.args) examples in
+  let edge_points = if edges then edge_inputs params base_points else [] in
+  let points = Array.of_list (base_points @ edge_points) in
   let ctx = { vars = params; points } in
   let b = bank_for st ctx [ out_ty ] bank_size in
-  let g = { gty = out_ty; outs = Array.of_list (List.map (fun ex -> Some ex.Spec.out) examples) } in
+  let n_ex = List.length examples in
+  let g = { gty = out_ty;
+            outs = Array.init (Array.length points) (fun j -> if j < n_ex then Some (List.nth examples j).Spec.out else None);
+            defined = Array.init (Array.length points) (fun j -> j >= n_ex) } in
+  (* Shallow deduction first, then structural recursion, then deeper
+     deduction: a recursive program is preferred to a deep chain of guards. *)
+  let recursion () =
+    let attempt f = try f () with Exhausted -> None in
+    match attempt (fun () -> Recur.list_recursion ~cfg ~self ~decls ~params ~out_ty examples) with
+    | Some e -> Some e
+    | None -> attempt (fun () -> Recur.int_recursion ~cfg ~self ~decls ~params ~out_ty examples) in
+  (* Every parameter of a part matters, so a program that ignores one is
+     probably fitting a coincidence (replicate's one example has a list of
+     length 3 and a count of 3). The first solution that uses all of them is
+     preferred; failing that, the first solution at all. *)
+  let uses_all e = List.for_all (fun (p, _) -> Expr.mentions p e) params in
+  let first = ref None and first_depth = ref None in
+  let scan d =
+    let seen = ref 0 in
+    let rec go s = match s () with
+      | Seq.Nil -> None
+      | Seq.Cons (e, rest) ->
+          if !first = None then first := Some e;
+          incr seen;
+          if uses_all e then Some e else if !seen >= 40 then None else go rest in
+    go (solve st ctx b g d) in
   let rec deepen d =
-    if d > depth then Gave_up (Printf.sprintf "no derivation within depth %d (%d steps)" depth st.steps)
-    else match solve st ctx b g d with
+    if d > depth then
+      (match !first with
+       | Some e -> Solved (e, st.steps)
+       | None -> Gave_up (Printf.sprintf "no derivation within depth %d (%d steps)" depth st.steps))
+    else if d = 3 && !first = None then
+      (match recursion () with
+       | Some e -> Solved (e, st.steps)
+       | None -> (match scan d with Some e -> Solved (e, st.steps) | None -> deepen (d + 1)))
+    else match scan d with
       | Some e -> Solved (e, st.steps)
-      | None -> deepen (d + 1)
+      | None ->
+          (* found something that ignores a parameter: one level deeper, then settle *)
+          (match !first, !first_depth with
+           | Some _, None -> first_depth := Some d; deepen (d + 1)
+           | Some _, Some d0 when d > d0 -> deepen (depth + 1)
+           | _ -> deepen (d + 1))
   in
   try deepen 0 with
-  | Out_of_steps -> Gave_up (Printf.sprintf "deduction bound reached: %d steps" st.steps)
-  | Exhausted -> Gave_up (Printf.sprintf "term bound reached: %d terms kept" !Synth.total)
+  | Out_of_steps | Exhausted as ex ->
+      (match !first with
+       | Some e -> Solved (e, st.steps)
+       | None -> Gave_up (match ex with
+           | Out_of_steps -> Printf.sprintf "deduction bound reached: %d steps" st.steps
+           | _ -> Printf.sprintf "term bound reached: %d terms kept" !Synth.total))
+
+(* The strict parametric reading first (free-theorem examples, no comparison
+   of a rigid 'a), then the ordinary one. *)
+let solve_param ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty examples =
+  let base = match cfg with Some c -> c | None -> default in
+  let attempt cfg exs =
+    match solve_top ~cfg ?bank_size ?lambda_bank_size ?depth ?self ~edges:true ~decls ~params ~out_ty exs with
+    | Solved _ as r -> r
+    | Gave_up _ -> solve_top ~cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty exs in
+  let ordinary () = attempt base examples in
+  (* The collapsing theorem is only safe to lean on when the output carries
+     a 'a: a function to a 'a-free type (a test, a count) that never looks
+     at its elements depends on shape alone, which the parts asking for one
+     rarely mean; is_palindrome compares, and collapsing would lie about it. *)
+  match (if Parametric.has_var out_ty then Parametric.augment ~params ~out_ty examples else None) with
+  | None -> ordinary ()
+  | Some more ->
+      (match attempt { base with strict = true } more with
+       | Solved _ as r -> r
+       | Gave_up why ->
+           if Sys.getenv_opt "GW_DEBUG" <> None then prerr_endline ("  strict reading gave up: " ^ why);
+           ordinary ())

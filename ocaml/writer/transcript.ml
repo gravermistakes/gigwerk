@@ -82,7 +82,9 @@ let exchanges (b : block) =
 
 (* `- : t = v` or `val x : t = v`, to (type text, value text). *)
 let split_response r =
-  let r = String.trim r in
+  (* a long answer wraps: `- : string rle list =` then the value on the next
+     line, so line breaks are spaces here *)
+  let r = String.trim (String.map (fun c -> if c = '\n' || c = '\r' || c = '\t' then ' ' else c) r) in
   let after_colon s =
     match String.index_opt s ':' with
     | None -> None

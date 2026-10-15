@@ -38,18 +38,19 @@ type bank = {
 }
 
 type config = {
+  strict : bool;                   (* no comparison may touch a rigid 'a *)
   max_size : int;
   max_lambda_size : int;
   max_cands : int;                 (* total terms kept, across all banks *)
   fuel : int;                      (* evaluation steps per application *)
 }
 
-let default = { max_size = 9; max_lambda_size = 5; max_cands = 60_000; fuel = 2_000 }
+let default = { strict = false; max_size = 9; max_lambda_size = 5; max_cands = 40_000; fuel = 2_000 }
 
 (* Terms kept across every bank of one derivation. Banks are per context and
    a deduction opens many contexts; without a total they add up to whatever
    memory there is. *)
-let global_cap = 1_200_000
+let global_cap = 300_000
 
 exception Found of Expr.t
 exception Exhausted
@@ -151,6 +152,18 @@ type comp = {
 
 let is_component comp = Hashtbl.mem Eval.components comp.cname
 
+(* Components that compare values of their first type variable. *)
+let comparing = [ "="; "<>"; "<"; ">"; "<="; ">="; "compare"; "max"; "min"; "List.mem";
+                  "List.sort"; "List.sort_uniq"; "List.assoc_opt" ]
+
+let sibling_comps () =
+  Hashtbl.fold (fun name _ acc ->
+      match Hashtbl.find_opt Eval.components name with
+      | Some c -> { cname = c.Components.name; scheme = c.Components.scheme;
+                    build = (fun args -> Expr.Call (name, args)); run = c.Components.impl } :: acc
+      | None -> acc) Components.siblings []
+  |> List.sort (fun a b -> compare a.cname b.cname)
+
 let of_component (c : Components.t) =
   { cname = c.Components.name; scheme = c.Components.scheme;
     build = (fun args -> Expr.Call (c.Components.name, args)); run = c.Components.impl }
@@ -239,6 +252,8 @@ let string_fragments (examples : Spec.example list) =
   let cut pieces needles =
     List.concat_map (fun p -> List.fold_left (fun acc nd -> List.concat_map (fun x -> split_on x nd) acc) [ p ] needles) pieces in
   let first = List.filter (fun s -> s <> "") (cut outs (List.sort_uniq compare ins)) in
+  (* an output untouched by any cut is that example's whole answer *)
+  let first = List.filter (fun f -> not (List.mem f outs) || List.length (List.filter (( = ) f) outs) >= 2) first in
   let frags = List.sort_uniq compare first in
   let second = List.filter (fun s -> s <> "") (cut outs frags) in
   let all = List.sort_uniq compare (frags @ second) in
@@ -263,9 +278,13 @@ let inferred_divisors (spec_examples : Spec.example list) =
 
 let constants (spec_examples : Spec.example list) (target_out : ty) (decls : decl list) =
   let ints = [ 0; 1; 2; 3; 4; 5; 10; 100; 1000 ] in
-  let out_ints = List.filter_map (fun ex -> match ex.Spec.out with Value.Int n -> Some n | _ -> None) spec_examples in
-  let deep_ints = List.concat_map (fun ex -> List.filter_map (function
-      | Value.Int n when abs n <= 1000 -> Some n | _ -> None) (subvalues ex.Spec.out)) spec_examples in
+  (* A value that is one example's answer is not vocabulary: offering it back
+     lets the search memorize that example. Only what recurs across answers
+     is offered. *)
+  let recurring vs = List.filter (fun v -> List.length (List.filter (( = ) v) vs) >= 2) vs in
+  let out_ints = recurring (List.filter_map (fun ex -> match ex.Spec.out with Value.Int n -> Some n | _ -> None) spec_examples) in
+  let deep_ints = recurring (List.concat_map (fun ex -> List.sort_uniq compare (List.filter_map (function
+      | Value.Int n when abs n <= 1000 -> Some n | _ -> None) (subvalues ex.Spec.out))) spec_examples) in
   let gcds = inferred_divisors spec_examples in
   let ints = List.sort_uniq compare (ints @ out_ints @ deep_ints @ gcds) in
   let chars = List.sort_uniq compare (List.concat_map (fun ex ->
@@ -274,8 +293,8 @@ let constants (spec_examples : Spec.example list) (target_out : ty) (decls : dec
   let chars = List.sort_uniq compare (' ' :: chars) in
   let strings = "" :: string_fragments spec_examples in
   let strings = List.sort_uniq compare (strings
-      @ List.filter_map (fun ex -> match ex.Spec.out with
-          | Value.String s when String.length s <= 60 -> Some s | _ -> None) spec_examples) in
+      @ recurring (List.filter_map (fun ex -> match ex.Spec.out with
+          | Value.String s when String.length s <= 60 -> Some s | _ -> None) spec_examples)) in
   let ctor_consts = List.concat_map (fun d -> match d.kind with
       | Variant ctors -> List.filter_map (fun (c, args) ->
           if args = [] && d.params = [] then Some (Expr.Con (c, []), Value.Con (c, []), TCon (d.name, []))
@@ -476,6 +495,12 @@ and grow s b n ~lambda_depth =
                      of constants are values, and stay. *)
                   let invented = chosen <> [] && is_component comp
                                  && List.for_all (fun (_, e, _) -> closed e) chosen in
+                  (* under the strict reading a comparison may not look at a
+                     rigid 'a: that is what makes the free theorem hold *)
+                  let compares_var = s.cfg.strict && List.mem comp.cname comparing
+                                     && (match List.assoc_opt 0 subst with
+                                         | Some t -> Parametric.has_var t | None -> false) in
+                  let invented = invented || compares_var in
                   if not (has_gen rty) && not invented then begin
                     let chosen = List.sort (fun (i, _, _) (j, _, _) -> compare i j) chosen in
                     let exprs = List.map (fun (_, e, _) -> e) chosen in
@@ -616,7 +641,7 @@ let build_search ?(cfg = default) ~(decls : decl list) ~(examples : Spec.example
   List.iter (fun d -> match d.kind with
       | Variant ctors -> Value.declare_variant (List.map (fun (c, a) -> (c, List.length a)) ctors)
       | _ -> ()) decls;
-  let comps = List.map of_component Components.all @ ctor_comps decls in
+  let comps = List.map of_component Components.all @ ctor_comps decls @ sibling_comps () in
   let all_types = List.sort_uniq (fun a b -> compare (key a) (key b))
       (List.concat_map types_in types @ List.concat_map (fun (_, t) -> types_in t) ctx.vars
        @ [ t_list t_int; t_list t_char; t_list t_string ]) in

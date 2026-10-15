@@ -17,6 +17,7 @@ type verdict = {
   compared : int;
   agreed : int;
   disagreements : string list;   (* call, writer's value, reference's value *)
+  samples : (string * Value.t list * Value.t) list;   (* fresh inputs and the reference's answers *)
 }
 
 (* Random.State with a fixed seed: reproducible, and without the short
@@ -118,6 +119,61 @@ let call_source ~name ~labels args =
       | Optional s -> "?" ^ s ^ ":" ^ lit) labels args in
   "(" ^ String.concat " " (name :: parts) ^ ")"
 
+(* What every example input has in common, kept in the generated ones: an
+   input no test of the part could have looked like says nothing about the
+   part. A sorted array for a binary search, a non-negative count, two strands
+   of equal length. Read off the examples, Daikon-style, and only ever used
+   to shape inputs, never to excuse a disagreement on them. *)
+type invariant = Sorted of int | Distinct of int | Nonneg of int | Positive of int | Same_length of int * int
+
+let elements = function Value.List l -> Some l | Value.Array a -> Some (Array.to_list a) | _ -> None
+
+let invariants (examples : Spec.example list) arity =
+  let col i = List.filter_map (fun ex -> List.nth_opt ex.Spec.args i) examples in
+  let all p i = let c = col i in c <> [] && List.for_all p c in
+  let sorted v = match elements v with
+    | Some l -> let rec ok = function a :: (b :: _ as t) -> Value.compare a b <= 0 && ok t | _ -> true in ok l
+    | None -> false in
+  let distinct v = match elements v with
+    | Some l -> List.length (List.sort_uniq Value.compare l) = List.length l | None -> false in
+  let long i = List.exists (fun v -> match elements v with Some l -> List.length l >= 2 | None -> false) (col i) in
+  let int_ok p v = match v with Value.Int n -> p n | _ -> false in
+  List.concat (List.init arity (fun i ->
+      (if all sorted i && long i then [ Sorted i ] else [])
+      @ (if all distinct i && long i then [ Distinct i ] else [])
+      @ (if all (int_ok (fun n -> n > 0)) i then [ Positive i ]
+         else if all (int_ok (fun n -> n >= 0)) i then [ Nonneg i ] else [])
+      @ List.concat (List.init arity (fun j ->
+          if j > i && all (fun _ -> true) i
+             && List.for_all (fun ex -> match List.nth_opt ex.Spec.args i, List.nth_opt ex.Spec.args j with
+                 | Some a, Some b -> (match elements a, elements b with
+                     | Some x, Some y -> List.length x = List.length y | _ -> false)
+                 | _ -> false) examples
+          then [ Same_length (i, j) ] else []))))
+
+let impose invs (inp : Value.t list) =
+  let rebuild orig l = match orig with Value.Array _ -> Value.Array (Array.of_list l) | _ -> Value.List l in
+  let arr = Array.of_list inp in
+  List.iter (function
+      | Sorted i -> (match elements arr.(i) with
+          | Some l -> arr.(i) <- rebuild arr.(i) (List.stable_sort Value.compare l) | None -> ())
+      | Distinct i -> (match elements arr.(i) with
+          | Some l -> arr.(i) <- rebuild arr.(i) (List.sort_uniq Value.compare l) | None -> ())
+      | Nonneg i -> (match arr.(i) with Value.Int n -> arr.(i) <- Value.Int (abs n) | _ -> ())
+      | Positive i -> (match arr.(i) with Value.Int n -> arr.(i) <- Value.Int (max 1 (abs n)) | _ -> ())
+      | Same_length (i, j) -> (match elements arr.(i), elements arr.(j) with
+          | Some x, Some y ->
+              let n = min (List.length x) (List.length y) in
+              let cut l = List.filteri (fun k _ -> k < n) l in
+              arr.(i) <- rebuild arr.(i) (cut x); arr.(j) <- rebuild arr.(j) (cut y)
+          | _ -> ())) invs;
+  (* sorting after distinct, distinct after sorting: both hold either way *)
+  List.iter (function
+      | Sorted i -> (match elements arr.(i) with
+          | Some l -> arr.(i) <- rebuild arr.(i) (List.stable_sort Value.compare l) | None -> ())
+      | _ -> ()) invs;
+  Array.to_list arr
+
 let inputs_for decls (v : Iface.value_spec) (examples : Spec.example list) n =
   let ty = Iface.expand decls v.Iface.vty in
   let args, _ = unarrow ty in
@@ -126,10 +182,11 @@ let inputs_for decls (v : Iface.value_spec) (examples : Spec.example list) n =
     let pool = List.concat_map (fun ex -> List.concat_map Synth.subvalues ex.Spec.args) examples in
     let seen i = List.filter_map (fun ex -> List.nth_opt ex.Spec.args i) examples in
     let tys = List.map (fun (l, t) -> match l with Optional _ -> t_option t | _ -> t) args in
+    let invs = invariants examples (List.length tys) in
     let rec draw acc k =
       if k = 0 || List.length acc >= n then List.rev acc
       else
-        let inp = List.mapi (fun i t -> gen decls pool t (seen i)) tys in
+        let inp = impose invs (List.mapi (fun i t -> gen decls pool t (seen i)) tys) in
         let dup = List.exists (fun a -> List.for_all2 Value.equal a inp) acc
                   || List.exists (fun ex -> List.for_all2 Value.equal ex.Spec.args inp) examples in
         draw (if dup then acc else inp :: acc) (k - 1)
@@ -169,11 +226,11 @@ let differential ~env ~scratch ~exercise_dir ~slug ~(iface : Iface.t) ~examples 
       let exs = List.filter_map (fun (t, ex) -> if t = v.Iface.vname then Some ex else None) examples in
       let args, _ = unarrow (Iface.expand decls v.Iface.vty) in
       let labels = List.map fst args in
-      List.map (fun inp -> (v.Iface.vname, call_source ~name:v.Iface.vname ~labels inp))
+      List.map (fun inp -> (v.Iface.vname, call_source ~name:v.Iface.vname ~labels inp, inp))
         (inputs_for decls v exs per_value)) iface.Iface.values in
   if calls = [] then Error "no input could be generated"
   else
-    let main = program iface calls in
+    let main = program iface (List.map (fun (n, src, _) -> (n, src)) calls) in
     let m = Probe.module_name slug in
     let w = build_and_run ~env ~dir:(Filename.concat scratch (slug ^ "-diff-w")) ~exercise_dir ~module_name:m ~impl:source ~main in
     let r = build_and_run ~env ~dir:(Filename.concat scratch (slug ^ "-diff-r")) ~exercise_dir ~module_name:m ~impl:reference ~main in
@@ -185,15 +242,18 @@ let differential ~env ~scratch ~exercise_dir ~slug ~(iface : Iface.t) ~examples 
             | Some i -> Some (String.sub line 0 i, String.sub line (i + 1) (String.length line - i - 1))
             | None -> None) l in
         let wt = table wl and rt = table rl in
-        let compared = ref 0 and agreed = ref 0 and dis = ref [] in
-        List.iteri (fun i (_, src) ->
+        let compared = ref 0 and agreed = ref 0 and dis = ref [] and samples = ref [] in
+        List.iteri (fun i (name, src, inp) ->
             let id = string_of_int i in
             match List.assoc_opt id rt, List.assoc_opt id wt with
             | Some rv, _ when String.length rv > 0 && rv.[0] = '!' -> ()        (* outside the domain *)
-            | Some rv, Some wv ->
+            | Some rv, w ->
                 incr compared;
-                if close_enough wv rv then incr agreed
-                else dis := Printf.sprintf "%s = %s, reference %s" src wv rv :: !dis
-            | Some rv, None -> incr compared; dis := Printf.sprintf "%s: no output, reference %s" src rv :: !dis
+                (match Literal.of_string_opt rv with
+                 | Some v -> samples := (name, inp, v) :: !samples | None -> ());
+                (match w with
+                 | Some wv when close_enough wv rv -> incr agreed
+                 | Some wv -> dis := Printf.sprintf "%s = %s, reference %s" src wv rv :: !dis
+                 | None -> dis := Printf.sprintf "%s: no output, reference %s" src rv :: !dis)
             | None, _ -> ()) calls;
-        Ok { compared = !compared; agreed = !agreed; disagreements = List.rev !dis }
+        Ok { compared = !compared; agreed = !agreed; disagreements = List.rev !dis; samples = List.rev !samples }

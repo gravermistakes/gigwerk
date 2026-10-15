@@ -103,6 +103,7 @@ let of_signature (sg : signature) : t =
            with Unsupported _ -> unreadable := src item :: !unreadable)
       | Psig_open od ->
           opens := String.concat "." (Longident.flatten od.popen_expr.txt) :: !opens
+      | Psig_attribute _ -> ()          (* documentation, not interface *)
       | _ -> unreadable := src item :: !unreadable) sg;
   { decls = List.rev !decls; values = List.rev !values;
     unreadable = List.rev !unreadable; opens = List.rev !opens }
