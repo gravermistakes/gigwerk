@@ -116,8 +116,34 @@ let level b n =
   | Some l -> l
   | None -> let l = ref [] in Hashtbl.replace b.by_size n l; l
 
+(* A test on one integer variable that singles out one value of it (true at
+   exactly one point, or false at exactly one) is a lookup of an example
+   however it is spelled: x = 2, 1 = pred y. Detected by running it over a
+   window; points at 0 and 1 are the natural boundaries and stay. *)
+let int_vars = ref []
+let all_vars : (string * ty) list ref = ref []
+
+let point_test (c : cand) =
+  key c.ty = "bool" && c.size <= 7
+  && (match List.filter (fun x -> Expr.mentions x c.expr) !int_vars with
+      | [ x ] when not (List.exists (fun (y : string) -> y <> x && Expr.mentions y c.expr)
+                          (List.map fst !all_vars)) ->
+          let trues = ref [] and falses = ref [] in
+          for n = -20 to 220 do
+            match Eval.run ~budget:200 [ (x, Value.Int n) ] c.expr with
+            | Some (Value.Bool true) -> trues := n :: !trues
+            | Some (Value.Bool false) -> falses := n :: !falses
+            | _ -> ()
+          done;
+          (match !trues, !falses with
+           | [ n ], _ :: _ :: _ -> n <> 0 && n <> 1
+           | _ :: _ :: _, [ n ] -> n <> 0 && n <> 1
+           | _ -> false)
+      | _ -> false)
+
 let add cfg b c =
   if not (first_order c.ty) then false
+  else if point_test c then false
   else
     let k = key c.ty ^ "\x01" ^ vec_key c.vec in
     if Hashtbl.mem b.seen k then false
@@ -464,6 +490,8 @@ let pending : (bank * cand) list ref = ref []
 
 let rec seed s b =
   let ctx = b.ctx in
+  int_vars := List.filter_map (fun (x, t) -> if key t = "int" then Some x else None) ctx.vars;
+  all_vars := ctx.vars;
   List.iter (fun (x, t) ->
       let vec = Array.map (fun p -> List.assoc_opt x p) ctx.points in
       ignore (add s.cfg b { expr = Expr.Var x; size = 1; ty = t; vec })) ctx.vars;
@@ -511,7 +539,20 @@ and grow s b n ~lambda_depth =
                   let compares_var = s.cfg.strict && List.mem comp.cname comparing
                                      && (match List.assoc_opt 0 subst with
                                          | Some t -> Parametric.has_var t | None -> false) in
-                  let invented = invented || compares_var in
+                  (* x = 2, x = "Bob": a parameter compared for equality with
+                     a value is a lookup of that example, not a rule. Chars are
+                     the exception: c = ' ' is how a char predicate is said. *)
+                  let memorizes = (comp.cname = "=" || comp.cname = "<>")
+                                  && (match chosen with
+                                      | [ (_, e1, _); (_, e2, _) ] ->
+                                          let lit = function
+                                            | Expr.Lit (Value.Int (0 | 1)) | Expr.Lit (Value.String "") -> false
+                                            | Expr.Lit (Value.Int _ | Value.String _) -> true
+                                            | _ -> false in
+                                          let var = function Expr.Var _ -> true | _ -> false in
+                                          (var e1 && lit e2) || (lit e1 && var e2)
+                                      | _ -> false) in
+                  let invented = invented || compares_var || memorizes in
                   if not (has_gen rty) && not invented then begin
                     let chosen = List.sort (fun (i, _, _) (j, _, _) -> compare i j) chosen in
                     let exprs = List.map (fun (_, e, _) -> e) chosen in

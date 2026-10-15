@@ -69,3 +69,36 @@ let augment ~(params : (string * ty) list) ~out_ty (examples : Spec.example list
             if List.exists (fun e -> List.for_all2 Value.equal e.Spec.args ex.Spec.args) acc then acc
             else acc @ [ ex ]) [] all)
     with Opaque -> None
+
+(* Symmetry, read off the examples: when the arguments are all of one type,
+   some examples are permutations of others, and every such pair agrees, the
+   function plausibly does not care about argument order (a triangle's sides).
+   Every permutation of every example is then an example too. A hypothesis,
+   so the caller tries it first and drops it if nothing derives under it. *)
+let rec permutations = function
+  | [] -> [ [] ]
+  | l -> List.concat_map (fun x ->
+      let rest = let rec drop = function [] -> [] | y :: r -> if y == x then r else y :: drop r in drop l in
+      List.map (fun p -> x :: p) (permutations rest)) l
+
+let symmetric ~(params : (string * ty) list) (examples : Spec.example list) =
+  let tys = List.map (fun (_, t) -> Types.to_string t) params in
+  if List.length params < 2 || List.length params > 4
+     || List.exists (fun t -> t <> List.hd tys) tys then None
+  else
+    let sorted ex = List.sort Value.compare ex.Spec.args in
+    let related = List.filter (fun (a, b) -> a != b
+        && List.for_all2 Value.equal (sorted a) (sorted b)
+        && not (List.for_all2 Value.equal a.Spec.args b.Spec.args))
+        (List.concat_map (fun a -> List.map (fun b -> (a, b)) examples) examples) in
+    let agree = List.for_all (fun (a, b) -> Value.equal a.Spec.out b.Spec.out) related in
+    if List.length related < 2 || not agree then None
+    else
+      let all = List.concat_map (fun ex ->
+          List.map (fun args -> { ex with Spec.args }) (permutations ex.Spec.args)) examples in
+      let conflict = List.exists (fun a -> List.exists (fun b ->
+          List.for_all2 Value.equal a.Spec.args b.Spec.args && not (Value.equal a.Spec.out b.Spec.out)) all) all in
+      if conflict then None
+      else Some (List.fold_left (fun acc ex ->
+          if List.exists (fun e -> List.for_all2 Value.equal e.Spec.args ex.Spec.args) acc then acc
+          else acc @ [ ex ]) [] all)

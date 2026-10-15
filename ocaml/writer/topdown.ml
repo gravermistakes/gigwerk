@@ -928,4 +928,10 @@ and solve_param_all ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~param
            if Sys.getenv_opt "GW_DEBUG" <> None then prerr_endline ("  strict reading gave up: " ^ why);
            ordinary ())
 
-let solve_param = solve_cegis
+let solve_param ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty examples =
+  match Parametric.symmetric ~params examples with
+  | Some more ->
+      (match solve_cegis ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty more with
+       | Solved _ as r -> r
+       | Gave_up _ -> solve_cegis ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty examples)
+  | None -> solve_cegis ?cfg ?bank_size ?lambda_bank_size ?depth ?self ~decls ~params ~out_ty examples
