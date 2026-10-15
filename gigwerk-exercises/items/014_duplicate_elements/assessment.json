@@ -1,0 +1,41 @@
+{
+  "id": "014_duplicate_elements",
+  "title": "Duplicate the Elements of a List",
+  "contract_status": "ready",
+  "specification_strength": "full",
+  "synthesis_status": "rejected",
+  "synthesis_attempt_count": 2,
+  "elapsed_seconds": 0.0418,
+  "entrypoints": ["duplicate"],
+  "required_features": [
+    "Parametric algebraic lists",
+    "First-order recursive logical measures returning an algebraic List value",
+    "Equality over List-valued refinements",
+    "Structural recursion synthesis with no trusted algorithmic components"
+  ],
+  "semantic_obligations": [
+    "For every finite input [x1; ...; xn], output is [x1; x1; ...; xn; xn].",
+    "Preserve input occurrence order exactly.",
+    "Emit exactly two adjacent copies for each input occurrence, including repeated equal values.",
+    "Return [] for [].",
+    "Remain polymorphic and do not compare, inspect, mutate, or otherwise constrain elements."
+  ],
+  "source_provenance": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/014_duplicate_elements.md",
+    "solution_section_quarantined": true
+  },
+  "verification": {
+    "contract_resolve_command": "proot -R /home/ubuntu/synquid-runtime/bundle/rootfs -b OUTPUT:/work -w /work /root/.cabal/bin/synquid contract.sq --resolve --output=Plain",
+    "contract_resolve_exit_code": 0,
+    "negative_control_compile_exit_code": 0,
+    "negative_control_run_exit_code": 1,
+    "negative_control_failure": "official example: output does not preserve the required ordered sequence"
+  },
+  "caveats": [
+    "No synthesis candidate exists: both permitted synthesis invocations were rejected at parsing before search; the corrected final contract was resolve-checked only because a third synthesis attempt is prohibited.",
+    "A Synquid candidate, if subsequently produced, remains only a candidate until mechanical OCaml lowering and test_generated.ml pass.",
+    "The test negative-control stub resides in the job scratch directory, not this deliverable directory, and is deliberately incorrect."
+  ]
+}

@@ -1,0 +1,3 @@
+contract.sq:11: Resolution Error:
+  Datatype Nat is undefined in sort Nat
+

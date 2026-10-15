@@ -1,0 +1,9 @@
+{
+  "attempt": 1,
+  "exit_code": 1,
+  "elapsed_seconds": 0.022185825,
+  "result": "rejected_during_resolution",
+  "stderr_file": "synthesis_attempt_1.err",
+  "stdout_file": "synthesis_attempt_1.out",
+  "note": "The initial nested List (List a) measure encoding was rejected by this Synquid version's exact datatype-parameter requirement. It was replaced before the second and final attempt by the representation-isomorphic Runs datatype encoding."
+}

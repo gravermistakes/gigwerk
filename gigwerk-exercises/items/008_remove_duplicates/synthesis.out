@@ -1,0 +1,9 @@
+eq :: x:a -> y:a -> {Bool|_v == (x == y)}
+attempt2.sq:33: Error:
+  Cannot match shape 'a'
+  with shape 'List (A0)'
+  when checking y :: List List A2
+  in
+  \x . \y . 
+      match Cons Nil y with
+

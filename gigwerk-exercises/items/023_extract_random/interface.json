@@ -1,0 +1,56 @@
+{
+  "id": "023_extract_random",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "rand_select",
+      "ocaml_signature": "'a list -> int -> 'a list",
+      "parameters": [
+        {
+          "name": "xs",
+          "ocaml_type": "'a list",
+          "meaning": "source list from which occurrences are extracted"
+        },
+        {
+          "name": "n",
+          "ocaml_type": "int",
+          "meaning": "requested number of selected occurrences"
+        }
+      ],
+      "result": {
+        "ocaml_type": "'a list",
+        "meaning": "selected items, in the order produced by the seeded selection procedure"
+      },
+      "documented_precondition": "0 <= n && n <= List.length xs",
+      "documented_postconditions": [
+        "List.length result = n.",
+        "For each value v, occurrences of v in result do not exceed occurrences of v in xs.",
+        "Each call begins with Random.init 0, so the documented selection procedure is reproducible per call.",
+        "The official input [\"a\"; \"b\"; \"c\"; \"d\"; \"e\"; \"f\"; \"g\"; \"h\"] with n = 3 returns [\"e\"; \"c\"; \"g\"]."
+      ],
+      "unspecified_by_authoritative_non_solution_source": [
+        "Behavior when n is negative.",
+        "Behavior when n exceeds List.length xs.",
+        "The exact random-draw algorithm/order for inputs other than the official example."
+      ]
+    }
+  ],
+  "necessary_type_declarations": [
+    "No user-defined OCaml types are required; the entrypoint is polymorphic over the list element type."
+  ],
+  "trusted_primitive_declarations": [
+    {
+      "name": "Random.init",
+      "ocaml_signature": "int -> unit",
+      "role": "Required effectful initialization at the start of every rand_select call; seed must be 0 for the documented reproducible mode.",
+      "classification": "effectful OCaml standard-library primitive; not an unsynthesized final algorithm"
+    },
+    {
+      "name": "Random.int",
+      "ocaml_signature": "int -> int",
+      "role": "Potential bounded PRNG draw primitive required by an implementation; its draw schedule is not defined by the solution-free source.",
+      "classification": "effectful OCaml standard-library primitive; not available as a verified Synquid component in this benchmark"
+    }
+  ],
+  "implementation_status": "No implementation is supplied by this benchmark component."
+}

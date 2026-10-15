@@ -1,0 +1,8 @@
+{
+  "repository": "ocaml/ocaml.org",
+  "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+  "path": "data/exercises/016_drop_elements.md",
+  "retrieved_url": "https://api.github.com/repos/ocaml/ocaml.org/contents/data/exercises/016_drop_elements.md?ref=7b4c04b90b5433050bcecb25772880bc48bae4d0",
+  "blob_sha": "3b74c8ff9c09b0969b27ca6189de1f574f669f7a",
+  "solution_quarantine": "The exact level-2 ## Solution section was removed in memory before the source artifact was written or inspected."
+}

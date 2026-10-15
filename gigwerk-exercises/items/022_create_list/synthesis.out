@@ -1,0 +1,3 @@
+contract.sq:31: Resolution Error:
+  Constant arguments to measure exactRange must not change in recursive call exactRange (first + 1) last xs
+

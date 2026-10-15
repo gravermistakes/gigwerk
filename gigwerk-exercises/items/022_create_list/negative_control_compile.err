@@ -1,0 +1,4 @@
+File "/home/ubuntu/gigwerk-exercises/items/022_create_list/test_generated.ml", line 6, characters 5-14:
+6 | open Generated
+         ^^^^^^^^^
+Error: Unbound module Generated

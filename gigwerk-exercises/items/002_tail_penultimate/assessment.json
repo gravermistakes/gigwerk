@@ -1,0 +1,34 @@
+{
+  "id": "002_tail_penultimate",
+  "title": "Last Two Elements of a List",
+  "contract_status": "ready",
+  "specification_strength": "full",
+  "synthesis_status": "rejected",
+  "elapsed_seconds": 0.041,
+  "attempts": [
+    {
+      "attempt": 1,
+      "elapsed_seconds": 0.02,
+      "exit_code": 1,
+      "result": "rejected",
+      "diagnostic": "contract.sq:29:14: Parse Error: Unexpected capitalized Nil"
+    },
+    {
+      "attempt": 2,
+      "elapsed_seconds": 0.021,
+      "exit_code": 1,
+      "result": "rejected",
+      "diagnostic": "contract.sq:30:10: Parse Error: Unexpected reserved word match expecting refinement term"
+    }
+  ],
+  "final_contract_note": "After the second rejected attempt, contract.sq was revised to a refinement-indexed-list formulation using only forms evidenced in pinned non-solution Synquid fixtures. It was deliberately not run because the task caps this item at two synthesis attempts. Consequently it is a ready exact contract, but its parser acceptance and synthesis result are unverified.",
+  "required_features": [
+    "Refinement-indexed algebraic lists parameterized by zero-based position and element value",
+    "Algebraic option and pair datatypes in refinement types",
+    "Arithmetic refinements over a recursive list-length measure",
+    "Boolean measure discriminating Nothing from Just"
+  ],
+  "trusted_primitives": [],
+  "candidate_claim": "None. No Synquid candidate was produced, and no manually authored OCaml implementation is present.",
+  "ocaml_semantic_test_status": "Pending backend lowering. The supplied test suite is compiled against an explicitly labelled failwith unsynthesized negative-control stub and is expected to fail its semantic assertion."
+}

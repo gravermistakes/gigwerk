@@ -1,0 +1,59 @@
+{
+  "id": "020",
+  "title": "Remove the K'th Element From a List",
+  "contract_status": "requires_features",
+  "specification_strength": "full",
+  "synthesis_status": "runtime_error",
+  "elapsed_seconds": 0.045,
+  "synthesis_attempts": [
+    {
+      "number": 1,
+      "elapsed_seconds": 0.026,
+      "exit_code": 1,
+      "result": "parser_error_multiline_indentation",
+      "stdout": "contract.sq:29:16: Parse Error: Unexpected 15-column indentation or ':'"
+    },
+    {
+      "number": 2,
+      "elapsed_seconds": 0.019,
+      "exit_code": 1,
+      "result": "parser_error_on_second_named_dependent_argument",
+      "stdout": "contract.sq:27:52: Parse Error: Unexpected 51-column indentation or ':'"
+    }
+  ],
+  "required_features": [
+    "A Synquid frontend/parser configuration that accepts the declared polymorphic index-refined function type with two named dependent arguments and the conditional abstract-refinement result predicate.",
+    "A backend lowering that preserves the abstract-refinement positional relation when converting a synthesized candidate to OCaml."
+  ],
+  "semantic_obligations": [
+    "Use zero-based indexing.",
+    "For every valid index n, remove exactly position n.",
+    "Preserve the relative order of all retained elements.",
+    "Preserve equal elements at all nonselected positions; do not use set semantics.",
+    "Return a list whose length is one less than the input for valid indices.",
+    "Do not assert behavior for invalid indices, because the authoritative non-solution statement does not specify it."
+  ],
+  "tests": {
+    "test_file": "test_generated.ml",
+    "coverage": [
+      "authoritative example",
+      "first/middle/final/singleton boundary cases",
+      "duplicate and ordering cases",
+      "exhaustive valid inputs of lengths 1..4 over values 0, 1, and 2",
+      "a deliberately incorrect non-executed negative-control expectation"
+    ],
+    "negative_control_verification": {
+      "stub": "test-only, intentionally incorrect no-op Generated.remove_at; stored only in scratch and not delivered",
+      "compile": "ocamlc succeeded",
+      "run_exit_code": 2,
+      "observed_failure": "Failure(\"remove_at: official example: index 1\")"
+    }
+  },
+  "candidate_status": "No candidate was produced. A successful Synquid run would still be only a candidate until later backend lowering and OCaml semantic tests pass.",
+  "provenance": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/020_remove_nth_element.md",
+    "solution_section_handling": "Exactly one `## Solution` section was programmatically removed before statement inspection."
+  }
+}

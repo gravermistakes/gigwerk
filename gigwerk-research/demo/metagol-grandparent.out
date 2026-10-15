@@ -1,0 +1,7 @@
+% learning target/2
+% clauses: 1
+% clauses: 2
+% clauses: 3
+target(A,B):-target_1(A,C),target_1(C,B).
+target_1(A,B):-mother(A,B).
+target_1(A,B):-father(A,B).

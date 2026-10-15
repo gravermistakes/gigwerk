@@ -1,0 +1,24 @@
+{
+  "id": "012_run_length_decoding",
+  "title": "Decode a Run-Length Encoded List",
+  "contract_status": "requires_features",
+  "synthesis_status": "not_attempted",
+  "specification_strength": "none",
+  "required_features": [
+    "A sound logical primitive or definable measure for integer-indexed repeat(n, x) that returns the exact ordered List containing n copies of x; Synquid measures structurally recurse on a declared datatype, not on the int carried by Many.",
+    "A way to use the exact result of a typed helper such as repeat in a refinement/measure equation. Ordinary Synquid function signatures cannot be invoked as logical predicates or measures.",
+    "Alternatively, an equivalent sound inductive relation over an Int run count, an element, and an ordered output List that can be defined and used in the refinement language."
+  ],
+  "semantic_obligations": [
+    "decode [] returns [].",
+    "One x expands to exactly [x].",
+    "Many (n, x) expands to n consecutive x values on the source-valid generated-code domain.",
+    "Expansion preserves segment encounter order and every occurrence; neither sets nor lengths alone are adequate.",
+    "The official example must yield exactly the stated fourteen-element string list.",
+    "No behavior is invented for manually constructed Many counts that fall outside the source-referenced encoder's unstated invariant."
+  ],
+  "entrypoints": ["decode"],
+  "elapsed_seconds": 0,
+  "output_dir": "/home/ubuntu/gigwerk-exercises/items/012_run_length_decoding",
+  "notes": "No contract.sq or synthesis logs were produced. A bounded pinned-runtime probe confirmed that List-valued measures and equality can retain order, but the required exact integer-indexed repeat relation is unavailable: measures structurally recurse on datatype inputs, and ordinary typed helper functions cannot occur in logical measure bodies. A weak length/set contract was deliberately not run. Independent standard-library-only OCaml tests cover the official example, edge cases, and exhaustive positive-count small codes; an explicitly incorrect stub was compiled against them and failed the expected semantic assertion."
+}

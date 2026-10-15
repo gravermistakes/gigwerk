@@ -1,0 +1,77 @@
+{
+  "id": "017_split_list",
+  "title": "Split a List Into Two Parts; The Length of the First Part Is Given",
+  "contract_status": "ambiguous",
+  "specification_strength": "partial",
+  "synthesis_status": "rejected",
+  "elapsed_seconds": 5.264,
+  "attempts": [
+    {
+      "attempt": 1,
+      "exit_code": 1,
+      "elapsed_seconds": 0.021,
+      "result": "rejected before synthesis: multiline type signature parse error",
+      "stderr": ""
+    },
+    {
+      "attempt": 2,
+      "exit_code": 1,
+      "elapsed_seconds": 5.264,
+      "result": "rejected: Synquid could not find sufficiently strong refinements while searching the exact contract",
+      "stderr": ""
+    }
+  ],
+  "runtime": {
+    "rootfs": "/home/ubuntu/synquid-runtime/bundle/rootfs",
+    "executable_inside_rootfs": "/root/.cabal/bin/synquid",
+    "command_shape": "proot -R ROOTFS -b OUTPUT_DIR:/work -w /work /root/.cabal/bin/synquid contract.sq --output=Plain --print-stats",
+    "synthesis_attempt_limit": 2,
+    "synthesis_attempts_used": 2
+  },
+  "semantic_obligations": [
+    "For n >= 0, the entrypoint returns (prefix, suffix) with prefix followed by suffix exactly equal to the input list.",
+    "The reconstruction relation is structural, so list order and duplicate multiplicity are preserved.",
+    "For n >= 0, length(prefix) = min(n, length(input)).",
+    "If n is at least the input length, the suffix is empty and the prefix is the entire input.",
+    "The OCaml interface is polymorphic and ordered as split xs n : 'a list -> int -> 'a list * 'a list.",
+    "The authoritative statement gives no behavior for negative n; no behavior was invented."
+  ],
+  "required_features": [
+    "Parametric algebraic datatypes for List and Pair",
+    "Refinement integer arithmetic over a nonnegative requested length",
+    "Structural list-valued logical measure and equality to express ordered prefix/suffix reconstruction",
+    "Synthesis support capable of discovering inductive refinements for the exact pair-valued split relation"
+  ],
+  "contract_support": {
+    "artifact": "contract.sq",
+    "expresses": "the complete stated nonnegative-domain behavior without weakening it to length or set equality",
+    "limitation": "The pinned Synquid runtime parses/resolves the exact contract but rejects synthesis with 'Cannot find sufficiently strong refinements'.",
+    "no_candidate": true
+  },
+  "test_evidence": {
+    "artifact": "test_generated.ml",
+    "oracle": "independently written, standard-library-only reference logic; isolated from contract inputs",
+    "coverage": [
+      "2 official examples",
+      "5 edge cases",
+      "2 order/multiplicity cases",
+      "510 bounded exhaustive cases over binary lists of lengths 0 through 5 and n from 0 through length+3",
+      "1 forbidden-outcome negative control"
+    ],
+    "negative_control_stub": {
+      "location": "/home/ubuntu/jobs/ba5db0259f3c_a16/semantic_negative/Generated.ml",
+      "expected_result": "compiles, then fails an expected semantic assertion",
+      "generated_compile_exit_code": 0,
+      "test_compile_exit_code": 0,
+      "link_exit_code": 0,
+      "run_exit_code": 1,
+      "observed_failure": "FAIL official: first part length 3: semantic assertion failed"
+    }
+  },
+  "provenance": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/017_split_list.md",
+    "solution_section_read": false
+  }
+}

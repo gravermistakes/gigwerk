@@ -1,0 +1,7 @@
+(set-logic QF_LIA)
+(define-fun max ((x Int) (y Int)) Int (ite (<= x y) y x))
+(define-fun min ((x Int) (y Int)) Int (ite (<= y x) y x))
+(declare-const x Int)
+(declare-const y Int)
+(assert (not (and (>= (max x y) x) (>= (max x y) y) (or (= x (max x y)) (= y (max x y))) (= (+ (max x y) (min x y)) (+ x y)))))
+(check-sat)

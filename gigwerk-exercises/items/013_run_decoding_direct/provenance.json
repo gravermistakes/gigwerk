@@ -1,0 +1,12 @@
+{
+  "repository": "ocaml/ocaml.org",
+  "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+  "path": "data/exercises/013_run_decoding_direct.md",
+  "blob_sha": "e583d790c1a318d7d26e8e7a89bbc477419543e4",
+  "retrieval": "read-only gh API",
+  "solution_quarantine": {
+    "method": "removed the sole exact level-2 heading ## Solution section through the next level-2 heading or EOF before inspection",
+    "solution_body_read": false,
+    "solution_body_reproduced": false
+  }
+}

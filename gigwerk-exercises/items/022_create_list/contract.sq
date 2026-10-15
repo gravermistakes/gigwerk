@@ -1,0 +1,52 @@
+-- Benchmark 022: Create a List Containing All Integers Within a Given Range
+--
+-- This is a contract-only artifact. `range` remains a synthesis hole; there
+-- is no hand-authored implementation in this file.
+--
+-- Trusted generic arithmetic/comparison primitives. They are components, not
+-- the benchmark algorithm, and must be supplied by the target backend.
+inc :: x: Int -> {Int | _v == x + 1}
+dec :: x: Int -> {Int | _v == x - 1}
+sub :: x: Int -> y: Int -> {Int | _v == x - y}
+eq  :: x: Int -> y: Int -> {Bool | _v == (x == y)}
+lt  :: x: Int -> y: Int -> {Bool | _v == (x < y)}
+gt  :: x: Int -> y: Int -> {Bool | _v == (x > y)}
+
+-- `IList` is mechanically lowered to OCaml's `int list` by the backend.
+-- It is integer-specific because this pinned Synquid measure syntax requires
+-- the measure's datatype parameters to remain universally quantified.
+data IList where
+  INil  :: IList
+  ICons :: x: Int -> xs: IList -> IList
+
+termination measure len :: IList -> {Int | _v >= 0} where
+  INil -> 0
+  ICons x xs -> 1 + len xs
+
+type Nat = {Int | _v >= 0}
+
+-- exactRange first last out holds precisely when out starts at first and
+-- advances by +1 or -1 toward last, stopping at the inclusive endpoint.
+-- The structural List argument guarantees this logical definition terminates.
+measure exactRange :: first: Int -> last: Int -> IList -> Bool where
+  INil -> False
+  ICons x xs ->
+    x == first &&
+    ((first == last && len xs == 0) ||
+     (first < last && exactRange (first + 1) last xs) ||
+     (first > last && exactRange (first - 1) last xs))
+
+-- Full semantic goal: ordered, inclusive, gap-free, multiplicity-preserving
+-- range enumeration in either direction. The helper inputs carry a natural
+-- distance so Synquid can establish decreasing structural recursion without
+-- a Nonterminating/partial escape hatch. All algorithmic bodies remain holes.
+rangeUp :: first: Int -> distance: Nat ->
+  {IList | exactRange first (first + distance) _v}
+rangeUp = ??
+
+rangeDown :: first: Int -> distance: Nat ->
+  {IList | exactRange first (first - distance) _v}
+rangeDown = ??
+
+range :: first: Int -> last: Int -> {IList | exactRange first last _v}
+range = ??

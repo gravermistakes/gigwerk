@@ -1,0 +1,37 @@
+{
+  "id": "033",
+  "title": "Determine Whether Two Positive Integer Numbers Are Coprime",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "coprime",
+      "ocaml_signature": "int -> int -> bool",
+      "parameters": [
+        {
+          "name": "a",
+          "ocaml_type": "int",
+          "precondition": "a > 0"
+        },
+        {
+          "name": "b",
+          "ocaml_type": "int",
+          "precondition": "b > 0"
+        }
+      ],
+      "postcondition": "Returns true if and only if the mathematical greatest common divisor of a and b equals 1.",
+      "outside_precondition": "The authoritative statement specifies no behavior for zero or negative arguments."
+    }
+  ],
+  "type_declarations": [],
+  "trusted_primitive_declarations": [],
+  "trusted_components_policy": "No helper algorithm, GCD oracle, or final decision procedure is admitted as a trusted runtime component. The test-only oracle in test_generated.ml is not synthesis input and is not a runtime declaration.",
+  "determinism": "Required: pure and deterministic on the positive-input domain.",
+  "unsupported_input_kinds": [
+    "randomness",
+    "effects",
+    "mutable state",
+    "coinductive or infinite streams",
+    "strings",
+    "floats"
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "id": "010_run_length_encoding",
+  "title": "Run-Length Encoding",
+  "contract_status": "requires_features",
+  "specification_strength": "full",
+  "synthesis_status": "rejected",
+  "elapsed_seconds": 4.396,
+  "attempts": [
+    {
+      "number": 1,
+      "elapsed_seconds": 0.026,
+      "exit_code": 1,
+      "result": "rejected during resolution",
+      "stdout_file": "synthesis.attempt1.out",
+      "stderr_file": "synthesis.attempt1.err",
+      "diagnostic": "Datatype Run expected 0 predicate arguments and got 1. The original canonicality predicate was therefore repaired to quantify over the run representative value instead of Run a."
+    },
+    {
+      "number": 2,
+      "elapsed_seconds": 4.37,
+      "exit_code": 1,
+      "result": "rejected during synthesis; no candidate emitted",
+      "stdout_file": "synthesis.out",
+      "stderr_file": "synthesis.err",
+      "diagnostic": "Synquid reached the encode goal but attempted to synthesize the declared polymorphic equality component and failed with: Cannot match shape 'Bool' with shape '_' when checking eq."
+    }
+  ],
+  "required_features": [
+    {
+      "feature": "trusted polymorphic decidable equality component",
+      "why": "The exact OCaml interface is polymorphic and run boundaries require deciding whether adjacent elements are equal. The pinned runtime has no executable trusted equality component for an abstract type variable; it tries to synthesize eq and rejects the goal."
+    },
+    {
+      "feature": "backend lowering from structural Run/Runs values to (int * 'a) list",
+      "why": "The full Synquid contract represents positive counts structurally (leader plus same-valued tail) so it can preserve ordered expansion. The reusable typed backend must lower that representation mechanically; no OCaml lowering or target implementation appears in this item."
+    }
+  ],
+  "semantic_obligations": [
+    "encode [] = []",
+    "Each output pair represents one maximal non-empty contiguous input run and has a strictly positive count.",
+    "Output run order equals left-to-right input traversal order.",
+    "Expanding every (count, value) pair reconstructs the input exactly, preserving ordering and multiplicity.",
+    "Adjacent output pairs have distinct representative values; equal values separated by another value remain distinct runs.",
+    "The API is pure and deterministic, has no specified errors/options, mutation, randomness, float/string special cases, or infinite-stream behavior."
+  ],
+  "test_evidence": {
+    "test_file": "test_generated.ml",
+    "tooling": "OCaml 4.14.1 standard library only",
+    "negative_control_stub": "/home/ubuntu/jobs/ba5db0259f3c_a9/negative_control/generated.ml",
+    "observed_exit_code": 1,
+    "observed_failure": "FAIL: official example -- unexpected exception: Failure(\"unsynthesized\")",
+    "meaning": "The test harness compiled against the expressly labelled unsynthesized stub and failed as expected. This is a red/control check, not proof of a solution."
+  },
+  "candidate_note": "No Synquid candidate was produced. Even if a later run produces one, it remains only a candidate until a typed backend lowers it and the independent OCaml tests pass."
+}

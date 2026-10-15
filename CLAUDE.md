@@ -99,6 +99,16 @@ cd ocaml && dune build && dune test     # 316 checks across nine binaries
 ./lint.sh                               # c, sql, prolog, elpi
 ```
 
+The synthesis harness (merged from the manus implementation) runs from its own
+directories:
+
+```
+cd gigwerk-exercises/backend && dune build --root . && dune test --root .
+bash gigwerk-exercises/backend/test_cli.sh          # real Synquid output -> OCaml
+bash synquid-validation/run-ocaml-tests.sh          # BST, with negative control
+cd gigwerk-exercises/scripts && python3 -B test_status.py && python3 -B test_runner.py
+```
+
 `lint.sh` reports one failure without `swipl` installed, which is the checker
 working. Every checker in it has been proven able to fail on a real fault; keep
 it that way, and mutation-verify anything new before claiming it passes.

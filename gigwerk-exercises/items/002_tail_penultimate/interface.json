@@ -1,0 +1,30 @@
+{
+  "id": "002_tail_penultimate",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "last_two",
+      "ocaml_signature": "'a list -> ('a * 'a) option",
+      "synquid_signature": "<p :: Int -> a -> Bool> . xs: List a <p> -> {Maybe (Pair {a | p (len xs - 2) _v} {a | p (len xs - 1) _v}) | isNothing _v == (len xs < 2)}",
+      "purity": "pure",
+      "determinism": "deterministic",
+      "errors": "No exercise-level exception is specified; inputs of length 0 or 1 return None."
+    }
+  ],
+  "necessary_type_declarations": [
+    {
+      "synquid": "data Pair a b where Pair :: x: a -> y: b -> Pair a b",
+      "ocaml_lowering": "'a * 'b"
+    },
+    {
+      "synquid": "data Maybe a where Nothing :: Maybe a; Just :: a -> Maybe a",
+      "ocaml_lowering": "'a option"
+    },
+    {
+      "synquid": "data List a <p :: Int -> a -> Bool> where Nil :: List a <p>; Cons :: x: {a | p 0 _v} -> xs: List a <{p (_0 + 1) _1}> -> List a <p>",
+      "ocaml_lowering": "'a list"
+    }
+  ],
+  "trusted_primitive_declarations": [],
+  "target_and_helper_implementation_policy": "The target last_two is an unsynthesized hole in contract.sq. There are no executable helper algorithms. len and isNothing are logical requirement measures only."
+}

@@ -1,0 +1,49 @@
+{
+  "id": "013_run_decoding_direct",
+  "module": "Generated",
+  "source_interface_status": "entrypoint name is explicit in the official example; signature is inferred uniquely from that example and the stated rle declaration",
+  "type_declarations": [
+    {
+      "name": "rle",
+      "ocaml": "type 'a rle = One of 'a | Many of int * 'a",
+      "constructors": [
+        {"name": "One", "ocaml_type": "'a -> 'a rle"},
+        {"name": "Many", "ocaml_type": "int * 'a -> 'a rle"}
+      ]
+    }
+  ],
+  "entrypoints": [
+    {
+      "name": "encode",
+      "ocaml_signature": "'a list -> 'a rle list",
+      "purity": "pure and deterministic for finite ordinary lists and a deterministic equality primitive",
+      "failure_behavior": "not specified by the source; a lowering using Stdlib.(=) inherits its comparison exceptions and nontermination behavior"
+    }
+  ],
+  "trusted_primitive_declarations": [
+    {
+      "name": "ocaml_equal",
+      "role": "generic supporting primitive only; not the target algorithm or a synthesized helper",
+      "ocaml_binding": "Stdlib.( = )",
+      "ocaml_signature": "'a -> 'a -> bool",
+      "required_refinement_intent": "for comparable x and y, result is true exactly when the implementation's adjacent-run equality considers x and y equal",
+      "status": "must be supplied, modeled, or verified by the eventual typed backend; no weak Synquid contract is emitted here"
+    },
+    {
+      "name": "zero",
+      "role": "generic trusted integer constant used only as a synthesis component for run-count construction; not a target/helper implementation",
+      "synquid_signature": "{Int | _v == 0}",
+      "mechanical_lowering": "0"
+    },
+    {
+      "name": "inc",
+      "role": "generic trusted integer primitive used only as a synthesis component for run-count construction; not a target/helper implementation",
+      "synquid_signature": "n: Int -> {Int | _v == n + 1}",
+      "mechanical_lowering": "fun n -> n + 1"
+    }
+  ],
+  "explicit_non_declarations": [
+    "No seed, comparator argument, accumulator argument, mutable state, stream type, option/result wrapper, or exception wrapper may be added to encode.",
+    "No target or helper implementation is supplied by this benchmark artifact."
+  ]
+}

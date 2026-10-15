@@ -1,0 +1,8 @@
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.005s
+
+OK
+PASS: 2950 independently generated BSTs; 26550 exhaustive insertion cases; 20000 random sequence steps; 308280 assertions
+PASS: 2950 independently generated BSTs; 26550 exhaustive insertion cases; 20000 random sequence steps; 308280 assertions
+PASS: negative control rejected; mechanical output reproduced

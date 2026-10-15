@@ -1,0 +1,9 @@
+split :: xs:List a -> n:Nat -> {Pair List a List a|(append (snd _v) (fst _v) == xs && (n <= len xs ==> len (fst _v) == n)) && (len xs <= n ==> len (fst _v) == len xs)}
+contract.sq:34: Error:
+  Cannot find sufficiently strong refinements
+  when checking Nil ::
+  {List a|len _v >= 0 && len _v < len xs}
+  in
+  \xs . \n . 
+      match split Nil ?? with
+

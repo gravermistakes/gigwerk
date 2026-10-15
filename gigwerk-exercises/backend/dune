@@ -1,0 +1,27 @@
+; Build for the merged manus backend. The sources are unchanged; this file only
+; makes them build where they now live. The executable is the CLI that
+; test_cli.sh calls synquid-ocaml.
+(library
+ (name synquid_backend_lib)
+ (modules synquid_backend)
+ (wrapped false)
+ (libraries str))
+
+(executable
+ (name main)
+ (modules main)
+ (libraries synquid_backend_lib))
+
+(test
+ (name test_backend)
+ (modules test_backend)
+ (libraries synquid_backend_lib str))
+
+; verify_catalogue.py and test_runner.py both expect the CLI at
+; backend/synquid-ocaml, the name it had when it was built by hand. Promote
+; the dune build to exactly that path rather than change their runner.
+(rule
+ (targets synquid-ocaml)
+ (deps main.exe)
+ (mode (promote (until-clean)))
+ (action (copy main.exe synquid-ocaml)))

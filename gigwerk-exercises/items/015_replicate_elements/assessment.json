@@ -1,0 +1,45 @@
+{
+  "id": "015_replicate_elements",
+  "title": "Replicate the Elements of a List a Given Number of Times",
+  "contract_status": "requires_features",
+  "synthesis_status": "not_attempted",
+  "specification_strength": "full",
+  "required_features": [
+    "An ordered, multiplicity-aware relation over input list, integer count, and output list; for example sequence refinements with concatenation and repeat, or a usable inductive relational predicate."
+  ],
+  "semantic_obligations": [
+    "Expose Generated.replicate with exact type 'a list -> int -> 'a list and list-first argument order.",
+    "For every positive count n, replace each source occurrence with exactly n consecutive copies before moving to the next source occurrence.",
+    "Preserve left-to-right source order, including group boundaries between equal values at different source positions.",
+    "Preserve and multiply multiplicity rather than deduplicating, permuting, or repeating the whole input list.",
+    "Return [] for [] at every positive tested count.",
+    "Return the original list for count 1.",
+    "Do not assert a behavior for zero or negative counts: the authoritative statement supplies none."
+  ],
+  "entrypoints": [
+    "replicate"
+  ],
+  "elapsed_seconds": 0,
+  "output_dir": "/home/ubuntu/gigwerk-exercises/items/015_replicate_elements",
+  "source_provenance": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/015_replicate_elements.md",
+    "solution_quarantine": "Exactly one ## Solution section removed before inspection."
+  },
+  "contract_decision": {
+    "contract_file": null,
+    "reason": "Pinned Synquid supports integer, datatype, and set refinement sorts and unary list measures, but an exact per-element replication relation requires ordered sequence and duplicate-multiplicity information across input, count, and output. A length/set contract would be semantically too weak and was not run."
+  },
+  "test_scope": {
+    "positive_counts": [1, 2, 3, 4, 5],
+    "exhaustive_inputs": "all lists over [0; 1] through length 3 for counts 1..4",
+    "negative_control": "whole-list repetition [1; 2; 1; 2] is explicitly rejected for input [1; 2], count 2",
+    "zero_and_negative_counts": "intentionally untested because upstream statement does not define them"
+  },
+  "verification": {
+    "negative_control_stub": "scratch-only Generated.replicate that deliberately repeats the whole list for count 2; not a candidate or deliverable",
+    "compile_result": "ocamlc exit code 0",
+    "run_result": "executable exit code 2; expected assertion: official example: elements, grouping, or order differs"
+  }
+}

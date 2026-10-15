@@ -1,0 +1,56 @@
+{
+  "id": "007_flatten_list",
+  "title": "Flatten a List",
+  "language": "OCaml",
+  "module": "Generated",
+  "type_declarations": [
+    "type 'a node = One of 'a | Many of 'a node list"
+  ],
+  "entrypoints": [
+    {
+      "name": "flatten",
+      "ocaml_signature": "'a node list -> 'a list",
+      "arguments": [
+        {
+          "name": "nodes",
+          "type": "'a node list",
+          "constraint": "finite ordinary OCaml list"
+        }
+      ],
+      "result": {
+        "type": "'a list",
+        "guarantee": "the depth-first, left-to-right leaf sequence; One x contributes x exactly once and Many xs contributes flatten xs in place"
+      },
+      "purity": "pure",
+      "totality": "total on finite values of the declared type",
+      "failure_behavior": "no exception, option, or result case is part of the contract"
+    }
+  ],
+  "trusted_primitive_declarations": {
+    "generic_language_primitives": [
+      "OCaml algebraic-data constructors One and Many",
+      "OCaml finite-list constructors [] and (::)"
+    ],
+    "trusted_algorithmic_components": [],
+    "prohibited_substitutions": [
+      "No trusted flatten/concat/reverse helper may stand in for the target algorithm.",
+      "The final flatten algorithm is unsynthesized; no candidate implementation is declared by this artifact."
+    ]
+  },
+  "semantics": {
+    "traversal": "depth-first, left-to-right",
+    "ordering": "preserved exactly",
+    "multiplicity": "preserved exactly",
+    "empty_many": "contributes no values",
+    "effects": "none",
+    "randomness": "none",
+    "mutation": "none",
+    "infinite_or_coinductive_inputs": "not required; OCaml lists in this benchmark are finite"
+  },
+  "source": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/007_flatten_list.md",
+    "solution_section": "quarantined and not used"
+  }
+}

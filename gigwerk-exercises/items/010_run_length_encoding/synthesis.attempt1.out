@@ -1,0 +1,3 @@
+contract.sq:42: Resolution Error:
+  Datatype Run expected 0 predicate arguments and got 1
+

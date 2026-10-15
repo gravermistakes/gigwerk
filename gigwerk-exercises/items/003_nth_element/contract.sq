@@ -1,0 +1,44 @@
+-- GigWerk benchmark contract for OCaml exercise 003: N'th Element of a List.
+-- Target only: at.  It remains a synthesis hole; no hand-authored algorithm is present.
+--
+-- Semantic encoding:
+--   * List's abstract refinement p relates each zero-based position to its value.
+--   * Maybe's abstract refinement q constrains a Just payload.
+--   * isJust distinguishes Nothing from Just so the result is exact for every
+--     nonnegative index. The source statement does not specify negative ints;
+--     their result is intentionally unconstrained (see assessment.md).
+
+qualifier {x == y, x != y}
+
+data List a <p :: Int -> a -> Bool> where
+  Nil  :: List a <p>
+  Cons :: x: {a | p 0 _v} -> xs: List a <{p (_0 + 1) _1}> -> List a <p>
+
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+
+data Maybe a <q :: a -> Bool> where
+  Nothing :: Maybe a <q>
+  Just    :: x: {a | q _v} -> Maybe a <q>
+
+measure isJust :: Maybe a -> Bool where
+  Nothing -> False
+  Just x  -> True
+
+-- Trusted generic integer primitives only. They are not lookup algorithms.
+zero :: {Int | _v == 0}
+dec  :: x: Int -> {Int | _v == x - 1}
+eq   :: x: Int -> y: Int -> {Bool | _v <==> (x == y)}
+
+-- OCaml lowering target:
+--   val at : int -> 'a list -> 'a option
+-- For every xs and NONNEGATIVE index i, return Some exactly when i < len xs,
+-- with the item at zero-based position i; otherwise return None. The public
+-- OCaml input remains int, but the source supplies no negative-index semantics.
+at :: <p :: Int -> a -> Bool> .
+      i: Int -> xs: List a <p> ->
+      {Maybe a <{0 <= i ==> p i _0}> |
+         ((0 <= i && i < len xs) ==> isJust _v) &&
+         ((0 <= i && len xs <= i) ==> !isJust _v)}
+at = ??

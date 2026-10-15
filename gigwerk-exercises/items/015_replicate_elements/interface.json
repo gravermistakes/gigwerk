@@ -1,0 +1,33 @@
+{
+  "id": "015_replicate_elements",
+  "title": "Replicate the Elements of a List a Given Number of Times",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "replicate",
+      "ocaml_signature": "'a list -> int -> 'a list",
+      "argument_order": [
+        "input_list",
+        "count"
+      ],
+      "type_declarations": [],
+      "trusted_primitive_declarations": [],
+      "effects": "none stated; benchmark requires a deterministic pure result",
+      "input_domain": {
+        "input_list": "finite OCaml standard list",
+        "count": "The authoritative statement demonstrates a positive count (3). It does not state behavior for 0 or negative integers; this benchmark does not add a behavior for those values."
+      },
+      "required_behavior_for_positive_count": "For every source occurrence, emit exactly count consecutive occurrences of that value, processing source occurrences from left to right. Equal values in distinct source positions remain distinct groups."
+    }
+  ],
+  "unsupported_or_unstated_dimensions": {
+    "randomness": "not applicable",
+    "effects": "not applicable",
+    "mutable_state": "not applicable",
+    "infinite_streams": "not applicable; OCaml lists are finite",
+    "strings": "the official example uses strings, but the signature is polymorphic",
+    "floats": "not singled out; polymorphic value handling is required",
+    "failure_behavior": "not stated",
+    "zero_and_negative_counts": "not stated"
+  }
+}

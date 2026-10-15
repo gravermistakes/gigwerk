@@ -1,0 +1,41 @@
+{-
+  Benchmark 001_tail — synthesis input only.
+
+  `p i x` denotes that x occurs at zero-based position i in the input list.
+  The output's abstract refinement permits Just only for the final input
+  position; `isNothing` makes None equivalent to an empty input.  Together
+  these constraints specify the exact last element, including duplicates and
+  order, rather than a set/membership approximation.
+
+  Trusted declarations: algebraic data constructors and integer refinement
+  theory.  `last` is the sole target and remains an unsynthesized hole.
+-}
+
+qualifier {x == y, x != y}
+
+true :: {Bool | _v}
+false :: {Bool | !_v}
+
+data List a <p :: Int -> a -> Bool> where
+  Nil :: List a <p>
+  Cons :: x: {a | p 0 _v}
+       -> xs: List a <{p (_0 + 1) _1}>
+       -> List a <p>
+
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+
+data Maybe a <q :: a -> Bool> where
+  Nothing :: Maybe a <q>
+  Just :: {a | q _v} -> Maybe a <q>
+
+measure isNothing :: Maybe a -> Bool where
+  Nothing -> true
+  Just x -> false
+
+last :: <p :: Int -> a -> Bool> .
+        xs: List a <p>
+     -> {Maybe a <{p (len xs - 1) _v}> |
+           isNothing _v == (len xs == 0)}
+last = ??

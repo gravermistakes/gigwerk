@@ -1,0 +1,43 @@
+-- Benchmark 002_tail_penultimate
+-- Logical specification only. `last_two` is intentionally an unsynthesized hole.
+-- No trusted executable primitives or helper algorithms are declared.
+
+-- Mechanical-lowering correspondence:
+--   Nil / Cons              <-> OCaml [] / (::)
+--   Nothing / Just          <-> OCaml None / Some
+--   Pair                    <-> OCaml tuple (,)
+
+data Pair a b where
+  Pair :: x: a -> y: b -> Pair a b
+
+data Maybe a where
+  Nothing :: Maybe a
+  Just :: a -> Maybe a
+
+-- The refinement parameter maps each zero-based list position to its value.
+-- This is the source-validated indexed-list form used by the pinned runtime.
+data List a <p :: Int -> a -> Bool> where
+  Nil :: List a <p>
+  Cons :: x: {a | p 0 _v} ->
+          xs: List a <{p (_0 + 1) _1}> ->
+          List a <p>
+
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+
+-- A total shallow structural measure, used only to distinguish None from Some.
+measure isNothing :: Maybe a -> Bool where
+  Nothing -> True
+  Just x -> False
+
+-- Exact contract: for indexed input xs,
+--   * Nothing iff xs has fewer than two elements;
+--   * otherwise Just (penultimate, last), in that order.
+-- Pair component refinements refer to the exact zero-based terminal positions.
+last_two :: <p :: Int -> a -> Bool> .
+            xs: List a <p> ->
+            {Maybe (Pair {a | p (len xs - 2) _v}
+                         {a | p (len xs - 1) _v}) |
+             isNothing _v == (len xs < 2)}
+last_two = ??

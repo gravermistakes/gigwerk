@@ -1,0 +1,53 @@
+synquid v0.4, 2016-08-11
+
+synquid [OPTIONS] FILE [FILES]
+  Synquid program synthesizer
+
+Common flags:
+     --only=GOAL,...         Only synthesize the specified functions
+Explorer parameters:
+  -a --app-max=INT           Maximum depth of an application term (default:
+                             3)
+     --scrutinee-max=INT     Maximum depth of a match scrutinee (default: 1)
+  -m --match-max=INT         Maximum depth of matches (default: 2)
+  -x --aux-max=INT           Maximum depth of auxiliary functions (default:
+                             1)
+  -f --fix=FIXPOINTSTRATEGY  What should termination metric for fixpoints be
+                             derived from? AllArguments FirstArgument
+                             DisableFixpoint Nonterminating (default:
+                             FirstArgument )
+  -g --generalize-preds      Make recursion polymorphic in abstract
+                             refinements (default: False)
+  -e --explicit-match        Do not abduce match scrutinees (default: False)
+  -u --unfold-locals         Use all variables, as opposed to top-level
+                             function arguments only, in match scrutinee
+                             abduction (default: False)
+  -p --partial               Generate best-effort partial solutions (default:
+                             False)
+  -i --incremental           Subtyping checks during bottom-up phase
+                             (default: True)
+  -c --consistency           Check incomplete application types for
+                             consistency (default: True)
+  -z --memoize               Use memoization (default: False)
+  -s --symmetry              Use symmetry reductions (default: False)
+Solver parameters:
+     --lfp                   Use least fixpoint solver (only works for type
+                             checking, default: False)
+  -b --bfs-solver            Use BFS instead of MARCO to solve second-order
+                             constraints (default: False)
+Output:
+  -o --out-file[=FILE]       Generate Haskell output file (default: none)
+     --out-module=Name       Name of Haskell module to generate (default:
+                             from file name)
+     --output=FORMAT         Output format: Plain, Ansi or Html (default:
+                             Plain)
+  -r --resolve               Resolve only; no type checking or synthesis
+                             (default: False)
+     --print-spec            Show specification of each synthesis goal
+                             (default: True)
+     --print-stats           Show specification and solution size (default:
+                             False)
+  -l --log=INT               Logger verboseness level (default: 0)
+  -? --help                  Display help message
+  -V --version               Print version information
+     --numeric-version       Print just the version number

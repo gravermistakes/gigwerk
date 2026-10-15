@@ -1,0 +1,59 @@
+{
+  "benchmark_id": "005_reverse_list",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "rev",
+      "ocaml_signature": "'a list -> 'a list",
+      "parameters": [
+        {
+          "name": "xs",
+          "ocaml_type": "'a list",
+          "precondition": "xs is a finite immutable OCaml list"
+        }
+      ],
+      "result": {
+        "ocaml_type": "'a list",
+        "postcondition": "For xs = [x1; ...; xn], the result is [xn; ...; x1]; equality is exact sequence equality, so ordering and duplicate multiplicity are preserved under reversal."
+      }
+    }
+  ],
+  "necessary_type_declarations": [
+    {
+      "ocaml": "type 'a list = [] | (::) of 'a * 'a list",
+      "role": "Built-in finite immutable list representation used by the entrypoint."
+    },
+    {
+      "synquid": "data List a where Nil :: List a; Cons :: x:a -> xs:List a -> List a",
+      "role": "Inductive source-level representation mechanically mapped to the OCaml list type."
+    }
+  ],
+  "synthesis_only_helpers": [
+    {
+      "name": "snoc",
+      "synquid_signature": "x:a -> xs:List a -> {List a | _v == snocSpec x xs}",
+      "ocaml_lowering_signature": "'a -> 'a list -> 'a list",
+      "role": "Internal helper hole; append one element to the end of a list. It is not a trusted primitive or required exported entrypoint."
+    }
+  ],
+  "trusted_primitive_declarations": {
+    "executable": [],
+    "logical": [
+      {
+        "name": "snocSpec",
+        "role": "Non-executable logical measure defining one-element end append."
+      },
+      {
+        "name": "reverseSpec",
+        "role": "Non-executable logical measure defining exact sequence reversal."
+      }
+    ],
+    "explicitly_not_admitted": [
+      "OCaml List.rev",
+      "OCaml List.length",
+      "OCaml List.append",
+      "any preimplemented target/helper algorithm"
+    ]
+  },
+  "determinism": "Pure deterministic function: output depends only on xs; no effects, state, randomness, or exceptions are specified."
+}

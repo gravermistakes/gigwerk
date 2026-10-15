@@ -1,0 +1,115 @@
+FFFFFFFFFF
+======================================================================
+FAIL: test_candidate_not_implementation (__main__.StatusTests.test_candidate_not_implementation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 25, in test_candidate_not_implementation
+    self.assertEqual(self.classify(compiled=False), 'compile_failed')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 9, in classify
+    self.assertTrue(MODULE.exists(), 'missing fulfillment status gate')
+AssertionError: False is not true : missing fulfillment status gate
+
+======================================================================
+FAIL: test_failed_exit_overrides_claimed_tests (__main__.StatusTests.test_failed_exit_overrides_claimed_tests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 34, in test_failed_exit_overrides_claimed_tests
+    self.assertEqual(self.classify(test_exit=1), 'tests_failed')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 9, in classify
+    self.assertTrue(MODULE.exists(), 'missing fulfillment status gate')
+AssertionError: False is not true : missing fulfillment status gate
+
+======================================================================
+FAIL: test_full_verified_candidate (__main__.StatusTests.test_full_verified_candidate)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 19, in test_full_verified_candidate
+    self.assertEqual(self.classify(), 'fulfilled')
+                     ^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 9, in classify
+    self.assertTrue(MODULE.exists(), 'missing fulfillment status gate')
+AssertionError: False is not true : missing fulfillment status gate
+
+======================================================================
+FAIL: test_interface_required (__main__.StatusTests.test_interface_required)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 28, in test_interface_required
+    self.assertEqual(self.classify(interface=False), 'interface_unverified')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 9, in classify
+    self.assertTrue(MODULE.exists(), 'missing fulfillment status gate')
+AssertionError: False is not true : missing fulfillment status gate
+
+======================================================================
+FAIL: test_lowering_failure (__main__.StatusTests.test_lowering_failure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 37, in test_lowering_failure
+    self.assertEqual(self.classify(lowering=False), 'lowering_failed')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 9, in classify
+    self.assertTrue(MODULE.exists(), 'missing fulfillment status gate')
+AssertionError: False is not true : missing fulfillment status gate
+
+======================================================================
+FAIL: test_no_tests_for_partial (__main__.StatusTests.test_no_tests_for_partial)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 46, in test_no_tests_for_partial
+    self.assertEqual(self.classify(strength='partial', tests=False), 'tests_failed')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 9, in classify
+    self.assertTrue(MODULE.exists(), 'missing fulfillment status gate')
+AssertionError: False is not true : missing fulfillment status gate
+
+======================================================================
+FAIL: test_partial_never_fulfilled (__main__.StatusTests.test_partial_never_fulfilled)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 22, in test_partial_never_fulfilled
+    self.assertEqual(self.classify(strength='partial'), 'tests_passed_partial_contract')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 9, in classify
+    self.assertTrue(MODULE.exists(), 'missing fulfillment status gate')
+AssertionError: False is not true : missing fulfillment status gate
+
+======================================================================
+FAIL: test_requirements_feature_gap (__main__.StatusTests.test_requirements_feature_gap)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 43, in test_requirements_feature_gap
+    self.assertEqual(self.classify(contract='requires_features', synthesis='not_attempted'), 'requires_features')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 9, in classify
+    self.assertTrue(MODULE.exists(), 'missing fulfillment status gate')
+AssertionError: False is not true : missing fulfillment status gate
+
+======================================================================
+FAIL: test_tests_required (__main__.StatusTests.test_tests_required)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 31, in test_tests_required
+    self.assertEqual(self.classify(tests=False), 'tests_failed')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 9, in classify
+    self.assertTrue(MODULE.exists(), 'missing fulfillment status gate')
+AssertionError: False is not true : missing fulfillment status gate
+
+======================================================================
+FAIL: test_timeout_never_fulfilled (__main__.StatusTests.test_timeout_never_fulfilled)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 40, in test_timeout_never_fulfilled
+    self.assertEqual(self.classify(synthesis='timeout'), 'synthesis_timeout')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_status.py", line 9, in classify
+    self.assertTrue(MODULE.exists(), 'missing fulfillment status gate')
+AssertionError: False is not true : missing fulfillment status gate
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.004s
+
+FAILED (failures=10)

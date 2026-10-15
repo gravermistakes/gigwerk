@@ -1,0 +1,3 @@
+contract.sq:28: Resolution Error:
+  Type parameters of measure exactRange must be the same as in the datatype declaration
+

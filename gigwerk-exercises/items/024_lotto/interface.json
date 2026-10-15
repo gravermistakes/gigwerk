@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "exercise": {
+    "id": "024_lotto",
+    "title": "Lotto: Draw N Different Random Numbers From the Set 1..M",
+    "authoritative_repository": "ocaml/ocaml.org",
+    "authoritative_commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "authoritative_path": "data/exercises/024_lotto.md",
+    "source_blob_sha": "d7a5ed9ddbc41c85a6525a392409786e93b57fd6"
+  },
+  "generated_module": "Generated",
+  "entrypoints": [
+    {
+      "name": "lotto_select",
+      "ocaml_signature": "int -> int -> int list",
+      "parameters": [
+        {
+          "name": "n",
+          "ocaml_type": "int",
+          "stated_feasible_domain": "0 <= n"
+        },
+        {
+          "name": "m",
+          "ocaml_type": "int",
+          "stated_feasible_domain": "0 <= m and n <= m"
+        }
+      ],
+      "result": {
+        "ocaml_type": "int list",
+        "postcondition_on_stated_feasible_domain": [
+          "List.length result = n",
+          "every element x of result satisfies 1 <= x and x <= m",
+          "result has pairwise-distinct elements"
+        ],
+        "ordering": "unspecified",
+        "randomness": "required by the source wording; no seed argument is present"
+      },
+      "unstated_behavior": [
+        "n < 0",
+        "m < 0",
+        "n > m",
+        "random distribution or seeding",
+        "exceptions or option behavior"
+      ]
+    }
+  ],
+  "type_declarations": [],
+  "trusted_primitives": [
+    {
+      "name": "Random.int",
+      "ocaml_signature": "int -> int",
+      "classification": "effectful OCaml standard-library primitive; not a synthesized target/helper",
+      "required_precondition": "bound > 0",
+      "required_guarantee": "returns an integer k with 0 <= k < bound and advances/uses ambient PRNG state",
+      "reason": "The source API requires random draws but deliberately exposes no seed or explicit state."
+    }
+  ],
+  "unsynthesized_final_algorithm": "lotto_select is intentionally not implemented in this artifact."
+}

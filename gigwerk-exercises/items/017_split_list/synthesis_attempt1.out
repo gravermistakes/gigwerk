@@ -1,0 +1,3 @@
+contract.sq:31:25: Parse Error:
+  Unexpected 24-column indentation or ':'
+  expecting top-level indentation (started at line 5) or end of input

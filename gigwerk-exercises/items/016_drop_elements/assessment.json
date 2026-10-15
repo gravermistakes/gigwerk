@@ -1,0 +1,42 @@
+{
+  "id": "016",
+  "title": "Drop Every N'th Element From a List",
+  "contract_status": "requires_features",
+  "synthesis_status": "rejected",
+  "specification_strength": "full",
+  "required_features": [
+    "A recursive logical measure/relation with an accumulator or state parameter that may change on recursive calls while another parameter remains fixed; the pinned Synquid resolver forbids changing any measure constant argument.",
+    "Equivalently, an index-aware sequence refinement relation sufficient to state that exactly positions n, 2n, 3n, ... are removed while retained occurrences remain in order."
+  ],
+  "semantic_obligations": [
+    "For every positive n, use 1-based input positions.",
+    "Remove exactly positions i for which i mod n = 0.",
+    "Keep all other elements in original order.",
+    "Preserve multiplicity of all retained occurrences; do not reduce the requirement to sets or lengths.",
+    "Return [] for an empty input and for n = 1; return the original sequence when n exceeds its length.",
+    "Do not assert behavior for n <= 0, because the authoritative source does not specify it."
+  ],
+  "entrypoints": ["drop"],
+  "attempts": [
+    {
+      "attempt": 1,
+      "exit_code": 1,
+      "elapsed_seconds": 0.024,
+      "result": "rejected at resolution: a Pos refinement type alias is not accepted as a measure sort"
+    },
+    {
+      "attempt": 2,
+      "exit_code": 1,
+      "elapsed_seconds": 0.023,
+      "result": "rejected at resolution: Constant arguments to measure dropNth must not change in recursive call dropNth n n xs"
+    }
+  ],
+  "elapsed_seconds": 0.047,
+  "candidate_note": "No synthesized candidate exists. A Synquid candidate would still require mechanical OCaml lowering and these semantic tests before it could be considered fulfilled.",
+  "negative_control": {
+    "stub": "Generated.ml",
+    "compile_exit_code": 0,
+    "run_exit_code": 1,
+    "expected_result": "failure: the stub is intentionally unsynthesized"
+  }
+}

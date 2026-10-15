@@ -1,0 +1,31 @@
+{
+  "id": "008_remove_duplicates",
+  "title": "Eliminate Duplicates",
+  "language": "OCaml",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "compress",
+      "ocaml_signature": "'a list -> 'a list",
+      "purity": "pure deterministic",
+      "semantics": "Return the first element of every maximal non-empty contiguous run of values equal under ordinary OCaml polymorphic structural equality (=), preserving the runs' left-to-right order. Values equal but separated by a different value are retained as distinct output elements."
+    }
+  ],
+  "necessary_type_declarations": [],
+  "trusted_primitive_declarations": [
+    {
+      "synquid_name": "eq",
+      "synquid_signature": "x: a -> y: a -> {Bool | _v == (x == y)}",
+      "ocaml_lowering": "( = )",
+      "role": "Generic equality test used only as a component; it is not the final algorithm."
+    }
+  ],
+  "algorithm_holes": [
+    "compress"
+  ],
+  "excluded_interfaces": [
+    "No seed, randomness, option, result, exception-wrapper, mutable-state, stream, or string-specific API is introduced."
+  ],
+  "float_note": "Run boundaries follow OCaml (=): nan is not equal to nan; 0.0 is equal to -0.0.",
+  "comparison_note": "As with OCaml (=), comparing function-containing values may raise Invalid_argument; this benchmark preserves rather than masks that language behavior."
+}

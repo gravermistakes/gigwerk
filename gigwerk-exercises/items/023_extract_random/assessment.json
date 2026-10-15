@@ -1,0 +1,33 @@
+{
+  "id": "023_extract_random",
+  "title": "Extract a Given Number of Randomly Selected Elements From a List",
+  "contract_status": "requires_features",
+  "synthesis_status": "not_attempted",
+  "specification_strength": "partial",
+  "required_features": [
+    "Effectful stateful PRNG operations, including an exact model of per-call OCaml Random.init 0 initialization and bounded draws.",
+    "A probabilistic/effect semantics that can specify random selection rather than a pure set/length relation.",
+    "A sequence/multiset relation capable of preserving list occurrence multiplicity and constraining result order.",
+    "Additional authoritative specification of invalid n behavior and the draw algorithm/order beyond the sole official example, if exact behavior on all inputs is required."
+  ],
+  "semantic_obligations": [
+    "Expose rand_select with exact interface 'a list -> int -> 'a list.",
+    "For documented valid requests, return exactly n selected occurrences and never exceed any source value's multiplicity.",
+    "Initialize Random with seed 0 at the start of each function invocation in documented reproducible mode.",
+    "Match the official exact example: rand_select [\"a\"; \"b\"; \"c\"; \"d\"; \"e\"; \"f\"; \"g\"; \"h\"] 3 = [\"e\"; \"c\"; \"g\"].",
+    "Do not invent behavior for negative n or n greater than the input length; the solution-free source leaves it unstated.",
+    "Do not treat a finite test run as a proof of a random or probabilistic property."
+  ],
+  "entrypoints": [
+    "rand_select"
+  ],
+  "elapsed_seconds": 0,
+  "source_provenance": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/023_extract_random.md",
+    "solution_section": "One section found and quarantined before inspection; no solution bodies used."
+  },
+  "contract_file": null,
+  "notes": "No contract.sq or synthesis invocation was produced. Calling Synquid on a set/length-only approximation would be unsound: it would omit the required Random effects and cannot determine the specified seeded output order. Independent OCaml tests are retained, with a deliberately incorrect test-only negative-control stub used to demonstrate that the semantic oracle rejects a nonconforming implementation. A candidate generated later is only a candidate until mechanical lowering plus these OCaml tests succeeds."
+}

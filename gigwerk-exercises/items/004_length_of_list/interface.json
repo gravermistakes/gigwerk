@@ -1,0 +1,62 @@
+{
+  "benchmark_id": "004",
+  "title": "Length of a List",
+  "entrypoints": [
+    {
+      "name": "length",
+      "ocaml_signature": "'a list -> int",
+      "input": "A finite OCaml list of values of arbitrary, uniform element type.",
+      "output": "A nonnegative int equal to the number of cons cells in the input list.",
+      "semantic_contract": "For every list xs, length xs = cardinality(xs). The result counts every occurrence, including duplicate values; it is independent of element values and preserves no element ordering because the result is an integer.",
+      "failure_behavior": "No domain failure is specified for finite OCaml lists.",
+      "tail_recursion": "The upstream statement calls tail recursion a bonus; it is not a semantic acceptance requirement."
+    }
+  ],
+  "necessary_type_declarations": [
+    {
+      "language": "OCaml",
+      "declaration": "type 'a list = [] | (::) of 'a * 'a list",
+      "note": "Built-in OCaml list type; declaration shown for interface clarity, not to be redefined in Generated."
+    },
+    {
+      "language": "Synquid logical model",
+      "declaration": "data List a where Nil :: List a; Cons :: x:a -> xs:List a -> List a",
+      "note": "A separate inductive model used only by contract.sq."
+    }
+  ],
+  "trusted_primitives": [
+    {
+      "name": "Synquid Int arithmetic (+, integer literals, equality)",
+      "role": "Generic arithmetic and refinement-logic primitives used to state the cardinality measure.",
+      "trusted": true,
+      "is_final_algorithm": false
+    },
+    {
+      "name": "Synquid inductive pattern matching over List",
+      "role": "Generic eliminator for the logical List model.",
+      "trusted": true,
+      "is_final_algorithm": false
+    },
+    {
+      "name": "len",
+      "role": "Trusted logical termination/size measure: Nil maps to 0 and each Cons adds one to the tail measure.",
+      "trusted": true,
+      "is_final_algorithm": false,
+      "executable_component": false
+    }
+  ],
+  "unsynthesized_algorithm": {
+    "name": "length",
+    "status": "hole_in_contract",
+    "implementation_supplied_here": false,
+    "forbidden_delegations": ["List.length"]
+  },
+  "unsupported_or_inapplicable": {
+    "randomness": "not used",
+    "effects": "not used",
+    "coinductive_or_infinite_streams": "not part of the finite OCaml list interface",
+    "mutable_state": "not used",
+    "strings": "only example element values; no string-specific semantics",
+    "floats": "not used"
+  }
+}

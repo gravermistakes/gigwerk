@@ -1,0 +1,9 @@
+compress :: xs:List a -> {List a|_v == runCompress xs}
+contract.sq:36: Error:
+  Cannot match shape 'Bool'
+  with shape '_'
+  when checking eq ::
+  X1:_ -> X0:_ -> _ in
+  \xs . 
+    match eq ?? ?? with
+

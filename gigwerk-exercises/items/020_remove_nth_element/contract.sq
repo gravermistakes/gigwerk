@@ -1,0 +1,28 @@
+-- Exercise 020: valid-index removal from a finite list.
+-- This contract is intentionally source-only: remove_at is a synthesis hole.
+-- It uses an index-sensitive abstract refinement to retain the original
+-- element sequence exactly (including duplicates), except at index n.
+
+type Nat = {Int | _v >= 0}
+
+qualifier {x == y, x != y, x < y}
+
+-- Trusted generic arithmetic components, supplied by the runtime/backend;
+-- they are not exercise-specific algorithms.
+zero :: {Int | _v == 0}
+dec :: x: Int -> {Int | _v == x - 1}
+
+data List a <p :: Int -> a -> Bool> where
+  Nil :: List a <p>
+  Cons :: x: {a | p 0 _v} -> xs: List a <{p (_0 + 1) _1}> -> List a <p>
+
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+
+-- Preconditions deliberately restrict n to an existing 0-based position.
+-- The source statement gives no behavior for other integers.
+-- Output element j is input element j for j < n and input element j + 1
+-- otherwise; thus order and multiplicity are preserved exactly.
+remove_at :: <p :: Int -> a -> Bool> . n: Nat -> xs: {List a <p> | n < len xs} -> {List a <{p (if _0 < n then _0 else _0 + 1) _1>} | len _v == len xs - 1}
+remove_at = ??

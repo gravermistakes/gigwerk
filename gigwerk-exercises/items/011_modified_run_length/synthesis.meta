@@ -1,0 +1,8 @@
+attempt=1
+exit_code=1
+elapsed_seconds=0.021
+command=timeout 60s proot -R ROOTFS -b OUTPUT:/work -w /work /root/.cabal/bin/synquid contract.sq --output=Plain --print-stats
+attempt=2
+exit_code=1
+elapsed_seconds=0.034
+command=timeout 60s proot -R ROOTFS -b OUTPUT:/work -w /work /root/.cabal/bin/synquid contract.sq --output=Plain --print-stats

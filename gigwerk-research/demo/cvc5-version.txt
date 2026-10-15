@@ -1,0 +1,39 @@
+This is cvc5 version 1.1.2
+compiled with GCC version 13.2.0
+on Mar 31 2024 17:58:39
+
+Copyright (c) 2009-2023 by the authors and their institutional
+affiliations listed at https://cvc5.github.io/people.html
+
+This build of cvc5 uses GPLed libraries, and is thus covered by
+the GNU General Public License (GPL) version 3.  Versions of cvc5
+are available that are covered by the (modified) BSD license. If
+you want to license cvc5 under this license, please configure cvc5
+with the "--no-gpl" option before building from sources.
+
+THIS SOFTWARE IS PROVIDED AS-IS, WITHOUT ANY WARRANTIES.
+USE AT YOUR OWN RISK.
+
+This version of cvc5 is linked against the following non-(L)GPL'ed
+third party libraries.
+
+  CaDiCaL - Simplified Satisfiability Solver
+  See https://github.com/arminbiere/cadical for copyright information.
+
+  CryptoMiniSat - An Advanced SAT Solver
+  See https://github.com/msoos/cryptominisat for copyright information.
+
+  SymFPU - The Symbolic Floating Point Unit
+  See https://github.com/martin-cs/symfpu/tree/CVC4 for copyright information.
+
+This version of cvc5 is linked against the following third party
+libraries covered by the GPLv3 license.
+See licenses/gpl-3.0.txt for more information.
+
+  CLN - Class Library for Numbers
+  See http://www.ginac.de/CLN for copyright information.
+
+See the file COPYING (distributed with the source code, and with
+all binaries) for the full cvc5 copyright, licensing, and (lack of)
+warranty information.
+

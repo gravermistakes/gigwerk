@@ -1,0 +1,23 @@
+{
+  "id": "022",
+  "title": "Create a List Containing All Integers Within a Given Range",
+  "contract_status": "requires_features",
+  "specification_strength": "full",
+  "synthesis_status": "not_attempted",
+  "elapsed_seconds": 0,
+  "required_features": [
+    "Synquid structural recursive Boolean measure over List with two integer parameters",
+    "Linear integer arithmetic in refinement measures",
+    "Recursive synthesis with trusted generic inc/dec/eq/lt/gt components"
+  ],
+  "semantic_obligations": [
+    "range : int -> int -> int list",
+    "inclusive endpoints",
+    "ascending unit-step sequence if first <= last",
+    "descending unit-step sequence if first > last",
+    "exact ordering and multiplicity; no set/length-only weakening",
+    "finite, pure, deterministic behavior"
+  ],
+  "entrypoints": ["range"],
+  "notes": "Draft prior to local Synquid resolve/synthesis and negative-control compilation checks. No final implementation is included."
+}

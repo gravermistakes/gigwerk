@@ -1,0 +1,6 @@
+stub_compile_exit=0
+test_compile_exit=0
+test_run_exit=2
+--- run stdout ---
+--- run stderr ---
+Fatal error: exception Test_generated.Test_failure("official four-string example: expected a semantic result, but reached the unsynthesized negative-control stub")

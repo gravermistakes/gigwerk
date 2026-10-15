@@ -7,3 +7,9 @@ ocaml/_build/
 STATUS-ANALYSIS.md
 -version
 gigwerk.db
+
+# merged manus harness: build products, not sources
+gigwerk-exercises/backend/_build/
+gigwerk-exercises/backend/synquid-ocaml
+__pycache__/
+*.pyc

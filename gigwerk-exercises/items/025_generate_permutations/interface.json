@@ -1,0 +1,31 @@
+{
+  "id": "025_generate_permutations",
+  "title": "Generate a Random Permutation of the Elements of a List",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "permutation",
+      "ocaml_signature": "'a list -> 'a list",
+      "requirements": [
+        "Returns a list that is a permutation of the input: occurrence-sensitive multiset equality, including duplicates.",
+        "Returns a random ordering as required by the authoritative statement.",
+        "Has no seed or RNG-state argument; do not alter the unary public interface."
+      ]
+    }
+  ],
+  "type_declarations": [],
+  "trusted_primitive_declarations": [
+    {
+      "name": "random_choice",
+      "kind": "required runtime capability, not declared in an implementation artifact",
+      "conceptual_type": "'a list -> ('a * 'a list) option",
+      "purpose": "Select one occurrence from a finite non-empty list and return it with the remaining occurrences.",
+      "semantic_requirements": [
+        "Effectful/random selection; no deterministic seed is introduced into permutation's interface.",
+        "The returned remaining list preserves all and only unselected occurrences, including duplicates."
+      ]
+    }
+  ],
+  "contract_status": "requires_features",
+  "not_synthesis_input": "This JSON is an interface/requirement record. It is not a Synquid contract and contains no executable implementation."
+}

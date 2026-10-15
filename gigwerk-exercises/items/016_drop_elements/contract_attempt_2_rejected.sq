@@ -1,0 +1,27 @@
+-- Exercise 016: Drop Every N'th Element From a List
+-- Full contract: result is exactly the input sequence with positions n, 2n,
+-- 3n, ... removed. The target body is intentionally a synthesis hole.
+-- Caller precondition: n is positive (1-based period).
+
+type Pos = {Int | _v > 0}
+
+-- Trusted generic supporting primitive: integer predecessor only.
+dec :: x:Int -> {Int | _v == x - 1}
+
+data List a where
+  Nil :: List a
+  Cons :: x:a -> xs:List a -> List a
+
+-- Exact logical list value. [remaining] starts at [n] and is reset to [n]
+-- after a deletion. Raw Int arguments are required by this Synquid runtime's
+-- measure-sort resolver; the target signature supplies the positive-n input
+-- precondition needed for the intended behavior.
+measure dropNth :: n:Int -> remaining:Int -> List a -> List a where
+  Nil -> Nil
+  Cons x xs -> if remaining == 1
+                 then dropNth n n xs
+                 else Cons x (dropNth n (remaining - 1) xs)
+
+-- Target entry point: no algorithm implementation is supplied.
+drop :: xs:List a -> n:Pos -> {List a | _v == dropNth n n xs}
+drop = ??

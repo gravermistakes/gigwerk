@@ -1,0 +1,16 @@
+-- GigWerk benchmark 014_duplicate_elements
+-- Exact finite-list contract. `duplicate` is a synthesis goal; its body is a hole.
+-- `duplicateSpec` is a logical measure, not executable OCaml code.
+-- No trusted algorithmic component is declared.
+
+data List a where
+  Nil :: List a
+  Cons :: a -> List a -> List a
+
+measure duplicateSpec :: List a -> List a
+  where
+    Nil -> Nil
+    Cons x xs -> Cons x (Cons x (duplicateSpec xs))
+
+duplicate :: [a] -> {List a | _v == duplicateSpec arg0}
+duplicate = ??

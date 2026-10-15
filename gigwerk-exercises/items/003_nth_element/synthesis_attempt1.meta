@@ -1,0 +1,1 @@
+{"attempt": 1, "command": "timeout --foreground -k 5s 60s proot -R ROOTFS -b OUTPUT_DIR:/work -w /work /root/.cabal/bin/synquid contract.sq --output=Plain --print-stats", "elapsed_seconds": 0.020727741, "exit_code": 1, "nonterminating_disabled": true, "partial_disabled": true, "timeout_limit_seconds": 60}

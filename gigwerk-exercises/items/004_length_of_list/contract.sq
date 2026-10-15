@@ -1,0 +1,20 @@
+-- GigWerk benchmark 004: logical contract only.
+-- `len` is a trusted logical termination measure, not an executable OCaml
+-- implementation.  The only algorithmic definition, `length`, is a hole.
+
+type Nat = {Int | _v >= 0}
+
+data List a where
+  Nil :: List a
+  Cons :: x: a -> xs: List a -> List a
+
+-- The explicit codomain follows the pinned runtime's List examples.  Its
+-- `type Nat` alias is usable for value parameters but not as a measure sort.
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+
+-- Full contract: for every finite inductive input list xs, the result is
+-- exactly its structural cardinality, expressed by len xs.
+length :: xs: List a -> {Int | _v == len xs}
+length = ??

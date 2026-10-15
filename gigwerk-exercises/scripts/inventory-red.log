@@ -1,0 +1,13 @@
+..F....
+======================================================================
+FAIL: test_missing_catalogue_items_are_reported (__main__.RunnerTests.test_missing_catalogue_items_are_reported)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_runner.py", line 53, in test_missing_catalogue_items_are_reported
+    self.assertEqual(len(results), 2, 'declared missing items must not disappear')
+AssertionError: 0 != 2 : declared missing items must not disappear
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.224s
+
+FAILED (failures=1)

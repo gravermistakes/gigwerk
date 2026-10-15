@@ -1,0 +1,73 @@
+{
+  "id": "017_split_list",
+  "title": "Split a List Into Two Parts; The Length of the First Part Is Given",
+  "source": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/017_split_list.md",
+    "solution_section_quarantined": true
+  },
+  "entrypoints": [
+    {
+      "name": "split",
+      "ocaml_signature": "'a list -> int -> 'a list * 'a list",
+      "argument_order": ["xs", "n"],
+      "input_precondition": "n >= 0; behavior for negative OCaml integers is not stated by the authoritative problem.",
+      "result": "(prefix, suffix)",
+      "semantic_contract": [
+        "prefix @ suffix is structurally equal to xs, preserving order and multiplicity.",
+        "List.length prefix = min(n, List.length xs).",
+        "The split is saturated: when n >= List.length xs, the result is (xs, [])."
+      ],
+      "effects": "pure",
+      "mutable_state": false,
+      "randomness": false,
+      "exceptions_or_options": "none specified for n >= 0; negative-n behavior is unspecified."
+    }
+  ],
+  "necessary_type_declarations": [
+    {
+      "synquid": "data List a where Nil :: List a; Cons :: x: a -> xs: List a -> List a",
+      "ocaml_lowering": "'a list"
+    },
+    {
+      "synquid": "data Pair a b where P :: x: a -> y: b -> Pair a b",
+      "ocaml_lowering": "'a * 'b"
+    },
+    {
+      "synquid": "type Nat = {Int | _v >= 0}",
+      "role": "logical precondition alias; OCaml runtime type remains int"
+    }
+  ],
+  "trusted_primitives": [
+    {
+      "name": "len",
+      "kind": "trusted logical termination measure",
+      "declaration": "len :: List a -> {Int | _v >= 0}",
+      "purpose": "list length only; not an executable target helper"
+    },
+    {
+      "name": "fst",
+      "kind": "trusted logical measure",
+      "declaration": "fst :: Pair a b -> a",
+      "purpose": "observe the first logical pair component"
+    },
+    {
+      "name": "snd",
+      "kind": "trusted logical measure",
+      "declaration": "snd :: Pair a b -> b",
+      "purpose": "observe the second logical pair component"
+    },
+    {
+      "name": "append",
+      "kind": "trusted logical measure",
+      "declaration": "append :: ys: List a -> List a -> List a",
+      "purpose": "express structural prefix/suffix reconstruction with exact order and multiplicity; it is not an executable component delegated to the target"
+    }
+  ],
+  "unsynthesized_algorithm": {
+    "name": "split",
+    "synquid_definition": "split = ??",
+    "status": "no authored implementation; no candidate was emitted"
+  }
+}

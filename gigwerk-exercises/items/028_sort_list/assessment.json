@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "id": "028_sort_list",
+  "source": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/028_sort_list.md",
+    "retrieval": "read-only gh api",
+    "solution_quarantine": {
+      "method": "Removed the level-two solution section through the next level-two heading or EOF before inspection.",
+      "removed_source_line_range": "9-51",
+      "used_solution_content": false
+    }
+  },
+  "contract_status": "requires_features",
+  "specification_strength": "full",
+  "synthesis_status": "not_attempted",
+  "elapsed_seconds": 0,
+  "synquid": {
+    "attempts": [],
+    "contract_file": null,
+    "stdout_file": null,
+    "stderr_file": null,
+    "reason_not_attempted": "A sound full contract cannot be expressed with the pinned runtime's available list measures/set refinements. Running a weak set/length-only contract would violate the benchmark rule against calling incomplete contracts."
+  },
+  "required_features": [
+    "A multiplicity-preserving bag/multiset relation over complete inner lists, not merely a Set relation.",
+    "A way to count how many elements of an outer list have a given derived key (inner-list length).",
+    "A relation linking every output inner list to its input multiplicity while allowing an unspecified permutation within equal-key blocks.",
+    "Quantified or inductively defined monotonicity over those input-derived frequency keys."
+  ],
+  "semantic_obligations": [
+    "length_sort: preserve every inner list and its multiplicity; order inner-list lengths nondecreasingly.",
+    "frequency_sort: preserve every inner list and its multiplicity; order by nondecreasing frequency of the inner-list length in the original input.",
+    "Accept finite empty/repeated nested lists and remain polymorphic in elements.",
+    "Do not impose an unstated tie-break or stability requirement."
+  ],
+  "tie_order": {
+    "status": "underspecified_by_source",
+    "benchmark_interpretation": "Any permutation whose required sort key is nondecreasing is valid."
+  },
+  "artifacts": {
+    "problem_md": "problem.md",
+    "interface_json": "interface.json",
+    "test_generated_ml": "test_generated.ml",
+    "assessment_md": "assessment.md",
+    "contract_sq": null,
+    "synthesis_out": null,
+    "synthesis_err": null
+  },
+  "test_plan": {
+    "uses_only": "OCaml standard library",
+    "opens_module": "Generated",
+    "checks": [
+      "Official displayed examples as valid semantic illustrations.",
+      "Candidate permutation/multiplicity preservation.",
+      "Candidate nondecreasing length or input-frequency key.",
+      "Empty and repeated-inner-list edge cases.",
+      "341 exhaustive outer inputs built from four representative inner lists, at outer lengths 0 through 4.",
+      "An explicit drop-all negative control rejected by the same permutation assertion."
+    ]
+  }
+}

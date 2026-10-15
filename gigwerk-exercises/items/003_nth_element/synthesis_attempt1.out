@@ -1,0 +1,3 @@
+contract.sq:36: Resolution Error:
+  Variable _v is not in scope
+

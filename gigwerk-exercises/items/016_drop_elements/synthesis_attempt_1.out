@@ -1,0 +1,2 @@
+contract.sq:21: Resolution Error:
+  Datatype Pos is undefined in sort Pos

@@ -1,0 +1,54 @@
+{
+  "id": "019_rotate_list",
+  "title": "Rotate a List N Places to the Left",
+  "source": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/019_rotate_list.md",
+    "solution_section": "quarantined before inspection"
+  },
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "rotate",
+      "ocaml_signature": "'a list -> int -> 'a list",
+      "argument_order": ["xs", "n"],
+      "source_evidence": "The official example calls rotate [\"a\"; ...; \"h\"] 3. The upstream statement has no separate val declaration; this is the principal OCaml type induced by that call form and stated task."
+    }
+  ],
+  "necessary_type_declarations": [],
+  "trusted_primitives": [
+    {
+      "name": "OCaml structural list constructors and pattern matching",
+      "role": "generic runtime/language primitives only",
+      "not_an_unsynthesized_final_algorithm": true
+    },
+    {
+      "name": "OCaml integer values and comparisons",
+      "role": "generic runtime/language primitives only",
+      "not_an_unsynthesized_final_algorithm": true
+    }
+  ],
+  "prohibited_as_trusted_final_algorithm": [
+    "Any prewritten rotate implementation",
+    "A library routine or opaque component that realizes the complete rotation transformation",
+    "A manually translated Synquid candidate"
+  ],
+  "semantic_domain": {
+    "fully_specified_by_source": false,
+    "unambiguous_tested_domain": "finite xs with 0 <= n <= List.length xs; empty xs must produce []",
+    "unspecified_by_source": [
+      "negative n",
+      "n greater than List.length xs",
+      "whether count normalizes modulo the input length"
+    ]
+  },
+  "effects": {
+    "randomness": false,
+    "mutable_state": false,
+    "io_or_other_effects": false,
+    "strings_as_required_algorithmic_theory": false,
+    "floats": false,
+    "coinductive_or_infinite_streams": false
+  }
+}

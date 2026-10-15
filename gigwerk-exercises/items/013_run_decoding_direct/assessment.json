@@ -1,0 +1,61 @@
+{
+  "id": "013_run_decoding_direct",
+  "title": "Run-Length Encoding of a List (Direct Solution)",
+  "contract_status": "ready",
+  "synthesis_status": "runtime_error",
+  "specification_strength": "full",
+  "elapsed_seconds": 0.043,
+  "entrypoints": ["encode"],
+  "required_features": [
+    "Pinned Synquid algebraic data types and Boolean measures, used by contract.sq to state a recursive exact ordered-expansion relation.",
+    "Trusted generic equality primitive eq : 'a -> 'a -> bool, modeled by its equality refinement and mechanically lowered consistently with the OCaml backend's adjacent-equality semantics.",
+    "Mechanical lowering from the contract-only RList representation to the exact OCaml 'a rle list result type; RNil maps to [], and RCons maps to list cons."
+  ],
+  "semantic_obligations": [
+    "Partition the finite input into maximal nonempty consecutive equality-runs in left-to-right order.",
+    "Emit One x exactly for runs of length 1 and Many (n, x) exactly for runs of length n >= 2.",
+    "Preserve exact input ordering and multiplicity when output nodes are expanded; do not merge non-adjacent equal values.",
+    "Return [] for []; output no zero/negative Many count and no adjacent output nodes for equal values.",
+    "Honor the source's directness constraint: do not first construct duplicate sublists."
+  ],
+  "synquid_runtime": {
+    "source": "/home/ubuntu/jobs/42a912fe9212_a0/synquid (read-only)",
+    "configured_command": "proot -R /home/ubuntu/synquid-runtime/bundle/rootfs -b YOUR_OUTPUT_DIR:/work -w /work /root/.cabal/bin/synquid contract.sq --output=Plain --print-stats",
+    "attempt_limit": 2,
+    "attempts": [
+      {
+        "number": 1,
+        "exit_code": 1,
+        "elapsed_seconds": 0.021,
+        "result": "frontend parse error at nested constructor patterns in rcount; corrected by separating rcount from the RList head-count measure",
+        "stdout": "synthesis_attempt1.out",
+        "stderr": "synthesis_attempt1.err"
+      },
+      {
+        "number": 2,
+        "exit_code": 1,
+        "elapsed_seconds": 0.022,
+        "result": "frontend resolution error: rhead's RNil case tried to construct One 0 at generic type a; corrected by replacing rhead with integer rheadcount",
+        "stdout": "synthesis.out",
+        "stderr": "synthesis.err"
+      }
+    ],
+    "post_attempt_note": "The final local correction to contract.sq was deliberately not run: the user allows at most two attempts. Thus no Synquid candidate exists, and the contract's corrected frontend acceptance remains unverified."
+  },
+  "test_evidence": {
+    "path": "test_generated.ml",
+    "method": "Compiled independently with OCaml 4.14.1 against an explicitly labelled deliberately-wrong test stub outside this output directory.",
+    "compile_exit_code": 0,
+    "wrong_stub_runtime_exit_code": 1,
+    "observed_failure": "FAIL singleton is One: semantic result differs from expectation",
+    "coverage": "official example; empty, singleton, two- and four-element runs; alternating values; separated equal values; explicit negative control; all 364 lists over {0,1,2} of length <= 5"
+  },
+  "artifacts": {
+    "contract.sq": "full declarative contract; target encode and no algorithm helper have bodies other than the single synthesis hole",
+    "synthesis.out": "second attempt stdout",
+    "synthesis.err": "second attempt stderr",
+    "synthesis_attempt1.out": "first attempt stdout",
+    "synthesis_attempt1.err": "first attempt stderr"
+  },
+  "notes": "No final OCaml implementation, candidate lowering, or published solution body was authored or inspected. The contract encodes full ordered expansion and canonical run boundaries; a future attempt may only be made under an explicit attempt-budget decision. Any future Synquid output is merely a candidate until mechanically lowered and passed through test_generated.ml."
+}

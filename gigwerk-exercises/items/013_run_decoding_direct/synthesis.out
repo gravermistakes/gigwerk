@@ -1,0 +1,3 @@
+contract.sq:37: Resolution Error:
+  Cannot unify sorts a and Int
+
