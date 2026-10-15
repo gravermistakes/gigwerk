@@ -403,6 +403,45 @@ let book ?(gate = None) ~(now : int64) (r : request) : (booked, refusal) result 
                                 ladder = k.Role.ladder;
                                 decided_by })))))
 
+(* ------------------------------------------------------------- casting *)
+
+(* Who gets the gig. `book` decided whether this composition may exist at all
+   and fitted the Role into the envelope; the Agent's whole contribution was
+   the request that named the Role. What remains is the roster: which talent
+   the Agency keeps for which part. The Agent does not pick a module here and
+   cannot hand one in with the request, so a booking cannot smuggle in a
+   performer the roster does not hold.
+   A talent whose machine is not the Role's machine is refused, not adapted:
+   the Role says what the part is and what done means, and a performer working
+   a different ladder would be reporting completion of some other part. *)
+type miscast =
+  | No_talent of string
+  | Wrong_part of { role : string; talent : string }
+
+let miscast_to_string = function
+  | No_talent role -> Printf.sprintf "the roster holds no talent for role %S" role
+  | Wrong_part { role; talent } ->
+      Printf.sprintf "%S does not perform the %S part: its machine is not the role's"
+        talent role
+
+let cast ~(roster : (string * (module Code_actor.S)) list) (b : booked) =
+  match List.assoc_opt b.role.Role.name roster with
+  | None -> Error (No_talent b.role.Role.name)
+  | Some talent ->
+      let module T = (val talent : Code_actor.S) in
+      if b.role.Role.machine <> Some T.machine then
+        Error (Wrong_part { role = b.role.Role.name; talent = T.name })
+      else Ok talent
+
+(* The booked commission's own obligations, never the caller's: the role's
+   grants and the role's allowance, narrowed at booking. *)
+let perform ~roster (b : booked) ~specification ~workspace ~now =
+  match cast ~roster b with
+  | Error m -> Error m
+  | Ok actor ->
+      Ok (Producer.run ~actor ~specification ~workspace
+            ~obligations:b.commission_obligations ~now)
+
 (* --------------------------------------------------- running a booked commission *)
 
 (* Wire format on the pipe: PHASE \x1f PAYLOAD. \x1f because the verdict

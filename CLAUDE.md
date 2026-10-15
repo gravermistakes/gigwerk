@@ -95,7 +95,7 @@ online. Either take authorship or do not; there is no "generated" terminology.
 ## Build
 
 ```
-cd ocaml && dune build && dune test     # 316 checks across nine binaries
+cd ocaml && dune build && dune test     # 342 checks across ten binaries
 ./lint.sh                               # c, sql, prolog, elpi
 ```
 

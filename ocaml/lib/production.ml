@@ -33,7 +33,11 @@ type requirement = {
   acceptance : acceptance option;
 }
 
+(* `by` names the Actor whose work this is. An artifact carries its author the
+   way a record carries its signature: GigWerk handles the work, it never
+   passes its own output off as the talent's. *)
 type artifact = {
   requirement_id : string;
   paths : string list;
+  by : string;
 }

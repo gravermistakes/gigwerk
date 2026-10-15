@@ -76,9 +76,25 @@ Stated here because a document that claims a boundary it does not hold is worse
 than one that claims nothing.
 
 `Actor.run_commission` runs its work once, so `Phases.settled`, which
-wants two consecutive terminal emissions, cannot fire at all; and
-`budget_actions` is validated at booking, issued to `Obligations`, then never
-decremented, because the work thunk discards the obligations record.
+wants two consecutive terminal emissions, cannot fire at all. For the stock
+scripts run through `Booking.run`, `budget_actions` is validated at booking,
+issued to `Obligations`, then never decremented, because the work thunk
+discards the obligations record. A `Code_actor` walked by `Actor.run_machine`
+is charged per move; the stock scripts are not yet walked that way.
+
+The synthesis actor runs in the calling process, not in the forked commission
+child, so it has neither the child's wall clock nor its capability dirfd; each
+tool it starts is bounded only by `Proc`'s timeout. Its reads of the material
+before its first move are not charged. Synquid is not installed where this was
+verified: the tests replay the output Synquid produced for the BST contract,
+checked against the contract hash the harness recorded, and everything after
+the engine runs for real. No acceptance verb fits synthesis material, since
+the closed variant is dune verbs only, so a synthesis booking reports itself
+unverified rather than passed.
+
+The labor tier starts processes through `Proc`, with no shell. The Agency's
+sqlite access (`agency.ml`), `caps.ml`, `bridge.ml` and the `doctor` verb
+still go through one.
 
 `Bridge.gate` decides when elpi answers and falls back to `Conditions` when the
 engine is missing, which is the world the tests run in. `Trace` and the `span`
@@ -87,7 +103,7 @@ the one-way YAML discipline above is a rule the CLI cannot yet carry out.
 
 ## Build
 
-31 modules, 24 tables, 13 views, 8 CLI verbs. 316 checks across nine binaries,
+30 modules, 24 tables, 13 views, 8 CLI verbs. 342 checks across ten binaries,
 plus 32 SQL cases in `test_memory.sql` and `test_confidence.sql`. Verified on
 OCaml 4.14.1 with dune 3.14. The SWI suite is not counted here because it does
 not run without `swipl`.

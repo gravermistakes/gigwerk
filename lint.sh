@@ -44,6 +44,56 @@ if run ocaml; then
   fi
 fi
 
+# ------------------------------------------------------- impersonation
+# GigWerk never impersonates its talent. Two structural rules, checked on the
+# source rather than trusted to review:
+#
+#   1. Only talent constructs a Production.artifact. Talent is a lib module
+#      that implements Code_actor.S. Anything else building one is the Agency
+#      producing work and filing it under an Actor's name.
+#   2. Nothing the labor tier can reach, transitively, is the model. The labor
+#      tier is the talent plus the modules that run it; Agent_api is the only
+#      door to a model. Closure is computed from ocamldep, not from grep, so a
+#      reference through an intermediate module counts.
+#
+# Proven against: an artifact literal added to producer.ml (rule 1), a type
+# alias to Agent_api.request in proc.ml (rule 2, direct), and the same alias in
+# workspace.ml, which proc.ml never names but the talent reaches (rule 2,
+# transitive).
+if run ocaml; then
+  say "ocaml -- no impersonation: who builds artifacts, who can reach the model"
+  talent=$(grep -lE ':[[:space:]]*Code_actor\.S[[:space:]]*=[[:space:]]*struct' ocaml/lib/*.ml)
+  [ -n "$talent" ] || bad "no talent found: the rule would pass vacuously"
+  for f in $(grep -lE 'requirement_id[[:space:]]*=' ocaml/lib/*.ml ocaml/bin/*.ml); do
+    case " $(echo $talent) " in
+      *" $f "*) ok "$f builds artifacts and is talent" ;;
+      *) bad "$f builds a Production.artifact but implements no Code_actor.S" ;;
+    esac
+  done
+  deps() {  # module name -> direct lib dependencies, as module names
+    src="ocaml/lib/$(printf '%s' "$1" | tr 'A-Z' 'a-z' | cut -c1)$(printf '%s' "$1" | cut -c2-).ml"
+    [ -f "$src" ] || return 0
+    ocamldep -modules "$src" | cut -d: -f2 | tr ' ' '\n' | grep -v '^$'
+  }
+  labor="Code_actor Actor Proc Producer Verifier"
+  for f in $talent; do
+    m=$(basename "$f" .ml); labor="$labor $(printf '%s' "$m" | cut -c1 | tr 'a-z' 'A-Z')$(printf '%s' "$m" | cut -c2-)"
+  done
+  for root in $labor; do
+    seen=" "; queue="$root"
+    while set -- $queue; [ $# -gt 0 ]; do
+      m=$1; shift; queue="$*"
+      case "$seen" in *" $m "*) continue ;; esac
+      seen="$seen$m "
+      queue="$queue $(deps "$m" | tr '\n' ' ')"
+    done
+    case "$seen" in
+      *" Agent_api "*) bad "$root reaches Agent_api: the labor tier can call the model" ;;
+      *) ok "$root cannot reach Agent_api" ;;
+    esac
+  done
+fi
+
 # ------------------------------------------------------------------- c
 # Proven against: `syscal` for `syscall` -> implicit-declaration warning. This is
 # the one language where a typo compiles and then fails at runtime, so -Werror

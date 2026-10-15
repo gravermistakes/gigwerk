@@ -138,3 +138,15 @@ let scribe = make ~name:"scribe"
   ~grants:[ Grants.Write ]
   ~state_shape:"notes" ~ladder:Phases.scribe_ladder
   ~budget_ms:10000 ~budget_actions:3
+
+(* The part a synthesis actor is cast to. The machine is the one phases.ml
+   transcribed from the harness's classify, so what "done" means here is
+   tests_passed, never fulfilled: that verdict is on the material.
+   Three moves read, run and write (3 units each), two only run (1 each). *)
+let synthesis = make_with_machine ~name:"synthesis"
+  ~purpose:"derive a program from a refinement-typed contract and carry it \
+            through lowering, the required interface, compilation and the \
+            production's own test"
+  ~grants:[ Grants.Read; Grants.Write; Grants.Spawn ]
+  ~state_shape:"material_dir" ~machine:Phases.synthesis_machine
+  ~budget_ms:300_000 ~budget_actions:11
