@@ -132,19 +132,35 @@ let int_recursion ?(cfg = default) ?(body_size = 6) ~self ~decls ~(params : (str
   let terms t = terms_of srch.main t in
   let ev env e = Eval.run ~budget:5_000 env e in
   let int_params = List.filter (fun (_, t) -> key t = "int") params in
-  List.find_map (fun (x, _) ->
-      let absv env = match List.assoc_opt x env with Some (Value.Int n) -> Some (abs n) | _ -> None in
-      let nexts = List.filter (fun c ->
-          c.size >= 2 && Expr.mentions x c.expr
-          && List.for_all2 (fun p v -> match absv p, v with
-              | Some 0, _ -> true
-              | Some a, Some (Value.Int n) -> abs n < a
-              | _ -> false) points (Array.to_list c.vec)) (terms t_int) in
-      let nexts = List.filteri (fun i _ -> i < 10) nexts in
-      List.find_map (fun n ->
-          let step env = match ev env n.expr with
-            | Some v -> Some (List.map (fun (y, w) -> if y = x then (y, v) else (y, w)) env)
-            | None -> None in
+  (* A move gives every parameter its next value; the rest stay put. *)
+  let shrinks y (c : cand) =
+    let absv env = match List.assoc_opt y env with Some (Value.Int n) -> Some (abs n) | _ -> None in
+    List.for_all2 (fun p v -> match absv p, v with
+        | Some 0, _ -> true
+        | Some a, Some (Value.Int n) -> abs n < a
+        | _ -> false) points (Array.to_list c.vec) in
+  let ints = terms t_int in
+  (* one argument shrinks *)
+  let single = List.concat_map (fun (x, _) ->
+      List.map (fun c -> [ (x, c.expr) ])
+        (List.filteri (fun i _ -> i < 10)
+           (List.filter (fun c -> c.size >= 2 && Expr.mentions x c.expr && shrinks x c) ints))) int_params in
+  (* one argument takes another's place while that one shrinks: gcd's
+     (a, b) -> (b, a mod b) *)
+  let swapped = List.concat_map (fun (x, _) -> List.concat_map (fun (y, _) ->
+      if x = y then []
+      else List.map (fun c -> [ (x, Expr.Var y); (y, c.expr) ])
+          (List.filteri (fun i _ -> i < 6)
+             (List.filter (fun c -> c.size >= 2 && shrinks y c) ints))) int_params) int_params in
+  List.find_map (fun move ->
+      let x = fst (List.hd move) in
+      ignore x;
+      List.find_map (fun () ->
+          let step env =
+            let vals = List.map (fun (y, e) -> (y, ev env e)) move in
+            if List.exists (fun (_, v) -> v = None) vals then None
+            else Some (List.map (fun (y, w) -> match List.assoc_opt y vals with
+                | Some (Some v) -> (y, v) | _ -> (y, w)) env) in
           let guards = List.filteri (fun i _ -> i < 40) (terms t_bool) in
           List.find_map (fun g ->
               let rec chain env k acc =
@@ -187,6 +203,7 @@ let int_recursion ?(cfg = default) ?(body_size = 6) ~self ~decls ~(params : (str
                       match List.find_opt fold steps with
                       | None -> None
                       | Some s ->
-                          let call = Expr.App (Expr.Var self, List.map (fun p -> if p = x then n.expr else Expr.Var p) pnames) in
-                          Some (Expr.If (g.expr, b.expr, Expr.Let (false, "r", call, s.expr)))) bases) guards) nexts)
-    int_params
+                          let call = Expr.App (Expr.Var self, List.map (fun p ->
+                              match List.assoc_opt p move with Some e -> e | None -> Expr.Var p) pnames) in
+                          Some (Expr.If (g.expr, b.expr, Expr.Let (false, "r", call, s.expr)))) bases) guards) [ () ])
+    (single @ swapped)

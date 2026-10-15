@@ -19,6 +19,7 @@ type report = {
   differential : (Verify.verdict, string) result option;
   unread : string list;
   examples : (string * Spec.example) list;
+  library_used : Library.entry list;       (* the Agency's earlier work this part reached *)
 }
 
 let toplevel ~stdin_text =
@@ -134,19 +135,30 @@ let differential (p : Transcript.part) ~examples ~source ~reference ~slug ~targe
           | None, _ -> ()) calls;
       Ok { Verify.compared = !compared; agreed = !agreed; disagreements = List.rev !dis; samples = List.rev !samples }
 
-let solve ?cfg ~path () =
+let solve ?cfg ?library ~path () =
   let md = Iface.read_file path in
   let slug = Filename.remove_extension (Filename.basename path) in
   let p = Transcript.read ~slug md in
+  Hashtbl.reset Components.siblings;
+  let lib = match library with
+    | None -> []
+    | Some dir ->
+        let entries = Library.before ~dir ~slug ~exclude:(List.map (fun (n, _, _) -> n) p.Transcript.targets)
+            ~known_types:(List.map (fun d -> d.Types.name) p.Transcript.decls) in
+        Library.register entries; entries in
   let typed =
     if p.Transcript.targets = [] then
       [ (Part.Declined { name = "(statement)"; why = "the statement shows no example of a function to write" }, None) ]
     else List.map (derive_target ?cfg p) p.Transcript.targets in
   let derivations = List.map fst typed in
   let all = List.for_all (function Part.Derived _ -> true | _ -> false) derivations in
+  (* library entries the derived terms reach go first, in library order *)
+  let used = Library.reached lib (List.filter_map (function Part.Derived { body; _ } -> Some body | _ -> None) derivations) in
   let source =
     if not all then None
-    else Some (String.concat "\n" (List.filter_map (function
+    else Some (String.concat "\n" (List.map (fun (e : Library.entry) ->
+        Lower_ocaml.definition ~name:e.name ~params:e.params e.body ^ ";;") used
+        @ List.filter_map (function
         | Part.Derived { name; params; body; _ } -> Some (Lower_ocaml.definition ~name ~params body ^ ";;")
         | _ -> None) derivations)) in
   let decl_src = String.concat "\n" p.Transcript.decl_source in
@@ -160,7 +172,16 @@ let solve ?cfg ~path () =
             | (Part.Derived { name; _ }, Some ty) -> Some (name, ty)
             | _ -> None) typed in
         let examples = List.concat_map (fun (n, _, exs) -> List.map (fun e -> (n, e)) exs) p.Transcript.targets in
-        Some (differential p ~examples ~source:s ~reference:(Transcript.reference md) ~slug ~targets:types) in
+        let reference = Transcript.reference_with_context ~dir:(Filename.dirname path) ~slug md in
+        Some (differential p ~examples ~source:s ~reference ~slug ~targets:types) in
+  (* the Agency keeps what passed the part's own check *)
+  (match library, replay_v with
+   | Some dir, `Passed ->
+       Library.save ~dir ~slug (List.filter_map (function
+           | (Part.Derived { name; params; body; _ }, Some ty) -> Some { Library.slug; name; params; ty; body }
+           | _ -> None) typed)
+   | _ -> ());
   { slug; derivations; source = Option.map (fun s -> decl_src ^ "\n" ^ s) source; replay = replay_v;
     differential; unread = p.Transcript.unread;
-    examples = List.concat_map (fun (n, _, exs) -> List.map (fun e -> (n, e)) exs) p.Transcript.targets }
+    examples = List.concat_map (fun (n, _, exs) -> List.map (fun e -> (n, e)) exs) p.Transcript.targets;
+    library_used = used }

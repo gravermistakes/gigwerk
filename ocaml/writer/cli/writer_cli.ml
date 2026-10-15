@@ -33,6 +33,8 @@ let classify ?(constant_only = false) ~suite ~diff ~declined () =
   | `Passed, Some (Error e) -> ("unconfirmed", "differential not run: " ^ String.sub e 0 (min 100 (String.length e)))
   | `Passed, None -> ("unconfirmed", "")
 
+let library_defs : (string * string list * Writer.Expr.t) list ref = ref []
+
 let () =
   match Array.to_list Sys.argv with
   | _ :: "probe" :: dir :: _ ->
@@ -72,7 +74,7 @@ let () =
            Printf.printf "%s: agrees with the reference on %d of %d fresh inputs\n" slug v.Verify.agreed v.Verify.compared;
            List.iter (fun d -> print_endline ("    counterexample: " ^ d)) (List.filteri (fun i _ -> i < 5) v.Verify.disagreements))
   | _ :: "org" :: path :: _ ->
-      let r = Ocamlorg.solve ~path () in
+      let r = Ocamlorg.solve ?library:(Sys.getenv_opt "GW_LIBRARY") ~path () in
       let declined = List.filter_map (function
           | Part.Declined { name; why } -> Some (name ^ ": " ^ why) | _ -> None) r.Ocamlorg.derivations in
       at_exit (fun () ->
@@ -102,9 +104,10 @@ let () =
           let r = Part.solve ~env:(env ()) ~scratch:sc ~exercise_dir:path ~slug () in
           (slug, r.Part.derivations, r.Part.examples, r.Part.differential)
         else
-          let r = Ocamlorg.solve ~path () in
+          let r = Ocamlorg.solve ?library:(Sys.getenv_opt "GW_LIBRARY") ~path () in
+          library_defs := List.map (fun (e : Library.entry) -> (e.name, List.map fst e.params, e.body)) r.Ocamlorg.library_used;
           (r.Ocamlorg.slug, r.Ocamlorg.derivations, r.Ocamlorg.examples, r.Ocamlorg.differential) in
-      let defs = List.filter_map (function
+      let defs = !library_defs @ List.filter_map (function
           | Part.Derived { name; params; body; _ } -> Some (name, List.map fst params, body)
           | Part.Declined _ -> None) derivations in
       let declined = List.filter_map (function

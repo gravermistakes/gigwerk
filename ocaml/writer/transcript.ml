@@ -330,3 +330,52 @@ let reference md =
       let exs = exchanges b in
       if exs = [] then [ String.concat "\n" b ^ "\n;;" ]
       else List.map (fun e -> e.phrase ^ ";;") exs) blocks)
+
+(* Names an OCaml source text uses, and the top-level names it defines. *)
+let uses_and_defines src =
+  match Parse.implementation (Lexing.from_string src) with
+  | exception _ -> ([], [])
+  | items ->
+      let used = ref [] in
+      let it = { Ast_iterator.default_iterator with
+                 expr = (fun self e ->
+                     (match e.pexp_desc with
+                      | Pexp_ident { txt = Longident.Lident x; _ } -> used := x :: !used
+                      | _ -> ());
+                     Ast_iterator.default_iterator.expr self e) } in
+      List.iter (it.structure_item it) items;
+      let defined = List.concat_map (fun (i : Parsetree.structure_item) -> match i.pstr_desc with
+          | Pstr_value (_, vbs) -> List.filter_map (fun (vb : Parsetree.value_binding) -> match vb.pvb_pat.ppat_desc with
+              | Ppat_var { txt; _ } -> Some txt | _ -> None) vbs
+          | Pstr_type (_, tds) -> List.map (fun (td : Parsetree.type_declaration) -> td.ptype_name.txt) tds
+          | _ -> []) items in
+      (List.sort_uniq compare !used, defined)
+
+(* The reference with what it borrows from earlier problems: the ocaml.org
+   problems build on each other (coprime uses the previous problem's gcd).
+   Only definitions the reference actually reaches are taken, transitively,
+   so one broken phrase upstream cannot break this one. Verifier only. *)
+let reference_with_context ~dir ~slug md =
+  let own = reference md in
+  let earlier = Sys.readdir dir |> Array.to_list |> List.filter (fun f ->
+      Filename.check_suffix f ".md" && Filename.remove_extension f < slug) |> List.sort compare in
+  let phrases = List.concat_map (fun f ->
+      let src = reference (read_file (Filename.concat dir f)) in
+      List.filter_map (fun ph ->
+          let ph = String.trim ph in
+          if ph = "" || ph = ";;" then None
+          else let _, defs = uses_and_defines ph in if defs = [] then None else Some (ph, defs))
+        (Str.split (Str.regexp ";;") src)) earlier in
+  let own_defs = snd (uses_and_defines own) in
+  let rec close needed acc =
+    let fresh = List.filter (fun n -> not (List.mem n own_defs) && not (List.exists (fun (_, d) -> List.mem n d) acc)) needed in
+    let found = List.filter_map (fun n ->
+        (* the latest earlier definition of n *)
+        List.fold_left (fun best (ph, d) -> if List.mem n d then Some (ph, d) else best) None phrases) fresh in
+    let found = List.sort_uniq compare found in
+    if found = [] then acc
+    else close (List.concat_map (fun (ph, _) -> fst (uses_and_defines ph)) found) (found @ acc) in
+  let deps = close (fst (uses_and_defines own)) [] in
+  (* in the order they appeared *)
+  let ordered = List.filter (fun p -> List.mem p deps) phrases in
+  String.concat "\n" (List.map (fun (ph, _) -> ph ^ ";;") ordered) ^ "\n" ^ own
