@@ -416,12 +416,16 @@ let () =
                 claims = [ ("fs_read", "/srv/gigwerk/work") ] };
       capabilities = cap_cat }
   in
+  (* Missing, by construction: a binary that cannot exist. These checks once
+     passed only because elpi happened not to be installed, and failed the
+     day it was. *)
+  let missing ~capabilities c = Bridge.gate ~elpi_bin:"gigwerk-no-such-elpi" ~capabilities c in
   check "a gate whose elpi is missing falls back to Conditions (not hard-refuse) and books"
-    (match Booking.book ~gate ~now (req ()) with
+    (match Booking.book ~gate ~engine:missing ~now (req ()) with
      | Ok b -> b.Booking.decided_by = "conditions"
      | Error _ -> false);
   check "...and a structural refusal under that same gate is still decided_by=conditions"
-    (match Booking.book ~gate ~now (req ~evidence:{ Conditions.clean with Conditions.grants_narrow = false } ()) with
+    (match Booking.book ~gate ~engine:missing ~now (req ~evidence:{ Conditions.clean with Conditions.grants_narrow = false } ()) with
      | Error (Booking.Refused { decided_by; _ }) -> decided_by = "conditions"
      | _ -> false);
 

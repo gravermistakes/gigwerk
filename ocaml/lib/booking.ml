@@ -315,13 +315,13 @@ let decide_composition
           (Conditions.Refuse, [ Bridge.engine_error_to_string e ],
            Conditions.Composition, "elpi"))
 
-let book ?(gate = None) ~(now : int64) (r : request) : (booked, refusal) result =
+let book ?(gate = None) ?engine ~(now : int64) (r : request) : (booked, refusal) result =
   (* 1. THE COMPOSITION DECISION. Nothing else runs until the composition is
         allowed to exist. Deliberately first even though it is the most expensive
         check: issuing obligations for a composition that is about to be refused means
         a refusal can consume budget, and then a malformed proposal costs the
         same as a real one. Who decides is the seam above. *)
-  match decide_composition gate r.evidence with
+  match decide_composition ?engine gate r.evidence with
   | (Conditions.Refuse, reasons, attaches, decided_by) ->
       Error (Refused { reasons; attaches; decided_by })
   | (Conditions.Queue, reasons, _, decided_by) ->
