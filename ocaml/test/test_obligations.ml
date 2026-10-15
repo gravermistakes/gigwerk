@@ -474,5 +474,67 @@ let () =
     (Introspect.may_read Introspect.Ai
      && not (Introspect.may_read Introspect.Gate));
 
+  (* ------------------------------------------------------------------
+     THE TRANSITION RELATION, and the hole it closes.
+
+     Role.validate could only ask whether a terminal phase was DECLARED. A
+     role declaring one it can never arrive at passed, then burned its
+     allowance and reported budget_exceeded instead of the design error.
+     The shape is transcribed from the exercise harness's status.classify.
+     ------------------------------------------------------------------ *)
+  print_string "\nthe transition relation\n";
+
+  let m = Phases.synthesis_machine in
+  check "the synthesis machine is deterministic" (Phases.deterministic m);
+  check "its terminal is reachable from the initial state"
+    (Phases.terminal_reachable m);
+  check "it has no dead states" (Phases.unreachable_states m = []);
+  check "every state is arrivable in order"
+    (Phases.reachable m
+     = [ "commissioned"; "candidate"; "lowered"; "interface_checked";
+         "compiled"; "tests_passed" ]);
+  check "stepping follows delta" (Phases.step m "compiled" "test" = Some "tests_passed");
+  check "an input with no transition is no transition, not a guess"
+    (Phases.step m "compiled" "synthesize" = None);
+
+  (* classify withholds `fulfilled` from a passing run whose contract was
+     partial. That is a judgement about the MATERIAL, so the actor's terminal
+     stops one link short and the agency decides the rest. *)
+  check "the actor's terminal is tests_passed, not fulfilled"
+    (List.exists (fun (p : Phases.phase) -> p.Phases.terminal && p.Phases.name = "tests_passed") m.Phases.states
+     && not (List.exists (fun (p : Phases.phase) -> p.Phases.name = "fulfilled") m.Phases.states));
+
+  (* The hole itself: a terminal that is declared but unreachable. *)
+  let stranded =
+    { Phases.states = [ Phases.phase "start"; Phases.phase "spin";
+                        Phases.phase ~terminal:true "done" ];
+      initial = "start";
+      delta = [ { Phases.from_ = "start"; input = "go"; to_ = "spin" };
+                { Phases.from_ = "spin"; input = "again"; to_ = "spin" } ] }
+  in
+  check "a declared-but-unreachable terminal is caught"
+    (not (Phases.terminal_reachable stranded));
+  check "...and the old declaration check would have passed it"
+    (List.exists (fun (p : Phases.phase) -> p.Phases.terminal) stranded.Phases.states);
+  check "Role.validate refuses it"
+    (match Role.make_with_machine ~name:"stranded" ~purpose:"spin forever"
+             ~grants:[ Grants.Read ] ~state_shape:"s" ~machine:stranded
+             ~budget_ms:1000 ~budget_actions:2 with
+     | Error Role.Terminal_unreachable -> true | _ -> false);
+  check "and accepts the synthesis machine"
+    (match Role.make_with_machine ~name:"synth" ~purpose:"derive from a contract"
+             ~grants:[ Grants.Read; Grants.Spawn ] ~state_shape:"workspace"
+             ~machine:m ~budget_ms:180_000 ~budget_actions:6 with
+     | Ok _ -> true | _ -> false);
+  check "a nondeterministic machine is refused"
+    (match Role.make_with_machine ~name:"forked" ~purpose:"two ways out"
+             ~grants:[ Grants.Read ] ~state_shape:"s"
+             ~machine:{ Phases.states = [ Phases.phase "a"; Phases.phase ~terminal:true "b" ];
+                        initial = "a";
+                        delta = [ { Phases.from_ = "a"; input = "go"; to_ = "b" };
+                                  { Phases.from_ = "a"; input = "go"; to_ = "a" } ] }
+             ~budget_ms:1000 ~budget_actions:1 with
+     | Error Role.Nondeterministic -> true | _ -> false);
+
   Printf.printf "\ntotal: %d passed, %d failed\n" !pass !fail;
   if !fail > 0 then exit 1

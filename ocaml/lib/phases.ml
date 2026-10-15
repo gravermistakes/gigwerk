@@ -21,6 +21,61 @@ let phase ?(terminal = false) name = { name; terminal }
 
 type ladder = phase list
 
+(* ------------------------------------------------------------------------
+ * THE TRANSITION RELATION.
+ *
+ * A ladder is a set of states with no edges, so nothing says which phase may
+ * follow which, and `Role.validate` can only ask whether a terminal phase was
+ * DECLARED, never whether one is REACHABLE. A role declaring a terminal it can
+ * never arrive at passes that check and then burns its allowance until
+ * Obligations cuts it off, which reads as budget_exceeded rather than the
+ * design error it is.
+ *
+ * The shape is transcribed from the exercise harness's own classify(), which
+ * is a linear chain of gates naming where a run fell off.
+ * ------------------------------------------------------------------------ *)
+
+type transition = { from_ : string; input : string; to_ : string }
+type machine = { states : phase list; initial : string; delta : transition list }
+
+let states_of m = m.states
+
+(* Deterministic: no two transitions share a (from_, input). An actor is a DFA
+   or it is an actor with an oracle, and the second breaks every claim resting
+   on determinism. *)
+let deterministic m =
+  let keys = List.map (fun t -> (t.from_, t.input)) m.delta in
+  List.length (List.sort_uniq compare keys) = List.length keys
+
+let step m state input =
+  List.find_opt (fun t -> t.from_ = state && t.input = input) m.delta
+  |> Option.map (fun t -> t.to_)
+
+(* Breadth-first from `initial`. Returns every state actually arrivable, which
+   is what turns "a terminal is declared" into "a terminal is reachable". *)
+let reachable m =
+  let rec go seen = function
+    | [] -> List.rev seen
+    | s :: rest when List.mem s seen -> go seen rest
+    | s :: rest ->
+        let next = List.filter_map (fun t -> if t.from_ = s then Some t.to_ else None) m.delta in
+        go (s :: seen) (rest @ next)
+  in
+  go [] [ m.initial ]
+
+let terminal_reachable m =
+  List.exists
+    (fun name ->
+      match List.find_opt (fun p -> p.name = name) m.states with
+      | Some p -> p.terminal
+      | None -> false)
+    (reachable m)
+
+(* A state nothing can arrive at is a role-authoring mistake, not a spare part. *)
+let unreachable_states m =
+  let live = reachable m in
+  List.filter (fun p -> not (List.mem p.name live)) m.states |> List.map (fun p -> p.name)
+
 type breach =
   | Undeclared of string        (* a phase not in this script's ladder *)
   | Regressed of string * string (* terminal reached, then non-terminal emitted *)
@@ -84,3 +139,39 @@ let critic_ladder  = [ phase "read"; phase "checked";
                        phase ~terminal:true "verdict_emitted" ]
 let scribe_ladder  = [ phase "planned"; phase "drafted";
                        phase ~terminal:true "written" ]
+
+(* ---------------------------------------------------------- synthesis ----
+ *
+ * Transcribed from the exercise harness's status.classify. Its chain is
+ *
+ *   candidate -> lowered -> interface -> compiled -> tests -> fulfilled
+ *
+ * and the LAST link is not the actor's. classify withholds `fulfilled` from a
+ * run whose tests passed when the contract was partial or unresolved, naming
+ * it `tests_passed_partial_contract` instead. That is a judgement about the
+ * MATERIAL, not the performance.
+ *
+ * So the actor's terminal is `tests_passed`. Reaching it is the whole of the
+ * actor's job, done. Whether it becomes fulfillment depends on the quality of
+ * the contract it was cast to, which belongs to whoever wrote the contract,
+ * and an actor cannot emit a verdict on its own script. Cage does not decide
+ * whether The Wicker Man was any good; he decides nothing but the performance,
+ * and the performance was complete.
+ *
+ * That verdict lives where the agency's verdicts live: booking_verdict and
+ * commission_outcome, reading this terminal phase alongside the contract's
+ * own status. It is deliberately NOT a phase. *)
+let synthesis_machine =
+  { states =
+      [ phase "commissioned"; phase "candidate"; phase "lowered";
+        phase "interface_checked"; phase "compiled";
+        phase ~terminal:true "tests_passed" ];
+    initial = "commissioned";
+    delta =
+      [ { from_ = "commissioned";      input = "synthesize"; to_ = "candidate" };
+        { from_ = "candidate";         input = "lower";      to_ = "lowered" };
+        { from_ = "lowered";           input = "interface";  to_ = "interface_checked" };
+        { from_ = "interface_checked"; input = "compile";    to_ = "compiled" };
+        { from_ = "compiled";          input = "test";       to_ = "tests_passed" } ] }
+
+let synthesis_ladder = synthesis_machine.states

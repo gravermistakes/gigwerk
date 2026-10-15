@@ -156,7 +156,7 @@ let () =
   let forged =
     Ok { Role.name = "forged"; purpose = "smuggle retrieval";
          grants = [ Grants.Read; Grants.Retrieve ];
-         state_shape = "notes"; ladder = Phases.critic_ladder;
+         state_shape = "notes"; ladder = Phases.critic_ladder; machine = None;
          budget_ms = 1000; budget_actions = 2 }
   in
   check "a FORGED role record is caught by re-validation at booking"

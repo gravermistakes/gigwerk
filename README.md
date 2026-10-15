@@ -75,9 +75,7 @@ schema.
 Stated here because a document that claims a boundary it does not hold is worse
 than one that claims nothing.
 
-`Phases.ladder` is a list of states with no transition relation, so
-`Role.validate` checks that a terminal phase is declared and cannot check that
-one is reachable; `Actor.run_commission` runs its work once, so `Phases.settled`, which
+`Actor.run_commission` runs its work once, so `Phases.settled`, which
 wants two consecutive terminal emissions, cannot fire at all; and
 `budget_actions` is validated at booking, issued to `Obligations`, then never
 decremented, because the work thunk discards the obligations record.
@@ -89,7 +87,7 @@ the one-way YAML discipline above is a rule the CLI cannot yet carry out.
 
 ## Build
 
-31 modules, 24 tables, 13 views, 8 CLI verbs. 304 checks across nine binaries,
+31 modules, 24 tables, 13 views, 8 CLI verbs. 316 checks across nine binaries,
 plus 32 SQL cases in `test_memory.sql` and `test_confidence.sql`. Verified on
 OCaml 4.14.1 with dune 3.14. The SWI suite is not counted here because it does
 not run without `swipl`.

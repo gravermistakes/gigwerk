@@ -16,6 +16,11 @@ type t = {
   grants      : Grants.action list;
   state_shape : string;
   ladder      : Phases.ladder;      (* the tool declares its own phases *)
+  (* A role may declare the transition relation its ladder only implies. When
+     it does, validation stops asking whether a terminal phase was DECLARED and
+     starts asking whether one is REACHABLE, which is the property the comment
+     below has always claimed. Optional so existing roles are unaffected. *)
+  machine     : Phases.machine option;
   budget_ms   : int;
   (* How many Obligations-countable actions this script takes to reach its terminal
      phase. Declared by the TOOL, for the same reason the ladder is: the role is
@@ -28,6 +33,9 @@ type t = {
 type rejection =
   | Composer_only of Grants.action
   | No_terminal_phase
+  | Terminal_unreachable
+  | Dead_states of string list
+  | Nondeterministic
   | Empty_purpose
   | Cannot_act of { grants : int; budget_actions : int }
 
@@ -36,6 +44,15 @@ let rejection_to_string = function
       Printf.sprintf "role declares agent-only grant %s"
         (Grants.action_to_string a)
   | No_terminal_phase -> "role's ladder has no terminal phase, so it can never finish"
+  | Terminal_unreachable ->
+      "role declares a terminal phase but no path of transitions arrives at one, \
+       so it burns its allowance and reports budget_exceeded instead"
+  | Dead_states names ->
+      Printf.sprintf "role declares states nothing can reach: %s"
+        (String.concat ", " names)
+  | Nondeterministic ->
+      "two transitions share a (state, input); an actor is a DFA or it is an \
+       actor with an oracle"
   | Empty_purpose -> "role has no stated purpose"
   | Cannot_act { grants; budget_actions } ->
       Printf.sprintf
@@ -51,6 +68,21 @@ let validate k =
   | None ->
       if not (List.exists (fun (p : Phases.phase) -> p.Phases.terminal) k.ladder)
       then Error No_terminal_phase
+      else if (match k.machine with
+               | Some m -> not (Phases.deterministic m)
+               | None -> false)
+      then Error Nondeterministic
+      else if (match k.machine with
+               | Some m -> not (Phases.terminal_reachable m)
+               | None -> false)
+      then Error Terminal_unreachable
+      else if (match k.machine with
+               | Some m -> Phases.unreachable_states m <> []
+               | None -> false)
+      then Error (Dead_states
+                    (match k.machine with
+                     | Some m -> Phases.unreachable_states m
+                     | None -> []))
       else if String.trim k.purpose = "" then Error Empty_purpose
       (* Same failure class as No_terminal_phase, one layer down: a role that may
          act but has no allowance to act runs until Obligations cuts it off, and the
@@ -62,7 +94,17 @@ let validate k =
       else Ok k
 
 let make ~name ~purpose ~grants ~state_shape ~ladder ~budget_ms ~budget_actions =
-  validate { name; purpose; grants; state_shape; ladder; budget_ms; budget_actions }
+  validate { name; purpose; grants; state_shape; ladder; machine = None;
+             budget_ms; budget_actions }
+
+(* A role that knows its transition relation declares it here and gets the
+   reachability, determinism and dead-state checks instead of the weaker
+   "a terminal phase appears in the list". *)
+let make_with_machine ~name ~purpose ~grants ~state_shape ~machine ~budget_ms
+    ~budget_actions =
+  validate { name; purpose; grants; state_shape;
+             ladder = Phases.states_of machine; machine = Some machine;
+             budget_ms; budget_actions }
 
 (* --------------------------------------------------------------- stock ---- *)
 
