@@ -177,6 +177,7 @@ let () =
       let timeout_s = match Option.bind (Sys.getenv_opt "GW_SMYTH_TIMEOUT") float_of_string_opt with
         | Some t -> t | None -> 60. in
       let r = if kind = "org" then Smyth_talent.solve_org ~path ~timeout_s ~scratch:sc ()
+        else if kind = "cvc5" then Cvc5_talent.solve ~env:(env ()) ~scratch:sc ~exercise_dir:path ~slug:(Filename.basename path) ~timeout_s ()
         else Smyth_talent.solve ~env:(env ()) ~scratch:sc ~exercise_dir:path ~slug:(Filename.basename path) ~timeout_s () in
       List.iter (function
           | Smyth_talent.Derived { name; _ } -> prerr_endline ("  derived  " ^ name)
@@ -184,7 +185,8 @@ let () =
       Option.iter print_endline r.Smyth_talent.source;
       let declined = List.filter_map (function
           | Smyth_talent.Declined { name; why } -> Some (name ^ ": " ^ why) | _ -> None) r.Smyth_talent.outcomes in
-      let verdict, detail = classify ~suite:r.Smyth_talent.tests ~diff:r.Smyth_talent.differential ~declined () in
+      let constant_only = r.Smyth_talent.differential = Some (Error "no input could be generated") in
+      let verdict, detail = classify ~constant_only ~suite:r.Smyth_talent.tests ~diff:r.Smyth_talent.differential ~declined () in
       Printf.printf "VERDICT\t%s\t%s\t%s\n" r.Smyth_talent.slug verdict detail
   | _ :: "popper" :: kind :: path :: _ ->
       (* Popper booked to write the part in Prolog; SWI-Prolog accepts it *)

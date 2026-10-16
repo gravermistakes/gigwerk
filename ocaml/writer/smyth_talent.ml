@@ -61,7 +61,12 @@ type report = {
   differential : (Verify.verdict, string) result option;
 }
 
-let solve ~env ~scratch ~exercise_dir ~slug ?(timeout_s = 60.) () =
+let rec solve ~env ~scratch ~exercise_dir ~slug ?(timeout_s = 60.) () =
+  solve_with ~derive:(derive ~scratch ~timeout_s) ~prelude:[] ~env ~scratch ~exercise_dir ~slug ()
+
+(* Any booked writer, by the same acceptance: [derive] states and books one
+   value; [prelude] is definitions its answers rely on. *)
+and solve_with ~derive ~prelude ~env ~scratch ~exercise_dir ~slug () =
   let m = Probe.module_name slug in
   let mli_src = Iface.read_file (Filename.concat exercise_dir (m ^ ".mli")) in
   let iface = Iface.parse_string mli_src in
@@ -71,11 +76,11 @@ let solve ~env ~scratch ~exercise_dir ~slug ?(timeout_s = 60.) () =
       [ Declined { name = "(interface)"; why = "cannot represent: " ^ String.concat " / " iface.Iface.unreadable } ]
     else if List.exists (fun (d : Types.decl) -> d.Types.kind = Types.Abstract) iface.Iface.decls then
       [ Declined { name = "(interface)"; why = "an abstract type has no representation to synthesize against" } ]
-    else List.map (derive ~scratch ~timeout_s iface probe.Probe.examples) iface.Iface.values in
+    else List.map (derive iface probe.Probe.examples) iface.Iface.values in
   let source =
     if outcomes <> [] && List.for_all (function Derived _ -> true | Declined _ -> false) outcomes then
       Some (Lower_ocaml.module_source ~mli_src
-              ~definitions:(List.filter_map (function Derived d -> Some d.definition | Declined _ -> None) outcomes))
+              ~definitions:(prelude @ List.filter_map (function Derived d -> Some d.definition | Declined _ -> None) outcomes))
     else None in
   let tests = match source with
     | None -> `Not_run "not every value was derived"
