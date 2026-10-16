@@ -39,3 +39,14 @@ let derive ~scratch ~timeout_s (iface : Iface.t) examples (v : Iface.value_spec)
 let solve ~env ~scratch ~exercise_dir ~slug ?(timeout_s = 60.) () =
   Smyth_talent.solve_with ~derive:(derive ~scratch ~timeout_s) ~prelude:[ Cvc5_contract.helpers ]
     ~env ~scratch ~exercise_dir ~slug ()
+
+(* An ocaml.org problem, cvc5 booked for each function its statement shows. *)
+let solve_org ~path ?(timeout_s = 60.) ~scratch () =
+  let write ~name ~(params : (string * Types.label * Types.ty) list) ~out_ty exs =
+    match Cvc5_contract.problem ~params:(List.map (fun (n, _, t) -> (n, t)) params) ~out_ty exs with
+    | exception Cvc5_contract.Unrepresentable what -> Error ("SyGuS here cannot state " ^ what)
+    | problem ->
+        Result.map (fun body ->
+            Cvc5_contract.definition ~name ~params:(List.map (fun (n, l, _) -> (n, l)) params) body)
+          (book ~scratch ~timeout_s ~name problem) in
+  Smyth_talent.solve_org ~write ~prelude:[ Cvc5_contract.helpers ] ~path ~timeout_s ~scratch ()

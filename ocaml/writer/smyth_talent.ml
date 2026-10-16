@@ -96,7 +96,11 @@ and solve_with ~derive ~prelude ~env ~scratch ~exercise_dir ~slug () =
 (* An ocaml.org problem: the statement's examples, its stated or inferred
    types (the parametric reading first), the same booking, and the
    statement's own replay and the Solution's differential as acceptance. *)
-let solve_org ~path ?(timeout_s = 60.) ~scratch () =
+(* [write], when given, books another writer for each target in Smyth's
+   place: the part's name, parameters with labels and types, result type and
+   examples in, an OCaml definition or a reason out. [prelude] is
+   definitions its answers rely on. *)
+let solve_org ?write ?(prelude = []) ~path ?(timeout_s = 60.) ~scratch () =
   let md = Iface.read_file path in
   let slug = Filename.remove_extension (Filename.basename path) in
   let context = Transcript.context_before ~dir:(Filename.dirname path) ~slug in
@@ -111,6 +115,11 @@ let solve_org ~path ?(timeout_s = 60.) ~scratch () =
     let attempt ty =
       let args, out = Types.unarrow ty in
       let params = Part.param_names args in
+      match write with
+      | Some w ->
+          Result.map (fun definition -> (definition, ty))
+            (w ~name ~params ~out_ty:out exs)
+      | None ->
       match Smyth_contract.sketch ~decls ~name ~params:(List.map (fun (n, _, t) -> (n, t)) params) ~out_ty:out exs with
       | exception Smyth_contract.Unrepresentable what -> Error ("Smyth's language cannot state " ^ what)
       | sketch ->
@@ -132,7 +141,7 @@ let solve_org ~path ?(timeout_s = 60.) ~scratch () =
   let all = List.for_all (function Derived _ -> true | Declined _ -> false) outcomes in
   let decl_src = String.concat "\n" p.Transcript.decl_source in
   let source = if not all then None else
-      Some (String.concat "\n" (List.filter_map (function
+      Some (String.concat "\n" (List.map (fun d -> d ^ ";;") prelude @ List.filter_map (function
           | Derived d -> Some (d.definition ^ ";;") | Declined _ -> None) outcomes)) in
   let tests = match source with
     | None -> `Not_run "not every function was derived"

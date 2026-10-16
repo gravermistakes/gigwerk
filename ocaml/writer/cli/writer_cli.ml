@@ -177,6 +177,7 @@ let () =
       let timeout_s = match Option.bind (Sys.getenv_opt "GW_SMYTH_TIMEOUT") float_of_string_opt with
         | Some t -> t | None -> 60. in
       let r = if kind = "org" then Smyth_talent.solve_org ~path ~timeout_s ~scratch:sc ()
+        else if kind = "cvc5-org" then Cvc5_talent.solve_org ~path ~timeout_s ~scratch:sc ()
         else if kind = "cvc5" then Cvc5_talent.solve ~env:(env ()) ~scratch:sc ~exercise_dir:path ~slug:(Filename.basename path) ~timeout_s ()
         else Smyth_talent.solve ~env:(env ()) ~scratch:sc ~exercise_dir:path ~slug:(Filename.basename path) ~timeout_s () in
       List.iter (function
