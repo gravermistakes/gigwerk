@@ -9,7 +9,7 @@
 --   sqlite3 db.sqlite ".read sql/schema.sql" ".read sql/persist.sql"
 --
 -- Trace's rows go into schema.sql's own `span` table, not a new one -- see
--- lib/persist.ml for the gig_id mismatch that decision runs into.
+-- lib/persist.ml for the commission_id mismatch that decision runs into.
 -- ==========================================================================
 
 -- ------------------------------------------------------------------ SARCASM

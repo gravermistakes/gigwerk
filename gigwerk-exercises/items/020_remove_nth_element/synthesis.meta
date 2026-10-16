@@ -1,0 +1,7 @@
+attempt=2
+exit_code=1
+elapsed_seconds=0.019
+command=timeout 60s proot -R /home/ubuntu/synquid-runtime/bundle/rootfs -b OUTPUT:/work -w /work /root/.cabal/bin/synquid contract.sq --output=Plain --print-stats
+attempt_1_exit_code=1
+attempt_1_elapsed_seconds=0.026
+attempt_1_result=parser_error_multiline_indentation

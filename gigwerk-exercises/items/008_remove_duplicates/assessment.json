@@ -1,0 +1,48 @@
+{
+  "id": "008_remove_duplicates",
+  "title": "Eliminate Duplicates",
+  "contract_status": "requires_features",
+  "specification_strength": "full",
+  "synthesis_status": "runtime_error",
+  "elapsed_seconds": 0.901,
+  "entrypoints": ["compress"],
+  "required_features": [
+    "Algebraic datatype equality in refinements",
+    "Datatype-valued structural measures",
+    "Conditional refinement measures",
+    "Trusted generic polymorphic equality component injection, callable by synthesized code"
+  ],
+  "semantic_obligations": [
+    "The output is exactly the first element of each maximal non-empty contiguous equality run.",
+    "Output run representatives preserve source order.",
+    "Equal elements separated by a different value are not removed.",
+    "Empty input maps to empty output.",
+    "The boundary predicate is ordinary OCaml polymorphic structural equality, including its float and function-value behavior."
+  ],
+  "provenance": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/008_remove_duplicates.md",
+    "solution_quarantine": "The upstream Solution section was stripped before statement inspection."
+  },
+  "synthesis_evidence": {
+    "runtime": "pinned Synquid v0.4 under the required proot rootfs",
+    "external_timeout_seconds_per_attempt": 60,
+    "attempt_count": 2,
+    "attempt_1": {
+      "exit_code": 1,
+      "elapsed_seconds": 0.831,
+      "result": "The runtime tried to synthesize the declared external eq component and failed shape checking before a compress candidate was produced."
+    },
+    "resolve_only": {
+      "exit_code": 0,
+      "result": "The exact datatype-valued runCompress relation resolves successfully."
+    },
+    "attempt_2": {
+      "exit_code": 1,
+      "elapsed_seconds": 0.07,
+      "result": "Leaving eq as a hole also failed while synthesizing generic equality; no compress candidate was emitted."
+    }
+  },
+  "notes": "The full logical contract is expressible and resolves, but this runtime has no supported external/trusted-component declaration that makes OCaml polymorphic equality available to synthesis without requiring Synquid to synthesize generic equality itself. That component injection/import facility is the minimal missing feature. The target algorithm remains only compress = ??. No candidate was manually translated or semantically tested. test_generated.ml was compiled against an explicitly labelled deliberately-wrong negative-control stub only; its failure is evidence that the harness is active, not evidence about a candidate."
+}

@@ -1,0 +1,43 @@
+{
+  "id": "006_palindrome",
+  "title": "Palindrome",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "is_palindrome",
+      "ocaml_signature": "'a list -> bool",
+      "arity": 1,
+      "input": "One finite immutable OCaml list.",
+      "output": "true iff the input sequence equals its exact reversal; false otherwise.",
+      "failure_behavior": "No exercise-specific failure or option result. Element comparison has ordinary OCaml polymorphic-equality behavior."
+    }
+  ],
+  "type_declarations": [],
+  "trusted_primitives": [
+    {
+      "name": "eq",
+      "synquid_signature": "x: a -> y: a -> {Bool | _v == (x == y)}",
+      "kind": "generic supporting primitive; not the final algorithm",
+      "required_backend_binding": "OCaml polymorphic structural equality (=)",
+      "purpose": "Compare elements or finite list values in a specification-directed program.",
+      "caveats": [
+        "Comparison of functional values raises Invalid_argument in OCaml.",
+        "NaN is not equal to itself under ordinary OCaml float equality."
+      ]
+    }
+  ],
+  "excluded_features": {
+    "randomness": false,
+    "effects": false,
+    "mutable_state": false,
+    "coinductive_or_infinite_streams": false,
+    "strings": "Supported as ordinary element values; the official examples use strings.",
+    "floats": "The interface permits floats through polymorphism; no float theory is used by the Synquid contract."
+  },
+  "source": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/006_palindrome.md",
+    "solution_section_used": false
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "benchmark_id": "014_duplicate_elements",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "duplicate",
+      "ocaml_signature": "'a list -> 'a list",
+      "parameters": [
+        {
+          "name": "xs",
+          "ocaml_type": "'a list",
+          "semantics": "A finite OCaml list of opaque elements."
+        }
+      ],
+      "result": {
+        "ocaml_type": "'a list",
+        "semantics": "For input [x1; ...; xn], returns [x1; x1; ...; xn; xn], preserving left-to-right order and every occurrence."
+      }
+    }
+  ],
+  "necessary_type_declarations": [],
+  "trusted_primitive_declarations": {
+    "generic_supporting_primitives": [
+      "OCaml list constructors [] and (::) after mechanical lowering",
+      "Synquid built-in List, Nil, and Cons datatype support"
+    ],
+    "trusted_algorithmic_components": [],
+    "note": "No List.rev, List.length, list equality, comparison, external call, or pre-written target/helper algorithm is admitted as a synthesis component."
+  },
+  "effects": "None",
+  "randomness": "None",
+  "mutation": "None",
+  "finite_domain": "The benchmark contract is for ordinary finite OCaml lists only."
+}

@@ -1,0 +1,70 @@
+{
+  "id": "009_pack_duplicates",
+  "title": "Pack Consecutive Duplicates",
+  "contract_status": "ready",
+  "synthesis_status": "timeout",
+  "specification_strength": "full",
+  "required_features": [
+    "algebraic datatypes",
+    "recursive user-defined measures over final datatype arguments",
+    "refinement equality",
+    "structural recursion with termination checking",
+    "mechanical lowering of logical Runs a to OCaml a list list"
+  ],
+  "semantic_obligations": [
+    "pack has external OCaml signature 'a list -> 'a list list",
+    "the output is a left-to-right partition of the input into maximal consecutive runs",
+    "flattening output groups reproduces the input sequence exactly, including order and multiplicity",
+    "every output group is non-empty and uniform under polymorphic equality",
+    "adjacent output groups have different representatives; equal values separated by another run remain separate",
+    "empty input produces empty output",
+    "the operation is pure and deterministic and has no option/failure case"
+  ],
+  "entrypoints": ["pack"],
+  "elapsed_seconds": 60.050696477,
+  "output_dir": "/home/ubuntu/gigwerk-exercises/items/009_pack_duplicates",
+  "provenance": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/009_pack_duplicates.md",
+    "acquisition": "read-only gh Contents API",
+    "solution_quarantine": "The sole ## Solution section was removed in memory before inspection; retained non-solution SHA-256 is 5ceaafc7c4fe0c919c4fab7a691679e8995087630c02ce680c1bdbb9efa3e56f."
+  },
+  "synthesis_attempts": [
+    {
+      "attempt": 1,
+      "elapsed_seconds": 0.022185825,
+      "exit_code": 1,
+      "status": "rejected",
+      "reason": "Initial direct List (List a) measure encoding was rejected during resolution because this Synquid version requires final measure datatype parameters exactly match the measured datatype declaration.",
+      "stdout": "synthesis_attempt_1.out",
+      "stderr": "synthesis_attempt_1.err"
+    },
+    {
+      "attempt": 2,
+      "elapsed_seconds": 60.028510652,
+      "exit_code": 124,
+      "status": "timeout",
+      "command": "timeout 60s proot -R ROOTFS -b OUTPUT:/work -w /work /root/.cabal/bin/synquid contract.sq --output=Plain --print-stats",
+      "stdout": "synthesis.out",
+      "stderr": "synthesis.err",
+      "note": "The revised contract first passed --resolve (exit 0) but did not return a candidate before the mandated external 60-second limit."
+    }
+  ],
+  "verification": {
+    "contract_resolve": {
+      "command": "proot -R ROOTFS -b OUTPUT:/work -w /work /root/.cabal/bin/synquid contract.sq --resolve --output=Plain",
+      "exit_code": 0,
+      "stdout": "contract_resolve.out",
+      "stderr": "contract_resolve.err"
+    },
+    "negative_control": {
+      "implementation": "Explicitly labelled test-only stub outside the deliverable directory: pack _ = []",
+      "compile": "ocamlc compiled Generated.ml and test_generated.ml; link succeeded",
+      "run_exit_code": 2,
+      "observed_failure": "FAIL [NEGATIVE CONTROL: separated equal values are not coalesced]: semantic assertion failed",
+      "evidence": "negative_control.err"
+    }
+  },
+  "notes": "The final contract is full-strength: its Runs representation structurally excludes empty groups, flatten is exact, allEq makes each run uniform, and nextDistinct makes every adjacent boundary maximal. Runs a is explicitly representation-isomorphic to the required OCaml a list list and must be mechanically lowered by the parent backend. No final implementation, manually lowered candidate, or published solution body was created. A future Synquid result remains only a candidate until lowering and the independent OCaml semantic tests pass."
+}

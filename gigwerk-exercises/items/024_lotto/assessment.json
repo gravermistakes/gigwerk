@@ -1,0 +1,59 @@
+{
+  "id": "024_lotto",
+  "title": "Lotto: Draw N Different Random Numbers From the Set 1..M",
+  "contract_status": "requires_features",
+  "specification_strength": "partial",
+  "synthesis_status": "not_attempted",
+  "elapsed_seconds": 0,
+  "output_dir": "/home/ubuntu/gigwerk-exercises/items/024_lotto",
+  "notes": "No contract.sq or synthesis run was emitted because the pinned Synquid runtime cannot express the source-required ambient randomness without weakening the exact public semantics. Independent OCaml tests and source quarantine evidence are retained.",
+  "entrypoints": [
+    "lotto_select"
+  ],
+  "required_features": [
+    "An effect-aware contract language or a sound trusted foreign primitive for ambient random choice/PRNG state, while preserving the exact public interface int -> int -> int list.",
+    "A way to state that each random choice is made from the currently unselected finite domain; a pure set/length refinement alone would permit a deterministic result and erase the source's randomness requirement."
+  ],
+  "semantic_obligations": [
+    "For 0 <= n <= m, return exactly n integers.",
+    "Every returned integer lies in the inclusive interval 1..m.",
+    "No returned integer repeats.",
+    "The selection is random without adding a seed argument or silently replacing the effect with a deterministic implementation.",
+    "Do not require a fixed output list or ordering; the official displayed list is a sample random result.",
+    "Do not invent behavior for n < 0, m < 0, or n > m."
+  ],
+  "source_quarantine": {
+    "method": "GitHub Contents API at the pinned commit; exactly one ## Solution section was removed before source inspection.",
+    "source_blob_sha": "d7a5ed9ddbc41c85a6525a392409786e93b57fd6",
+    "solution_content_used": false
+  },
+  "synquid_runtime_evidence": {
+    "runtime": "synquid v0.4, 2016-08-11",
+    "inspected_source": "/home/ubuntu/jobs/42a912fe9212_a0/synquid (read-only)",
+    "observed_contract_model": "Pure algebraic data, termination measures, and refinement measures such as Set-valued elems; representative checked List-Delete contract uses delete = ??.",
+    "reason_not_attempted": "The pinned runtime evidence exposes no source-language effect/PRNG/monadic contract feature. Calling it with a pure list/set/length contract would synthesize or accept a deterministic selector and would therefore weaken the stated random semantics. Per benchmark policy, no weak contract was run.",
+    "attempts": [],
+    "synthesis_stdout": null,
+    "synthesis_stderr": null
+  },
+  "tests": {
+    "file": "test_generated.ml",
+    "dependencies": "OCaml standard library only; opens Generated",
+    "coverage": [
+      "official invocation parameters 6,49 without requiring a particular random list",
+      "zero draw from empty domain",
+      "singleton domain",
+      "full draw permutation consequence",
+      "all feasible pairs 0 <= n <= m <= 8",
+      "negative-control duplicate oracle"
+    ],
+    "negative_control": "An intentionally incorrect scratch Generated.lotto_select returned n copies of 1. Compilation succeeded; executing the independent test exited 2 at the expected semantic assertion: official example parameters: output contains duplicate values. The stub is not an output artifact or candidate implementation."
+  },
+  "artifacts": {
+    "problem_md": "solution-free statement and provenance",
+    "contract_sq": "omitted: not supportable without weakening the source semantics",
+    "test_generated_ml": "independent test suite only",
+    "interface_json": "exact public interface and trusted primitive declaration",
+    "assessment_md": "human-readable assessment"
+  }
+}

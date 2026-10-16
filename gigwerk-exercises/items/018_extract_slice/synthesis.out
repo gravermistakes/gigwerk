@@ -1,0 +1,10 @@
+slice :: xs:List a -> i:{Int|0 <= _v && _v < len xs} -> k:{Int|i <= _v && _v < len xs} -> {List a|_v == segment i k (len xs) xs}
+contract.sq:35: Error:
+  Cannot match shape 'Int'
+  with shape 'List (A0)'
+  when checking zero ::
+  {List a|len _v >= 0 && len _v < len xs}
+  in
+  \xs . \i . \k . 
+        match slice zero ?? ?? with
+

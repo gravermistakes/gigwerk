@@ -1,0 +1,54 @@
+{
+  "benchmark_id": "022",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "range",
+      "ocaml_signature": "int -> int -> int list",
+      "preconditions": [],
+      "postconditions": [
+        "The returned list is finite and non-empty.",
+        "Its first element is first and its last element is last.",
+        "If first <= last, it contains exactly first, first + 1, ..., last in strictly increasing order.",
+        "If first > last, it contains exactly first, first - 1, ..., last in strictly decreasing order.",
+        "Endpoints are inclusive; range n n = [n].",
+        "Ordering and multiplicity are observable and mandatory."
+      ]
+    }
+  ],
+  "necessary_type_declarations": [
+    "OCaml built-in type: int list"
+  ],
+  "trusted_primitive_declarations": [
+    {
+      "name": "inc",
+      "synquid_type": "x: Int -> {Int | _v == x + 1}",
+      "role": "generic arithmetic component"
+    },
+    {
+      "name": "dec",
+      "synquid_type": "x: Int -> {Int | _v == x - 1}",
+      "role": "generic arithmetic component"
+    },
+    {
+      "name": "eq",
+      "synquid_type": "x: Int -> y: Int -> {Bool | _v == (x == y)}",
+      "role": "generic comparison component"
+    },
+    {
+      "name": "lt",
+      "synquid_type": "x: Int -> y: Int -> {Bool | _v == (x < y)}",
+      "role": "generic comparison component"
+    },
+    {
+      "name": "gt",
+      "synquid_type": "x: Int -> y: Int -> {Bool | _v == (x > y)}",
+      "role": "generic comparison component"
+    }
+  ],
+  "excluded_behavior": [
+    "No randomness, effects, mutable state, I/O, strings, floats, options, exceptions as normal results, or infinite/coinductive streams.",
+    "No seed-bearing alternative interface.",
+    "No set-only, length-only, unordered, deduplicated, or finite-sample weakening."
+  ]
+}

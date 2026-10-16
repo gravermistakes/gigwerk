@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "id": "028_sort_list",
+  "title": "Sorting a List of Lists According to Length of Sublists",
+  "language": "OCaml",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "length_sort",
+      "ocaml_signature": "'a list list -> 'a list list",
+      "arity": 1,
+      "purity": "pure",
+      "finite_input_only": true,
+      "description": "Returns a permutation of the input outer list with nondecreasing lengths of inner lists."
+    },
+    {
+      "name": "frequency_sort",
+      "ocaml_signature": "'a list list -> 'a list list",
+      "arity": 1,
+      "purity": "pure",
+      "finite_input_only": true,
+      "description": "Returns a permutation of the input outer list with nondecreasing input-frequency of each inner-list length."
+    }
+  ],
+  "necessary_type_declarations": [],
+  "trusted_primitive_declarations": [],
+  "unsynthesized_target_algorithms": [
+    "length_sort",
+    "frequency_sort"
+  ],
+  "interface_notes": [
+    "The official statement shows calls over string list list; the signature is necessarily element-polymorphic because neither operation needs element comparison or inspection.",
+    "No exception, option, seed, comparator, mutable state, or effect is part of the specified interface.",
+    "No tie-breaking order is stated for equal sort keys; callers may not rely on stability."
+  ]
+}

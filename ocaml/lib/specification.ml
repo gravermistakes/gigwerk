@@ -5,6 +5,7 @@ type error =
   | Duplicate_id of string
   | Unknown_dependency of { id : string; dependency : string }
   | Unknown_acceptance_target of string
+  | Unknown_acceptance of int * string
   | Malformed_line of int * string
 
 type t = {
@@ -31,11 +32,52 @@ let add_dep id dep reqs =
       else r)
     reqs
 
-let set_acceptance id command reqs =
+let set_acceptance id accept reqs =
   List.map
     (fun r ->
-      if r.Production.id = id then { r with acceptance = Some command } else r)
+      if r.Production.id = id then { r with acceptance = Some accept } else r)
     reqs
+
+(* An acceptance argument names a path or target INSIDE the workspace. No
+   absolute paths, no parent traversal, no leading dash (which dune would read
+   as a flag). There is no shell to quote against; this guards the argv itself. *)
+let safe_argument a =
+  a <> ""
+  && a.[0] <> '-'
+  && a.[0] <> '/'
+  && not (String.length a >= 2 && String.sub a 0 2 = "..")
+  && (let ok = ref true in
+      String.iter
+        (fun c ->
+          match c with
+          | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '-' | '.' | '/' -> ()
+          | _ -> ok := false)
+        a;
+      !ok)
+  && (let rec no_dotdot i =
+        i + 1 >= String.length a
+        || not (a.[i] = '.' && a.[i + 1] = '.')
+           && no_dotdot (i + 1)
+      in
+      no_dotdot 0)
+
+let words s =
+  String.split_on_char ' ' s
+  |> List.concat_map (String.split_on_char '\t')
+  |> List.filter (fun w -> w <> "")
+
+(* The whole hole closes here. Anything not matching a declared verb is an
+   error, so unrecognised text cannot reach Verifier at all. *)
+let parse_acceptance line_no text =
+  match words text with
+  | [ "dune"; "build" ] -> Ok Production.Dune_build
+  | [ "dune"; ("runtest" | "test") ] -> Ok (Production.Dune_runtest None)
+  | [ "dune"; ("runtest" | "test"); dir ] when safe_argument dir ->
+      Ok (Production.Dune_runtest (Some dir))
+  | [ "dune"; "exec"; target ] when safe_argument target ->
+      Ok (Production.Dune_exec target)
+  | [ "fmt"; "check" ] | [ "dune"; "fmt" ] -> Ok Production.Fmt_check
+  | _ -> Error (Unknown_acceptance (line_no, text))
 
 let find id reqs = List.find_opt (fun r -> r.Production.id = id) reqs
 
@@ -47,29 +89,26 @@ let parse source =
         let directives = List.rev directives in
         let rec validate = function
           | [] -> Ok ()
-          | (kind, id, value, n) :: rest -> (
-              match kind with
-              | `Depends ->
-                  if Option.is_none (find id reqs) then
-                    Error (Unknown_dependency { id; dependency = value })
-                  else if Option.is_none (find value reqs) then
-                    Error (Unknown_dependency { id; dependency = value })
-                  else validate rest
-              | `Accept ->
-                  if Option.is_none (find id reqs) then
-                    Error (Unknown_acceptance_target id)
-                  else if trim value = "" then Error (Empty_acceptance n)
-                  else validate rest)
+          | `Depends (id, dep) :: rest ->
+              if Option.is_none (find id reqs) then
+                Error (Unknown_dependency { id; dependency = dep })
+              else if Option.is_none (find dep reqs) then
+                Error (Unknown_dependency { id; dependency = dep })
+              else validate rest
+          | `Accept (id, _) :: rest ->
+              if Option.is_none (find id reqs) then
+                Error (Unknown_acceptance_target id)
+              else validate rest
         in
         begin match validate directives with
         | Error e -> Error e
         | Ok () ->
             let reqs =
               List.fold_left
-                (fun acc (kind, id, value, _) ->
-                  match kind with
-                  | `Depends -> add_dep id value acc
-                  | `Accept -> set_acceptance id value acc)
+                (fun acc d ->
+                  match d with
+                  | `Depends (id, dep) -> add_dep id dep acc
+                  | `Accept (id, a) -> set_acceptance id a acc)
                 reqs directives
             in
             Ok { requirements = reqs; source }
@@ -110,7 +149,7 @@ let parse source =
               else
                 loop (line_no + 1) reqs
                   (List.fold_left
-                     (fun ds d -> (`Depends, id, d, line_no) :: ds)
+                     (fun ds d -> `Depends (id, d) :: ds)
                      directives deps)
                   rest
           end
@@ -120,9 +159,13 @@ let parse source =
           | Some (id, command) ->
               let id = trim id and command = trim command in
               if id = "" then Error (Malformed_line (line_no, raw))
-              else
-                loop (line_no + 1) reqs
-                  ((`Accept, id, command, line_no) :: directives) rest
+              else if command = "" then Error (Empty_acceptance line_no)
+              else (
+                match parse_acceptance line_no command with
+                | Error e -> e |> fun e -> Error e
+                | Ok a ->
+                    loop (line_no + 1) reqs
+                      (`Accept (id, a) :: directives) rest)
           end
         else Error (Malformed_line (line_no, raw))
   in

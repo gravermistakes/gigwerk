@@ -1,0 +1,9 @@
+snoc :: x:a -> xs:List a -> {List a|_v == snocSpec x xs}
+contract.sq:21: Error:
+  Cannot match shape 'a'
+  with shape 'List (A2)'
+  when checking xs :: List List A2
+  in
+  \x . \xs . 
+      match Cons Nil xs with
+

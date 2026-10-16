@@ -1,0 +1,2920 @@
+Program Synthesis from Polymorphic Refinement Types
+Extended Version
+Nadia Polikarpova
+
+Ivan Kuraj
+
+Armando Solar-Lezama
+
+arXiv:1510.08419v3 [cs.PL] 21 Apr 2016
+
+MIT CSAIL, USA
+{polikarn,ivanko,asolar}@csail.mit.edu
+
+Abstract
+
+replicate
+
+We present a method for synthesizing recursive functions
+that provably satisfy a given specification in the form of a
+polymorphic refinement type. We observe that such specifications are particularly suitable for program synthesis for
+two reasons. First, they offer a unique combination of expressive power and decidability, which enables automatic
+verification—and hence synthesis—of nontrivial programs.
+Second, a type-based specification for a program can often
+be effectively decomposed into independent specifications
+for its components, causing the synthesizer to consider fewer
+component combinations and leading to a combinatorial reduction in the size of the search space. At the core of our
+synthesis procedure is a new algorithm for refinement type
+checking, which supports specification decomposition.
+We have evaluated our prototype implementation on a
+large set of synthesis problems and found that it exceeds
+the state of the art in terms of both scalability and usability.
+The tool was able to synthesize more complex programs than
+those reported in prior work (several sorting algorithms and
+operations on balanced search trees), as well as most of the
+benchmarks tackled by existing synthesizers, often starting
+from a more concise and intuitive user input.
+
+then Nil
+else Cons x (replicate (dec n) x)
+
+Figure 1. Refinement type signature of replicate and the
+code synthesized from this signature.
+sponding verification procedures rarely enjoy the same level
+of modularity as type checking, thus fundamentally limiting
+the scalability of these techniques.
+In this work we present a novel system that pushes the
+idea of type-directed synthesis one step further by taking
+advantage of refinement types [13, 32]: types decorated with
+predicates from a decidable logic. For example, imagine that
+a user intends to synthesize the function replicate, which,
+given a natural number n and a value x, produces a list that
+contains n copies of x. In our system, the user can express
+this intent by providing the following signature:
+replicate
+
+:: n : Nat → x : α → {ν : List α | len ν = n}
+
+Here, the return type is refined with the predicate len ν = n,
+which restricts the length of the output list to be equal to the
+argument n; Nat is a shortcut for {ν : Int | ν ≥ 0}, the
+type of integers that are greater or equal to zero1 . Given this
+signature, together with the definition of List and a standard
+set of integer components (which include zero, decrement
+function, and inequalities), our system produces a provably
+correct implementation of replicate, shown in Fig. 1, within
+fractions of a second.
+We argue that refinement types offer the user a convenient interface to a program synthesizer: the signature above
+is only marginally more complex than a conventional ML
+or Haskell type. Contrast that with example-based synthesis,
+which would require a conventional type together with multiple input-output pairs, and in return provide much weaker
+correctness guarantees.
+The replicate example is a perfect illustration of the
+power of parametric polymorphism for specifying program
+
+Keywords Program Synthesis, Functional Programming,
+Refinement Types, Predicate Abstraction
+
+1.
+
+:: n: Nat → x: α → {List α | len ν = n}
+λ n . λ x . if n ≤ 0
+
+replicate =
+
+Introduction
+
+The key to scalable program synthesis is modular verification. Modularity enables the synthesizer to prune candidates
+for different subprograms independently, whereby combinatorially reducing the size of the search space it has to consider.
+This explains the recent success of type-directed approaches
+to synthesis of functional programs [12, 14, 15, 27]: not only
+do ill-typed programs vastly outnumber well-typed ones, but
+more importantly, a type error can be detected long before the
+whole program is put together.
+Simple, coarse-grained types alone are, however, rarely
+sufficient to precisely describe a synthesis goal. Therefore,
+existing approaches supplement type information with other
+kinds of specifications, such as input-output examples [1, 12,
+27], or pre- and post-conditions [20, 21]. Alas, the corre-
+
+1 Hereafter the bound variable of the refinement is always called ν and the
+
+binding is omitted.
+
+1
+
+2016/4/22
+
+behavior. Even though the signature in Fig. 1 never says explicitly that each element of the output list must equal x, it
+nevertheless captures the semantics of replicate completely:
+since the function knows nothing about the type parameter α,
+it has no way of constructing any values of this type other
+than x. This surprising expressiveness of polymorphic types
+had been long known [39], but combined with refinements,
+it enables full-fledged higher-order reasoning within the type
+system: a caller of replicate can instantiate α with any refinement type, obtaining the fact that whenever x has a certain property, every element of the output list shares that same
+property.
+Perhaps surprisingly, prior work on liquid types [19, 32,
+35, 36] has shown that this type of higher-order reasoning
+can be fully automated for a large class of programs and
+properties. The liquid type inference algorithm [32] uses a
+combination of Hindley-Milner unification and least-fixpoint
+Horn clause solver based on predicate abstraction to discover
+refined instantiations for polymorphic types and ultimately
+reduce verification to proving quantifier-free formulas over
+simple refinement predicates, efficiently decidable by SMT
+solvers. The unique combination of expressive power and
+decidability offered by polymorphic refinement types makes
+them ideal for program synthesis.
+Technical Challenges. Unfortunately, liquid type inference cannot be applied out of the box to the context of synthesis. Designed for the setting where, given a program, the
+goal is to construct its type, the inference algorithm starts
+from the leaves of the program, whose types are known, and
+propagates type information bottom-up, constructing types of
+terms from the types of their subterms. In program synthesis, however, the setting is different: here the top-level type is
+given, and the goal is to construct the program. One way to do
+so is to exhaustively explore program candidates, performing
+liquid type inference on each one, and then checking if the
+inferred type matches the given specification. While this approach does rule out many ill-typed partial programs, it fails
+to take advantage of the specification for guiding the search. A
+more promising approach would propagate type information
+top-down from the specification, using it to filter out irrelevant
+partial solutions.
+Some program terms naturally support decomposing a
+specification into independent requirements for their subterms. For example, given a goal type T and assuming that
+the top-level construct of the program is a conditional with a
+known guard, we can pass T on to the two branches of the
+conditional, together with the appropriate path conditions derived from the guard, and proceed to check (or synthesize)
+them completely independently. Unfortunately, for other program terms there might be infinitely many ways to precisely
+decompose a specification. Take a function application, f x:
+the specification f x :: Nat can be satisfied by requiring
+that f subtract one and x be positive, or that f add one, and x
+be greater than negative one, and so on. The challenge in this
+
+case is to find an over-approximate decomposition: that is,
+construct requirements on f and x that are necessary but generally not sufficient for the correctness of f x, yet are strong
+enough to filter out many incorrect subterms.
+To address this challenge, we propose a new type checking
+mechanism for refinement types, which we dub local liquid
+type checking. At the heart of the new mechanism is a type
+system inspired by bidirectional type checking [30]. Bidirectional systems interleave top-down and bottom-up propagation of type information depending on the syntactic structure
+of the program; in this work we extend the bottom-up phase
+of bidirectional checking with top-down propagation of overapproximate type information, resulting in a round-trip type
+checking mechanism, which promotes modular checking of
+function applications. Additionally, we equip the type system
+with a novel liquid abduction rule, which enables modular
+checking of branching terms.
+Refinement type checking involves solving subtyping
+constraints over unknown refinement types. The modularity requirement precludes our system from using the two
+techniques employed to this end by liquid type inference—
+Hindley-Milner unification and the least-fixpoint Horn solver—
+since both techniques are designed to work on complete programs and propagate type information bottom-up. Instead, local liquid type checking incorporates an algorithm for solving
+subtyping constraints incrementally, as it analyzes different
+parts of the program. Most notably, top-down propagation
+requires finding the greatest fixpoint solution to unknown
+refinements instead of the least, which is known to be fundamentally more expensive; we propose a practical implementation for this fixpoint computation, which we call MUSF IX,
+inspired by an existing algorithm for enumerating minimal
+unsatisfiable subsets (MUSes) [22].
+Results. We have combined local liquid type checking
+and exhaustive enumeration of program terms in a prototype
+program synthesizer called S YNQUID (for “S YNthesis with
+liQUID types”), which we evaluated on 64 synthesis problems
+from a variety of sources. The implementation, the benchmarks, and a web interface for S YNQUID are available from
+the tool repository [31].
+Our evaluation indicates that the techniques described
+above work well for synthesizing programs that manipulate
+lists and trees, as well as data structures with complex invariants and custom user-defined data structures. S YNQUID was
+able to synthesize programs that are more complex than those
+previously reported in the literature, including five different
+sorting algorithms, and manipulations of binary search trees,
+AVL trees, and Red-Black trees. The evaluation also shows
+that the modularity features of local liquid type checking and
+the MUSF IX solver are crucial for the performance of the
+system.
+We compare our system with the existing synthesizers
+based on input-output examples [1, 12, 14, 27], and Hoarestyle verification [20, 21], and demonstrate that S YNQUID
+
+2
+
+2016/4/22
+
+can handle the majority of its competitors’ most challenging
+benchmarks, taking a similar or shorter amount of time. In addition, compared with the example-based tools, S YNQUID’s
+specifications are usually more concise and the generated solutions are provably correct; compared with the tools based on
+Hoare-style reasoning, S YNQUID can verify (and thus synthesize) more complex programs thanks to automatic refinement
+inference.
+
+2.
+
+section illustrates the details of this procedure and showcases
+various features of the specification language on a number of
+examples.
+Example 1: Recursive Programs and Condition Abduction. We first revisit the replicate example from the introduction. We assume that the set of available components includes
+functions 0, inc and dec on integers, as well as a list datatype
+whose constructors are refined with length information, expressed by means of an uninterpreted function (or measure)
+len.
+
+Overview
+
+S YNQUID operates within a core ML-like language featuring
+conditionals, algebraic datatypes, pattern matching, parametric polymorphism, and fixpoints. We equip the language with
+general decidable refinement types, closely following the liquid types framework [19, 32, 35]. The type system includes
+refined base types of the form {B | ψ}, where ψ is a refinement predicate over the program variables and a special value
+variable ν, which does not appear in the program. Base types
+can be combined into dependent function types of the form
+x : Tx → T2 , where x may appear in the refinement predicates of T2 . Our framework is agnostic to the exact logic of
+refinement predicates as long as validity of their boolean combinations is decidable; our prototype implementation uses the
+quantifier-free logic of arrays2 , uninterpreted functions, and
+linear integer arithmetic, which is sufficient for all the examples and benchmarks in this paper.
+A synthesis problem is defined by (1) a goal refinement
+type T (2) a typing environment Γ and (3) a set of logical qualifiers Q. A solution to the synthesis problem is a program term
+t that has the type T in the environment Γ. The environment
+contains type signatures of components available to the synthesizer (which may include datatype constructors, “library”
+functions, and local variables) as well as any path conditions
+that can be assumed when synthesizing t. Qualifiers are predicates from the refinement logic used as building blocks for
+unknown refinements and branch guards. Our system extracts
+an initial set of such predicates automatically from the goal
+type and the types of components; for all our experiments,
+the automatically extracted qualifiers were sufficient to synthesize all the necessary refinements, but in general the user
+might have to provide additional predicates.
+Given a synthesis problem, S YNQUID constructs a candidate solution, by either by either picking a component in Γ
+or decomposing the problem into simpler subproblems and
+recursively obtaining a solution ti to each one. Since the decomposition is generally incomplete, a candidate obtained by
+combining ti ’s is not guaranteed to have the desired type T ;
+to check if the candidate is indeed a solution, the system generates a subtyping constraint. If the constraint cannot be satisfied, the system backtracks to pick a different combination
+of solutions to subproblems (or a different decomposition altogether); the stronger the sub-goals produced during decomposition, the less S YNQUID has to backtrack. The rest of the
+
+0 :: {Int | ν = 0}
+inc :: x: Int → {Int | ν = x + 1}
+dec :: x: Int → {Int | ν = x - 1}
+termination measure len
+
+:: List β → Nat
+
+data List β where
+
+:: {List β | len ν = 0}
+:: β → xs: List β →
+{List β | len ν = len xs + 1}
+
+Nil
+
+Cons
+
+Measure len also serves as the termination metric on lists
+(denoted with the termination keyword above): it maps lists
+to a type that has a predefined well-founded order in our
+language and thus enables termination checks for recursion
+on lists.
+For the rest of the section, let us fix the set of logical
+qualifiers Q to {? ≤ ?, ? 6= ?}, where ? is a placeholder
+that can be instantiated with any program variable or ν.
+Given the specification
+n : Nat → x : α → {List α | len ν = n}
+S YNQUID picks λ-abstraction as the top-level construct, and
+creates a synthesis subproblem for its body with a simpler
+goal type {List α | len ν = n}. The system need not
+consider other choices of the top-level construct, since every
+terminating program has an equivalent β-normal η-long form,
+where all functions are fully applied and the head of each
+application is a variable; moreover, the above decomposition
+is precise, since any solution to the subproblem will satisfy
+the top-level goal.
+As part of the decomposition, the arguments n : Nat and
+x : α are added to the environment, together with the function
+replicate itself, to account for the possibility that it may be
+recursive. In order to ensure termination of recursive calls, the
+system weakens the type of replicate in the environment to
+n0 : {Int | 0 ≤ ν < n} → x0 : α → {List α | len ν = n0 }
+demanding that the first argument be strictly decreasing.
+S YNQUID picks n as the termination metric in this case, since
+it is the only argument whose type has an associated wellfounded order.
+In the body of the function, the top-level construct might
+be a branching term. Rather than exploring this possibility
+explicitly, S YNQUID adds a fresh predicate unknown P0 as
+
+2 Arrays are used to model sets.
+
+3
+
+2016/4/22
+
+a path condition to the environment, and then searches for
+a branch-free program term that satisfies the specification
+assuming P0 . Each candidate branch-free term t is validated
+by solving a subtyping constraint; as part of this process,
+S YNQUID discovers the weakest P0 that makes t satisfy the
+specification. In case t is valid unconditionally, the weakest
+such P0 is True, and no branch is generated.
+Suppose the first branch-free term that S YNQUID considers is Nil; this choice results in a subtyping constraint
+
+generic, we can define the type of binary search trees as follows:
+:: BST α → Int
+:: BST α → Set α
+
+termination measure size
+measure keys
+
+data BST α where
+Empty :: {BST α | keys ν = []}
+Node :: x: α → l: BST{α | ν < x} → r: BST{α | x < ν}
+
+→ {BST α | keys ν = keys l + keys r + [x]}
+According to this definition, one can obtain a BST either by
+taking an empty tree, or by composing a node with key x and
+two BSTs, l and r, in which all keys are, respectively, strictly
+less and strictly greater than x. The type is additionally refined
+by the measure keys, which denotes the set of all keys in the
+tree, and a termination measure size (size-related refinements
+are omitted in the interest of space).
+The following type specifies insertion into a BST:
+
+n : Nat; x : α; P0 `
+{List β 0 | len ν = 0} <: {List α | len ν = n}
+where β 0 is a free type variable. The constraint imposes two
+requirements: (i) the shapes of the two types (i.e. their underlying unrefined types) must have a unifier [29] and (ii) the refinements of the subtype must subsume those of the supertype
+under the assumptions encoded in the environment. The constraint above gives rise to a unifier [β 0 7→ {α | P1 }] (where
+P1 is a fresh predicate unknown) and two Horn constraints:
+P0 ∧ P1 ⇒ > and 0 ≤ n ∧ P0 ∧ len ν = 0 ⇒ len ν = n.
+S YNQUID uses the MUSF IX Horn solver (Sec. 3.6) to find the
+weakest assignment of liquid formulas to P0 and P1 that satisfies both Horn constraints. A liquid formula is a conjunction
+of atomic formulas, obtained by replacing ?-placeholders in
+each qualifier in Q with appropriate variables. If for some Pi
+no valid assignment exists, or the weakest valid assignment is
+a contradiction, the candidate program is discarded.
+In our example, MUSF IX discovers the weakest assignment L = [P0 7→ n ≤ 0, P1 7→ >], effectively abducing
+the necessary branching condition. Since the condition is not
+trivially true, the system proceeds to synthesize the remaining
+branch under the path condition ¬(n ≤ 0). A similar strategy
+for generating branching programs has been successfully employed in several existing synthesis tools [1, 4, 20, 21] and is
+commonly referred to as condition abduction. Each condition abduction technique faces the challenge of searching a
+large space of potential conditions efficiently; our approach,
+which we dub liquid abduction, addressed this challenge by
+restricting conditions to liquid formulas and using MUSF IX
+to explore the space of liquid formulas efficiently.
+The remaining branch has to deal with the harder case
+of n > 0. When enumerating candidates for this branch,
+S YNQUID eventually decides to apply the replicate component (that is, make a recursive call), and searches for the
+parameters via recursive application of the synthesis procedure. At this point, the strong precondition on the argument
+m, 0 ≤ ν < n, which arises from the termination requirement, enables filtering candidate arguments locally, before
+synthesizing the rest of the branch. In particular, the system
+will discard the candidates n and inc n right away, since they
+fail to produce a value strictly less than n.
+Example 2: Complex Data Structures and Invariant Inference. Assuming comparison operators in our logic are
+
+insert :: x: α → t: BST α →
+{BST α | keys ν = keys t + [x]}
+
+From this specification, S YNQUID generates the following
+implementation within two seconds:
+insert =
+
+|
+|
+
+λ x . λ t . match t with
+
+Empty → Node x Empty Empty
+Node y l r → if x ≤ y ∧ y ≤ x
+then t
+else if y ≤ x
+then Node y l (insert x r)
+else Node y (insert x l) r
+
+Pattern matching in this example is synthesized using
+a special case of liquid abduction: type-checking the term
+Node x Empty Empty against the goal type {BST α | keys ν =
+keys t + [x]}, causes the system to abduce the condition
+keys t = [], which implies a match on t.
+The challenging aspect of this example is reasoning about
+sortedness. For example, for the term Node y l (insert x r)
+to be type-correct, the recursive call must return the type
+BST {α | y < ν}. This type does not appear explicitly in
+the user-provided signature for insert; in fact, verifying this
+program requires discovering a nontrivial inductive invariant
+of insert (that adding a key greater than some value z into
+a tree with keys greater than z again produces a tree with
+keys greater than z), which puts this and similar examples
+beyond reach of existing synthesizers based on Hoare-style
+reasoning [20, 21].
+In our framework, this property is easily inferred by the
+Horn constraint solver in combination with polymorphic recursion. When insert is added to the environment, its type is
+generalized to ∀β.x : β → u : {BST β | size u < size t} →
+{BST β | keys ν = keys t + {x}}. At the site of the recursive call, the precondition of Node y l imposes a constraint
+that simplifies to BST β <: BST {α | y < ν}, which leads to
+instantiating [β 7→ {α | P0 }] and [P0 7→ y < ν].
+4
+
+2016/4/22
+
+Importantly, due to round-trip type checking (Sec. 3.2),
+this assignment is discovered before the two arguments to
+insert are synthesized, which has the effect of propagating
+the requirement imposed by Node top-down through the application of insert onto its arguments. In particular, using the
+goal type {α | y < ν} for the first argument of insert, the
+system can immediately discard the candidate y, while trying
+x succeeds and leads to the abduction of the branch condition
+y ≤ x. As our evaluation shows, disabling this type of early
+filtering increases the synthesis time for this example from
+less than two seconds to over two minutes.
+Example 3: Abstract Refinements. Using refinement
+types as an interface to synthesis raises the question of their
+expressiveness. Restricting refinements to decidable logics
+fundamentally limits the class of programs they can fully
+specify, and for other programs writing a refinement type
+might be possible but cumbersome compared to providing a
+set of input-output examples or a specification in a richer language. The previous examples suggest that refinement types
+are effective for specifying programs that manipulate data
+structures with nontrivial universal and inductive invariants.
+In this example we demonstrate how extending the type system with abstract refinements allows us to express a wider
+class of properties, for example, talk about the order of list
+elements.
+Abstract refinements, proposed in [35], enable explicit
+quantification over refinements of datatypes and function
+types. For example, a list datatype can be parameterized by a
+binary relation r that must hold between any in-order pair of
+elements in the list:
+
+of list elements. Given the above specification and a component that appends an element to the end of the list (specified
+in a similar fashion), S YNQUID synthesizes the standard implementation of list reversal.
+Example 4: Higher-Order Combinators and Auxiliary
+Function Discovery. Complex programs might require recursive auxiliary functions. Discovering specifications for such
+functions automatically is a difficult task, akin to lemma discovery in theorem proving [7, 16, 25], which largely remains
+an open problem. S YNQUID expects users to provide the highlevel insight about a complex algorithm in the form of auxiliary function signatures. For example, if the goal is to synthesize a list sorting function with the following signature
+sort :: xs: List α → {IList α | elems ν = elems xs}
+
+(where elems denotes the set of list elements), the user can
+express the insight behind different sorting algorithms by
+providing different auxiliary functions: insertion into a sorted
+list for insertion sort, splitting and merging for merge sort,
+or partitioning and concatenation for quick sort. Naturally,
+the implementation of the auxiliary functions can in turn be
+synthesized, but coming up with their specification is the
+creative step that generally requires user interaction, and can
+be considered a major hurdle on the path to fully automatic
+synthesis.
+It turns out, however, that replacing general recursion
+with higher-order combinators such as map and fold—a style
+widely used and highly encouraged in functional programming—
+makes it possible to infer requirements on the auxiliary function from the specification of the main program. This is one
+of the main insights behind the synthesizer λ2 [12], which
+relies on hard-coded rules for propagating input-output examples top-down through common combinators. S YNQUID
+supports this top-down propagation of specifications out of
+the box thanks to the combination of refinement types and
+polymorphism.
+Consider the following type for function foldr, which
+folds a binary operation f over a list ys from right to left:
+
+data RList α <r ::α → α → Bool> where
+Nil :: RList α <r>
+Cons :: x: α → RList {α | r x ν} <r> → RList α <r>
+
+On the one hand this enables concise definitions of lists
+with various inductive properties as instantiations of RList:
+IList α = RList α < λ x λ y . x ≤ y> -- Increasing list
+UList α = RList α < λ x λ y . x 6= y> -- Unique list
+
+foldr ::<p :: List β → γ → Bool> .
+
+List α = RList α < λ x λ y . True> -- Unrestricted list
+
+f: (t: List β → h: β → acc: {γ | p t ν} →
+
+On the other hand, making list-manipulating functions
+polymorphic in this relation, provides an elegant way to specify order-related properties. Consider the following type for
+list reversal:
+
+{γ | p (Cons h t) ν}) →
+seed: {γ | p Nil ν} →
+ys: List β → {γ | p ys ν}
+
+The shape of this type is slightly different from the usual signature of foldr: the operation f takes an extra ghost argument t, which denotes the part of the list that has already been
+folded3 . The type of is parametrized by a binary relation p
+that foldr establishes between the input list ys and the output; it requires that the relationship hold between the empty
+list and the seed, and that applying f to a head element h and
+the result of folding a tail list t yield a result that satisfies the
+
+reverse :: <r ::α → α → Bool> . xs: RList α <r> →
+{RList α < λ x λ y . r y x> | len ν = len xs}
+
+It says that whatever relation holds between every in-order
+pair of elements of the input list, also has to hold between every out-of-order pair of elements of the output list. This type
+does not restrict the applicability of reverse, since at the call
+site r can always be instantiated with True; the implementation of reverse, however, has to be correct to any value of r,
+which leaves the synthesizer no choice but reverse the order
+
+3 Extending S YNQUID with bounded refinement types [38] would enable a
+
+more natural specification without the ghost argument.
+
+5
+
+2016/4/22
+
+relationship with Cons h t (in other words, p plays the role of
+a loop invariant). Note that folding a list left-to-right (foldl)
+requires a more complex specification that cannot currently
+be expressed within the S YNQUID type system.
+What happens if we ask S YNQUID to synthesize sort,
+while providing foldr as the only component? When trying
+out an application of foldr, round-trip type checking handles
+its higher-order argument, f, in a special way, since in our
+type system, as in [32], f cannot appear in the result type of
+foldr. Consequently, the exact value of f is not required to
+determine the type of the application, which gives S YNQUID
+the freedom to synthesize it independently from the rest of the
+program.
+The tool quickly figures out that foldr ?? Nil xs has the
+required type {IList α | elems ν = elems xs}, given the following assignment to foldr’s type and predicate variables:
+[β 7→ α, γ 7→ IList α, p 7→ λas.λbs.elems bs = elems as].
+Now that S YNQUID comes back to the task of filling in the
+first argument of foldr, its required type has been determined
+entirely as
+
+how users specify synthesis goals—but cannot rely on any annotations beyond that; in particular, the types of all polymorphic instantiations and arguments of anonymous functions
+must be inferred. The second requirement is to detect type
+errors locally: intuitively, if a subterm of a program causes a
+type error independently of its context, the algorithm should
+be able to report that error without analyzing the context.
+We build our type checking mechanism as an extension to
+the the liquid types framework [19, 32], which uses a combination of Hidley-Milner unification and a Horn solver to
+infer refinement types. The original liquid type inference algorithm is not designed for synthesis, and thus makes different trade-offs: in particular it does not satisfy the locality requirement. Our type checking mechanism achieves locality
+based on three key ideas. First, we apply bidirectional type
+checking [30] to refinement types and reinforce it with additional top-down propagation of type information, arriving at
+round-trip type checking (Sec. 3.2); we then further improve
+locality of rules for for function applications and branching
+statements (Sec. 3.4). Second, we develop a new algorithm for
+converting subtyping constraints into horn clauses, which is
+able to do so incrementally as the constraints are issued before
+analyzing the whole program (Sec. 3.5). Finally, we propose
+a new, efficient implementation for a greatest-fixpoint Horn
+solver (Sec. 3.6). In the interest of space we omit abstract refinements (see Sec. 2) from the formalization; [35] has shown
+that integrating this mechanism into the type system that already supports parametric polymorphism is straightforward.
+In Sec. 3.7 we derive synthesis rules from the modular type
+checking rules; in doing so we follow previous work on typedirected synthesis [17, 27], which has shown how to turn type
+checking rules for a language into synthesis rules for the same
+language.
+
+t: List α → h: α →
+acc: {IList α | elems ν = elems t} →
+{IList α | elems ν = elems (Cons h t)}
+
+(where elems (Cons h t) is expanded into [h] + elems t using the definition of the elems measure in the type of Cons); in
+other words, the auxiliary function must insert h into a sorted
+list acc. Treating this inferred signature as an independent
+synthesis goal, S YNQUID easily synthesizes a recursive program for insertion into a sorted list, and thus completes the
+following implementation of insertion sort without requiring any hints from the user, apart from a general recursion
+scheme:
+sort =
+
+3.1
+
+λ xs . foldr f Nil xs
+λ t . λ h . λ acc .
+
+match acc with
+Nil → Cons h Nil
+Cons z zs → if h ≤ z
+then Cons h (Cons z zs)
+else Cons z (f zs h zs)
+
+The next section gives a formal account of the S YNQUID
+language and type system, and details its modular type checking mechanism, which enables scalable synthesis.
+
+3.
+
+Syntax and Types
+
+Fig. 2 shows the syntax of the S YNQUID language.
+Terms. Unlike previous work, we differentiate between the
+languages of refinements and programs. The former consists
+of refinement terms ψ, which have sorts ∆; the exact set of
+interpreted symbols and sorts depends on the chosen refinement logic. We refer to refinement terms of the Boolean sort
+B as formulas.
+The language of programs consists of program terms t,
+which we split, following [27] into elimination and introduction terms (E-terms and I-terms for short). Intuitively, Eterms—variables and applications—propagate type information bottom-up, composing a complex property from properties of their components; I-terms propagate type information top-down, decomposing a complex requirement into simpler requirements for their components. Note that conditional
+guards, match scrutinees, and left-hand sides of applications
+are restricted to E-terms. We further separate I-terms into
+branching terms—conditionals and matches—and function
+terms—abstractions and fixpoints—and disallow branching
+terms on the right-hand side of application. This normal form
+
+where f =
+
+The S YNQUID Language
+
+The central goal of this section is to develop a type checking algorithm for a core programming language with refinement types that is geared towards candidate validation in the
+context of synthesis. This context imposes two important requirements on the type checking mechanism which are necessary for the synthesis procedure to be automatic and scalable.
+The first one has to do with the amount of type inference:
+the mechanism can expect top-level type annotations—this is
+6
+
+2016/4/22
+
+ψ
+
+∆
+
+t
+e
+
+b
+
+f
+
+B
+
+T
+
+S
+C
+T̂
+
+::=
+| > | ⊥ | 0 | + | . . . (varies)
+|x
+|ψψ
+
+Refinement term:
+interpreted symbol
+uninterpreted symbol
+application
+
+::=
+| B | Z | . . . (varies)
+|δ
+::= e | b | f
+::=
+|x
+| ee | ef
+::=
+| if e then t else t
+| match e with |i Ci hxji i 7→ ti
+::=
+| λx.t
+| fix x.t
+::=
+| Bool | Int
+| D Ti
+|α
+::=
+| {B | ψ}
+| x: T → T
+::= ∀αi .T
+::= · | x : T ; C
+::= let C in T
+
+Sort:
+interpreted
+uninterpreted
+Program term
+E-term:
+variable
+application
+Branching term:
+conditional
+match
+Function term:
+abstraction
+fixpoint
+Base type:
+primitive
+datatype
+type variable
+Type:
+scalar
+function
+Type schema
+Context
+Contextual Type
+
+Well-Formed Types
+
+Γ ` T̂
+
+Γ; ν : B ` ψ
+Γ; C ` T
+WF-C TX
+Γ ` let C in T
+Γ ` {B | ψ}
+Γ ` {B | ψ}
+Γ; x : {B | ψ} ` T
+WF-FO
+Γ ` x : {B | ψ} → T
+Tx non-scalar Γ ` Tx
+Γ`T
+WF-HO
+Γ ` Tx → T
+
+WF-S C
+
+Subtyping
+<:-S C
+<:-F UN
+
+Γ ` T <: T 0
+Γ ` B <: B 0
+
+Valid(JΓKψ⇒ψ0 ∧ ψ ⇒ ψ 0 )
+
+Γ ` {B | ψ} <: {B 0 | ψ 0 }
+Γ ` Ty <: Tx
+Γ; y : Ty ` [y/x]T <: T 0
+
+Γ ` x : Tx → T <: y : Ty → T 0
+Γ ` Ti <: Ti0
+<:-DT
+<:-R EFL
+Γ ` B <: B
+Γ ` D Ti <: D Ti0
+
+Figure 3. Well-formedness and subtyping.
+Environments, Well-Formedness, and Subtyping. A typing environment Γ is a sequence of variable bindings x : T
+and path conditions ψ; we denote conjunction of all path
+conditions in an environment as P(Γ). A formula ψ is wellformed in the environment Γ, written Γ ` ψ, if it is of a
+Boolean sort and each of its free variables is bound in Γ to a
+type that is consistent with its sort in ψ. Well-formedness extends to types as shown in Fig. 3. Note the two different rules
+for first-order and higher-order function types: in a function
+type x : T1 → T2 , T2 may reference the formal argument x
+only if T1 is a scalar type (that is, only first-order function
+types are dependent).
+The subtyping relation Γ ` T <: T 0 is relatively standard
+(Fig. 3). For simplicity, we consider all datatypes covariant
+in their type parameters (rule <:-DT); if need be, variance
+can be selected per type parameter depending on whether it
+appears positively or negatively in the constructors. The crucial part is the rule <:-S C, which reduces subtyping between
+scalar types to implication between their refinements, under
+the assumptions extracted from the environment. Since the refinements are drawn from a decidable logic, this implication
+is decidable. The function that extracts assumptions from the
+environment is parametrized by a formula ψ and returns a
+conjunction of all path conditions and refinements of all variables mentioned in ψ or the path conditions:
+
+Figure 2. Terms and types.
+
+is required to enable precise and efficient local type checking,
+as explained below. It does not fundamentally restrict the expressiveness of the language: every terminating program in
+lambda calculus can be translated to S YNQUID by first applying a standard β-normal η-long form [15, 27] and then
+pushing branching terms outside of applications, guards, and
+scrutinees.
+Types and Schemas. A S YNQUID type is either a scalar—
+base type refined with a formula—or a dependent function type. Base types include primitives, type variables, and
+user-defined datatypes with zero or more type parameters.
+Datatype constructors are represented simply as functions
+that must have the type ∀α1 . . . αm .T1 → . . . → Tk →
+D α1 . . . αm . A contextual type is a pair of a sequence of
+variable bindings and a type that can mention those variables;
+contextual types are useful for precise type checking of applications, as explained in Sec. 3.2.
+S YNQUID features ML-style polymorphism, where type
+variables are universally quantified at the outermost level to
+yield type schemas. Unlike ML, we restrict type variables to
+range only over scalars, which gives us the ability to determine whether a type is a scalar, even if it contains free type
+variables. We found this restriction not to be too limiting in
+practice.
+
+JΓKψ = P(Γ) ∧ BFV(P(Γ))∪FV(ψ) (Γ)
+where
+(
+Bv (Γ; x : {B | ψ}) =
+
+[x/ν]ψ ∧ Bv\{x}∪FV(ψ) (Γ)
+Bv (Γ) (otherwise)
+
+(x ∈ v)
+
+Bv (Γ; x : T ) = Bv (Γ) (T non-scalar)
+Bv (·) = >
+7
+
+2016/4/22
+
+This definition limits the effect of an environment variable
+with an inconsistent refinement to only those subtyping judgments that (transitively) mention that variable.
+
+Type Strengthening
+
+Γ `Q e ↓ T ↑ Tˆ0
+
+Γ(x) = {B | ψ} Γ ` {B | ψ} <: T
+Γ `Q x ↓ T ↑ {B | ν = x}
+Γ(x) = ∀αi .T 0
+Γ `Q Ti
+Γ ` [Ti /α]T 0 <: T
+
+VAR S C
+
+3.2
+
+Round-Trip Type Checking
+
+VAR∀
+
+Γ `Q x ↓ T ↑ [Ti /α]T 0
+Γ `Q e1 ↓ {B | ⊥} → T ↑ let C1 in (x : {B | ψ} → T 0 )
+Γ; C1 `Q e2 ↓ {B | ψ} ↑ let C2 in Tx
+Γ; C1 ; C2 ; x : Tx ` T 0 <: T
+A PP FO
+Γ `Q e1 e2 ↓ T ↑ let C1 ; C2 ; x : Tx in T 0
+Γ `Q e ↓ bot → T ↑ let C in (Tx0 → T 0 )
+Γ; C `Q f ↓ Tx0
+A PP HO
+Γ `Q e f ↓ T ↑ let C in T 0
+
+This section describes the core of S YNQUID’s type system.
+It is inspired by bidirectional type checking [30], which interleaves top-down and bottom-up propagation of type information depending on the syntactic structure of the program,
+with the goal of making type checks more local. Bidirectional
+typing rules use two kinds of typing judgments: an inference
+judgment, written Γ ` e ↑ T , states that the term t generates type T in the environment Γ; a checking judgment,
+Γ ` t ↓ T , states that the term t checks against a known
+type T in the environment Γ. Accordingly, all typing rules
+can be split into inference and checking rules, depending on
+the judgment they derive. Bidirectional type checking rules
+for S YNQUID are given in Appendix A.
+In a bidirectional system, analyzing a program starts with
+propagating its top-level type annotation top-down using
+checking rules, until the system encounters a term t to which
+no checking rule applies. At this point the system switches
+to bottom-up mode, infers the type T 0 of t, and checks if T 0
+is a subtype of the goal type; if the check fails, t is rejected.
+Bidirectional type propagation is “all-or-nothing”: once a
+checking problem for a term cannot be decomposed perfectly
+into checking problems for its subterms, the system abandons
+all information about the goal type and switches to purely
+bottom-up inference. Our insight is that some information
+from the goal type can be retained in the bottom-up phase,
+leading to more local error detection. To this end, we modify the bidirectional inference judgment into a strengthening
+judgment Γ ` t ↓ T ↑ T 0 , which reads as follows: in
+the environment Γ, term t checks against a known type T and
+generates a stronger type T 0 . We call the resulting type system
+round-trip, since it propagates types top-down and then back
+up.
+Derivation rules for round-trip type checking are presented
+in Fig. 4. All judgments are parametrized by the set of qualifiers Q, used to construct unknown refinements as explained
+below. Checking rules encode the way a checking judgment
+for an I-term t is decomposed into simpler checking judgments for its components. Strengthening rules encode the
+way a goal type for an E-term e is decomposed into overapproximate goal types for its subterms, which are necessary
+but in general not sufficient for correctness, while the precise
+type of e is constructed from the inferred types of its subterms.
+A round-trip type checker starts with a top-down phase, just
+as a bidirectional one would; when it encounters an E-term,
+it applies the corresponding strengthening rule and discards
+the inferred type (see rule IE). Thus, instead of detecting type
+errors at the boundary between I- and E-terms, the round-trip
+system performs local checks for each variable and function
+application.
+
+Type Checking
+
+Γ `Q t ↓ S
+
+Γ `Q e ↓ T ↑ Tˆ0
+Γ `Q e ↓ T
+Γ; y : Tx `Q t ↓ [y/x]T
+A BS
+Γ `Q λy.t ↓ (x : Tx → T )
+Γ `Q e ↓ Bool ↑ let C in {Bool | ψ}
+Γ; C; [>/ν]ψ `Q t1 ↓ T
+Γ; C; [⊥/ν]ψ `Q t2 ↓ T
+Γ `Q if e then t1 else t2 ↓ T
+Γ `Q e ↓ top ↑ let C in {D Tk | ψ}
+j
+0
+Ci = Ti → {D Tk | ψi }
+Γi = {xji : Tij }; [x0 /ν]ψi0
+0
+Γ; C; [x /ν]ψ; Γi `Q ti ↓ T
+IE
+
+IF
+
+M ATCH
+
+Γ `Q match e with |i Ci hxji i 7→ ti ↓ T
+Γ `Q t ↓ T
+αi not free in Γ
+TA BS
+Γ `Q t ↓ ∀αi .T
+Γ; x : S ≺ `Q t ↓ S
+F IX
+Γ `Q fix x.t ↓ S
+
+Figure 4. Rules of round-trip type checking.
+In order to support goals types with an underspecified
+shape (as required for match scrutinees and higher-order applications), we augment S YNQUID with top and bot types,
+which are, respectively, a supertype and a subtype of every
+type. Note that these types are ignored when computing the
+logical representation of the environment JΓKψ , since they are
+not considered scalar. Also note that the precision of roundtrip type checking crucially relies on the fact that only Eterms appear in strengthening judgments; this is why S YN QUID bans branching terms from function arguments, conditional guards, and match scrutinees.
+Polymorphic instantiations. The rule VAR∀, which handles polymorphic instantiations, replaces type variables αi
+with types Ti chosen nondeterministically to satisfy all subtyping checks4 . In order to tame this nondeterminism, following [32], we restrict Ti s to liquid types. A formula ψ is liquid
+in Γ with qualifiers Q, written Γ `Q ψ, if it is a conjunction
+4 The same rule handles monomorphic non-scalar variables, assuming zero
+
+type variables.
+
+8
+
+2016/4/22
+
+of well-formed formulas, each of which is obtained from a
+qualifier in Q by substituting ?-placeholders with variables.
+This notion extends to types, Γ `Q T , in a way analogous to
+well-formedness (Fig. 3). Note that the set of all liquid formulas in a given environment is finite, and so is the set of all
+liquid types with a fixed shape. Sec. 3.5 and Sec. 3.6 present
+a deterministic algorithm for finding the types Ti .
+Applications. The application rules A PP FO and AppHO
+are the core of the round-trip type system: they are responsible
+for propagating partial type information down to the left-hand
+side of an application. The type system distinguishes between
+first-order and higher-order applications, since in a function
+type x : T1 → T2 , T2 cannot mention x if T1 is a function type
+(see Fig. 3). As a result, a higher-order application always
+yields the type T2 independently of the argument. If instead
+T1 is a scalar type, we have to replace x inside T2 with
+the actual argument of the application. Unfortunately, we
+cannot assign the application e1 e2 the type [e2 /x]T2 , since
+e2 is a program term, which does not necessarily have a
+corresponding refinement precisely capturing its semantics.
+We address this problem by assigning e1 e2 a contextual type
+let C in T2 , where the context C binds the variable x to the
+precise type of e2 .
+
+and r—and subtyping on base types, List T0 <: List Pos,
+which is not vacuous since here l and r are out of scope. The
+first argument of append is checked against the type List T0
+(in the second premise of A PP FO), which imposes a subtyping check Γ ` List Nat <: List T0 . Since no type T0 satisfies both subtyping relations, the type checker rejects the term
+append xs.
+
+Example. We demonstrate the local error detection enabled
+by rule A PP FO on the following type-checking problem:
+
+3.3
+
+Recursion. Another rule in Fig. 4 that deserves some discussion is F IX, which comes with a termination check. In the
+context of synthesis, termination concerns are impossible to
+ignore, since non-terminating recursive programs are always
+simpler than terminating ones, and thus would be synthesized
+first if considered correct. The F IX rule gives the “recursive
+call” a termination-weakened type S ≺ , which intuitively denotes “S with strictly smaller arguments”. The exact definition of termination-weakening is a parameter to our system.
+Our implementation provides a predefined well-founded order on primitive base types, and allows the user to define one
+on datatypes by mapping them to primitive types using termination metrics; then S ≺ is defined as a lexicographic order on
+the tuple of all arguments of S that have an associated wellfounded order.
+Soundness and Completeness
+
+We show soundness and completeness of round-trip type
+checking relative to purely bottom-up liquid type inference [32]. For detailed proofs see Appendix A.
+Round-trip type checking is sound in the sense that whenever a S YNQUID term t type-checks against a schema S,
+Γ `Q t ↓ S, there exist a set of qualifiers Q0 and a
+schema S 0 , such that the bottom-up system infers S 0 for t,
+Γ `Q0 t :: S, and Γ ` S 0 <: S. Note that bottom-up inference might require strictly more qualifiers than type checking: in the bottom-up system, generating types for branching statements and abstractions imposes the requirement that
+these types be liquid; the round-trip system obtains the types
+of those terms by decomposing the goal type, thus the liquid restriction does not apply. In practice the difference is irrelevant, since the type inference algorithm can extract the
+missing qualifiers from the top-level goal type and the preconditions of component functions. Thus, if Q contains a sufficient set of qualifiers such that the goals schema is liquid
+(Γ `Q S) and the preconditions of component function are
+liquid, which we denote as `Q Γ, then we can take Q0 = Q.
+
+Γ `Q append xs xs ↓ {List Pos | len ν = 5}
+where Pos is an abbreviation for {Int | ν > 0} and Γ contains
+the following bindings:
+xs : {List Nat | len ν = 2};
+append : ∀α. l : {List α | len ν ≥ 0}
+
+→ r : {List α | len ν ≥ 0}
+→ {List α | len ν = len l + len r}
+Intuitively, the constraint on the length of the output list is
+hard to verify without analyzing the whole expression, while
+the mismatch in the type of the list elements can be easily
+found without considering the second argument of append.
+Refinement types provide precise means to distinguish those
+cases: the length-related refinement of append is dependent
+on the arguments l and r, whereas the type of the list elements
+cannot possibly mention l or r, since it has to be well-formed
+in a scope where these variables are not defined.
+Applying the A PP FO rule twice to the judgment above
+yields Γ `Q append ↓ {B0 | ⊥} → {B1 | ⊥} →
+{List Pos | len ν = 2}, where the base types B0 and B1
+are yet to be inferred. Applying VAR∀, and decomposing the
+resulting subtyping check with <:-F UN, we get
+
+Theorem 1 (Soundness of round-trip type checking). If `Q
+Γ, Γ `Q S, and Γ `Q t ↓ S, then Γ `Q t :: S 0 and
+Γ `Q S 0 <: S.
+Unlike liquid type inference, the round-trip system requires a proof of termination for all fixpoints; thus if Γ `Q
+t :: S, but t’s termination cannot be shown using the chosen definition of termination weakening, the round-trip type
+system will reject t. Thus we show completeness for a weakened round-trip system, obtained from Fig. 4 by replacing S ≺
+
+Γ; l : {B0 | ⊥}; r : {B1 | ⊥} `
+{List T0 | len ν = len l + len r} <: {List Pos | len ν = 2}
+Using <:-S C, this judgment can be decomposed into an implication on refinements—vacuous thanks to the types of l
+9
+
+2016/4/22
+
+Consistency
+∧ :-S C
+
+type-correct boolean expressions as guards and then checking
+if any of them enables synthesis of a correct branch. The goal
+of this section is to improve the locality of the I F rule in order
+to avoid such blind enumeration.
+The idea comes from condition abduction [4, 20, 21]:
+instead of starting with the guard, for which no information
+can be extracted from the goal type, start by analyzing one of
+the branches and use logical abduction to infer the weakest
+assumption under which the branch fulfills the goal type.
+If such a condition does not exist or is a contradiction, the
+branch candidate is deemed ill-typed; otherwise the abduced
+condition can be used as a specification for the guard.
+This strategy relies on the availability of a sufficiently fast
+mechanism to perform logical abduction, which is generally
+challenging. In S YNQUID, we treat unknown path conditions
+the same way as unknown refinements in polymorphic instantiations: we restrict their valuations to liquid formulas over
+environment variables, and use the greatest-fixpoint Horn
+solver (described in Sec. 3.6) to discover the weakest such
+valuation. We refer to the modified rule for conditionals as
+the liquid abduction rule:
+
+Γ ` T ∧ : T0
+Γ ` B ∧ : B0
+
+∧ :-F UN
+
+Sat(JΓKψ∧ψ0 ∧ ψ ∧ ψ 0 )
+
+Γ ` {B | ψ} ∧ : {B 0 | ψ 0 }
+Γ; x : Tx ` T ∧ : [x/y]T 0
+
+Γ ` x : Tx → T ∧ : y : Ty → T 0
+Γ ` Ti ∧ : Ti0
+∧ :-DT
+∧ :-R EFL
+Γ`B∧:B
+Γ ` D Ti ∧ : D Ti0
+
+Figure 5. Type consistency.
+in the premise of the F IX rule by S. We denote the checking
+judgment of the modified system as Γ `∗Q t ↓ S.
+Theorem 2 (Completeness of round-trip type checking). If
+Γ `Q t :: S, then Γ `∗Q t ↓ S.
+3.4
+
+Type System Extensions
+
+In this section we further improve the locality of type checking for function applications and branching terms.
+Type Consistency. Recall the type checking problem
+Γ `Q append xs xs ↓ {List Pos | len ν = 5}
+from Sec. 3.2, and let us change the type of xs to {List Pos |
+
+I FA B
+
+len ν = 6}. In this case, xs has the right element type, Pos,
+
+but intuitively the partial application append xs can still be
+safely rejected, since no second argument with a non-negative
+length can fulfill the goal type.
+To formalize this intuition we introduce the notion of type
+consistency, defined in Fig. 5. Two scalar types are consistent
+if they have a common inhabitant for some valid valuation of
+environment variables. For function types, the relation is not
+symmetric: a type x : Tx → T is consistent with a goal type
+if their return types are consistent for some value of x of type
+Tx .
+We add a premise Γ ` T ∧ : T 0 to every rule in Fig. 4
+that already has the premise of the form Γ ` T <: T 0 . The
+additional premise has no effect on full applications, since
+for scalar types consistency is subsumed by subtyping. The
+consistency check can, however, reject a partial application
+e allowed by subtyping, due to goals generated by the rule
+A PP FO, which have a vacuous argument type {B | ⊥}. It is
+easy to show that in the absence of consistency checks, any
+application of such e would always be rejected by the subtyping check in A PP FO; thus introducing consistency checks
+does not affect completeness of type checking. With consistency checks in place, the term append xs in the example
+above is rejected since the formula len xs = 6 ∧ len r ≥
+0 ∧ len ν = len xs + len r ∧ len ν = 5 is unsatisfiable.
+Liquid Abduction. Consider the I F rule in Fig. 4: the
+type checker can analyze the two branches of the conditional
+independently of each other, but can only proceed with either
+branch once the precise type of the guard has been inferred.
+In the context of synthesis this amount to blindly enumerating
+
+Γ `Q ψ
+Sat(JΓKψ ∧ ψ)
+Γ `Q e ↓ {Bool | ν = ψ}
+Γ; ψ `Q t1 ↓ T
+Γ; ¬ψ `Q t2 ↓ T
+Γ `Q if e then t1 else t2 ↓ T
+
+This rule limits completeness of round-trip type checking by
+restricting valid guard types to the form above. Most notably,
+it excludes guards that contain function composition, and thus
+users have to provide wrapper components to encapsulate
+complex guard predicates; in all our experiments, the set of
+required guard components was quite intuitive, thus we conclude that the trade-off between expressiveness and efficiency
+offered by liquid abduction is reasonable in the context synthesis.
+Match Abduction. A similar technique can be used to
+propose pattern matching, assuming the types of potential
+scrutinees are restricted to liquid types. In this case, however,
+the liquid restriction imposes more substantial limitations on
+the structure of the program: abduction only works if the
+scrutinee is a variable and its datatype has at least one scalar
+constructor (such as Nil in List). Thus, S YNQUID employs
+a combined approach: it first tries an abduction-based rule,
+but if that fails, the system reverts to the original M ATCH rule
+of Fig. 4. As a result, type checking (and synthesis) enjoys
+the efficiency benefits of abduction without compromising
+completeness.
+3.5
+
+The Local Liquid Type Checking Algorithm
+
+Starting from the round-trip typing rules presented above, this
+section develops local liquid type checking: a deterministic
+algorithm that takes as input a S YNQUID program t, an environment Γ, a goal schema S, and a set of qualifiers Q, and
+either produces a derivation of Γ `Q t ↓ S or rejects
+10
+
+2016/4/22
+
+the program. The main challenge is to find suitable instantiations for polymorphic components, as required by the rule
+VAR∀; to this end, the algorithm replaces the type variables
+αi in the component schema with fresh free type variables
+αi0 5 , extracts subtyping constraints on αi0 from the subtyping
+premises of the derivation, and then solves the subtyping constraints to either discover a valid type assignment mapping
+free type variables to liquid types, or conclude that such an
+assignment does not exist.
+For the purpose of constraint solving, we extend the syntax
+of refinement terms with predicate unknowns Pi . Local liquid
+type checking maintains a set of subtyping constraints C =
+{Γi ` Ti <: Ti0 }, a set of Horn constraints H = {ψi }, a
+type assignment T = [αi0 7→ Ti ], and a liquid assignment
+L = [Pi → {ψ}i ]. We denote with JψKL the formula ψ
+with all predicate unknowns substituted with conjunctions of
+their valuations in L. The type checking process alternates
+between the following two steps: it either extends the type
+derivation by applying one of the rules of Fig. 4, adding any
+of its subtyping premises to C, or it picks a constraint c from C
+and solves it; constraint solving is formalized in the procedure
+Solve in Fig. 6.
+Solve does one of the following, depending on the operands
+of a subtyping constraint: it either substitutes a type variable
+for which an assignment already exists (Eq. 1, Eq. 2), unifies a type variable with a type (Eq. 4, Eq. 5), decomposes
+subtyping over compound types (Eq. 6, Eq. 7), or translates
+subtyping over scalar types into a Horn constraint and uses
+the procedure Horn, described in the next section, to find an
+L that satisfies all Horn constraints (Eq. 8). Local liquid type
+checking terminates when the entire type derivation has been
+built, and all constraints in C are between free type variables
+(only Eq. 3 applies).
+During unification of α0 and T , procedure Fresh inserts
+fresh predicate unknowns in place of all refinements in T ;
+note that due to the incremental nature of our algorithm, T
+might itself contain free type variables, which are simply replaced with fresh free type variables to be unified later as more
+subtyping constraints arise. This novel feature of local liquid
+type checking, which we call incremental unification, is crucial for early error detection. Existing refinement type checkers [13, 32] cannot interleave shape and refinement discovery, since they rely on the global Hindley-Milner inference
+algorithm to fully reconstruct the shapes of all types in the
+program before discovering their refinements.
+
+Solve(Γ ` c) = match c with
+| {α0 | ψ} <: T, α0 ∈ dom(T ) −→
+C ← C ∪ {Γ ` Refine(T (α0 ), ψ) <: T }
+
+(1)
+
+| T <: {α0 | ψ}, α0 ∈ dom(T ) −→ (symmetrical)
+
+(2)
+
+| {α0 | ψ1 } <: {β 0 | ψ2 } −→
+C ← C ∪ {α0 | ψ1 } <: {β 0 | ψ2 }
+0
+
+(3)
+
+0
+
+| {α | ψ} <: T, α ∈
+/ T −→
+T ← T [α0 7→ Fresh(T )];
+C := C ∪ {Γ ` {α0 | ψ} <: T }
+
+(4)
+
+0
+
+| T <: {α | ψ} −→ (symmetrical)
+
+(5)
+
+| (x : Tx → T1 ) <: (y : Ty → T2 ) −→
+C ← C ∪ {Γ ` Ty <: Tx , Γ; y : Ty ` [y/x]T1 <: T2 }
+(6)
+| {D T1i | ψ1 } <: {D T2i | ψ2 } −→
+C ← C ∪ {Γ ` {D | ψ1 } <: {D | ψ2 }, Γ ` T1i <: T2i }
+(7)
+| {B | ψ1 } <: {B | ψ2 } −→
+H ← H ∪ {JΓKψ1 ⇒ψ2 ∧ ψ1 ⇒ ψ2 };
+
+(8)
+
+L ← Horn(L, H)
+| otherwise −→ fail
+0
+
+(9)
+0
+
+Refine({B | ψ}, ψ ) = {B | ψ ∧ ψ }
+Fresh(T ) = match T with
+| {α0 | ψ} −→ β 0
+| {D T i | ψ} −→ {D Fresh(T i ) | P },
+| {B | ψ} −→ {B | P },
+
+L ← L[P 7→ ∅]
+
+L ← L[P 7→ ∅]
+
+Horn(L, H) = if ∀h ∈ H.Valid(JhKL ) then L else
+let h ← {H | ¬Valid(JhKL )} in
+let L
+
+0
+
+← Strengthen(L, h) in Horn(L0 , H)
+
+Figure 6. Solving subtyping constraints.
+the latter is retained in C. If further type checking produces a
+subtyping constraint on β 0 , say Nat <: β 0 , T will be extended
+with an assignment [β 0 → {Int | P1 }], which in turn will lead
+to transforming the constraint on γ 0 into ` γ 0 <: {Int | P1 }
+and instantiating [γ 0 → {Int | P2 }], at which point all free
+type variables have been eliminated.
+
+Example. Starting from empty T and L, Solve(` α0 <:
+List β 0 | len ν > 0) instantiates α0 by Eq. 4 leading to
+T = [α0 7→ {List γ 0 | P0 }], L = [P0 7→ ∅] and recycles the
+subtyping constraint; next by Eq. 1 and Eq. 7, the constraint is
+decomposed into ` {List | P0 } <: {List | len ν > 0}
+and ` γ 0 <: β 0 . The former produces a Horn constraint
+P0 ⇒ len ν > 0, which leads to strengthening L[P0 ], while
+
+3.6
+
+Solving Horn Clauses
+
+The set of Horn constraints H produced by Solve in Fig. 6
+consists of implications of the form ψ ⇒ ψ 0 , where each side
+is a conjunction of a known formula and zero or more predicate unknowns P . The goal of the procedure Horn is to find
+a liquid assignment to P that validates all constraints in H or
+determine that H is unsatisfiable. The space of possible valuations of each P is 2QP , where QP is a set of atomic formu-
+
+5 We prime the names of free type variables to differentiate them from the
+
+bound type variables of the top-level goal schema.
+
+11
+
+2016/4/22
+
+las obtained by instantiating qualifiers Q in the environment
+where P was created.
+Local liquid type checking invokes Horn after every new
+Horn constraint is issued, and expects to detect an unsatisfiable set of constraints—and thus a type error—as early as
+possible. Round-trip typing rules—in particular, A PP FO and
+I F -A BD—produce constraints in a specific order, such that
+for each unknown P , implications where P appears negatively (on the left) are issued before the ones where it appears
+positively (on the right). To enable early error detection in
+this setting, procedure Horn looks for the weakest valuation
+of each P that validates all Horn constraints issued so far, and
+deems H unsatisfiable if for some P such a valuation does
+not exist or is inconsistent (an inconsistent valuation can be
+safely discarded since it is guaranteed to violate some future
+constraint where P appears positively).
+As an optimization, Horn always starts form the current assignment L and possibly makes it stronger, since all weaker
+assignments are known to be too weak to satisfy the previously issued constraints (for a fresh P , L[P ] is initialized
+with ∅). Horn uses an iterative greatest-fixpoint computation,
+outlined in Fig. 6; in every iteration, Strengthen(L, ψ ⇒
+ψ 0 ) produces the weakest consistent assignment L0 strictly
+stronger than L, such that JψKL0 ⇒ Jψ 0 KL is valid (or fails
+if this is not possible). In general, L0 is not unique; in this
+case our algorithm simply explores all alternatives independently, which happens rarely enough in the context of refinement type checking and synthesis.
+Implementing Strengthen efficiently is challenging: for
+every unknown P in ψ, the algorithm has to find the smallest subset of atomic predicates from QP \ L[P ] that validates
+the implication. Existing greatest-fixpoint Horn solvers [33]
+use breadth-first search, which is exponential in the cumulative size of QP and does not scale sufficiently well to practical
+cases of condition abduction (see Sec. 4). Instead, we observe
+that this task is similar to the problem of finding minimal unsatisfiable subsets (MUSs) of a a set of formulas; based on this
+observation, we build a practical algorithm for Strengthen
+which we dub MUSF IX.
+The
+S task of Strengthen amounts to finding all MUSs of the
+set κ∈ψ (Qκ \L[κ])∪{¬Jψ 0 KL } under the assumption JψKL .
+MUSF IX borrows the main insight of the M ARCO algorithm [22] for MUS enumeration, which relies on the ability
+of the SMT solver to produce unsatisfiable cores from proofs.
+We modify M ARCO to only produce MUSs that contain the
+negated right-hand side of the Horn constraint, ¬Jψ 0 KL , since
+Horn should only produce consistent solutions. For each resulting MUS (stripped of ¬Jψ 0 KL ), MUSF IX finds all possible partitions into valuations of individual predicate unknowns. Since MUSes are normally much smaller than the
+original set of formulas, a straightforward partitioning algorithm works well and rarely yield more than one valid partition. As an important optimization, when MUS enumeration returns multiple syntactically minimal subsets, MUSF IX
+
+prunes out semantically
+V
+V redundant subsets, i.e. it removes a
+subset mi if mi ⇒ mj for some j 6= i.
+3.7
+
+Synthesis from Refinement Types
+
+From the rules of round-trip type checking we can obtain synthesis rules, following the approach of [27] and reinterpreting
+the checking and strengthening judgments in such a way that
+the term t is considered unknown. This interpretation yields
+a synthesis procedure, which, given a goal schema S, picks
+a rule where the goal schema in the conclusion matches S,
+and constructs the term t from subterms obtained from the
+rule’s premises. More concretely, starting from the top-level
+goal schema S, the algorithm always starts by applying rule
+F IX (if S ≺ is defined) followed by TA BS (if the schema is
+polymorphic), and finally A BS (if the goal type is a function
+type). Given a scalar goal, the procedure performs exhaustive
+enumeration of well-typed E-terms up to a given bound on
+their depth, solving subtyping constraints at every node and
+simultaneously abducing a path condition as per the I F -A BD
+rule. If the resulting condition ψ is trivially true, the algorithm
+has found a solution; if ψ is inconsistent, the E-term is discarded; otherwise, the algorithm generates a conditional and
+proceeds to synthesize its remaining branch under the fixed
+assumption ¬ψ, as well a term of type {Bool | ν = ψ} to be
+used as the branch guard. Once all possible E-terms are exhausted, the algorithm attempts to synthesize a pattern match
+using an arbitrary E-term as a scrutinee, unless the maximal
+nesting depth of matches has been reached.
+Soundness and Completeness. Soundness of synthesis
+follows straightforwardly from soundness of round-trip type
+checking, since each program candidate is constructed together with a typing derivation in the round-trip system. Completeness is less obvious: due to condition abduction, the
+synthesis procedure only explores programs where the left
+branch of each conditional is an E-term. We can show that
+every S YNQUID program can be rewritten to have this form
+(by flattening nested conditionals and pushing conditionals
+inside matches). Thus the synthesis procedure is complete in
+the following sense: for each schema S, if there exists a term
+t, such that the depth of applications and pattern matches in
+t are within the given bounds, the procedure is guarantees to
+find some term t0 that also type-checks against S; if such a
+term t does not exist, the procedure will terminate with a failure. Note that the algorithm imposes no a-priori bound on
+the nesting depth of conditionals (which is crucial for completeness as stated above); this does not preclude termination,
+since in any given environment, liquid formulas partition the
+input space into finitely many parts, and every condition abduction is guaranteed to cover a nonempty subset of these
+parts.
+
+4.
+
+Evaluation
+
+We performed an extensive experimental evaluation of S YN QUID with the goal of assessing usability and scalability of the
+12
+
+2016/4/22
+
+Group
+
+List
+
+Unique
+list
+
+Strictly
+sorted list
+
+Sorting
+
+Tree
+
+BST
+
+Binary
+Heap
+
+AVL
+
+RBT
+
+User
+
+Description
+
+#G
+
+Components
+
+#M
+
+Spec
+
+Code
+
+T-all
+
+T-def
+
+T-nrt
+
+T-ncc
+
+T-nmus
+
+is empty
+is member
+duplicate each element
+replicate
+append two lists
+concatenate list of lists
+take first n elements
+drop first n elements
+delete value
+map
+zip
+zip with function
+cartesian product
+i-th element
+index of element
+insert at end
+reverse
+foldr
+length using fold
+append using fold
+insert
+delete
+remove duplicates
+remove adjacent dupl.
+integer range
+insert
+delete
+intersect
+insert (sorted)
+insertion sort
+sort by folding
+extract minimum
+selection sort
+balanced split
+merge
+merge sort
+partition
+append with pivot
+quick sort
+is member
+node count
+preorder
+create balanced
+is member
+insert
+delete
+BST sort
+is member
+insert
+1-element constructor
+2-element constructor
+3-element constructor
+rotate left
+rotate right
+balance
+insert
+extract minimum
+delete
+balance left
+balance right
+insert
+desugar AST
+make address book
+merge address books
+
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+2
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+5
+1
+1
+1
+1
+1
+3
+3
+1
+1
+1
+2
+2
+2
+3
+1
+1
+1
+
+true, false
+true, false, =, 6=
+
+1
+2
+1
+1
+1
+3
+1
+1
+2
+1
+1
+1
+3
+1
+2
+2
+2
+2
+2
+2
+2
+2
+2
+3
+2
+2
+2
+2
+2
+4
+2
+4
+6
+4
+2
+6
+4
+2
+6
+2
+1
+2
+2
+2
+2
+2
+6
+2
+2
+2
+2
+2
+3
+3
+4
+3
+5
+5
+9
+9
+9
+4
+3
+3
+
+6
+6
+7
+4
+8
+5
+8
+11
+8
+5
+10
+10
+8
+12
+8
+21
+15
+14
+4
+8
+8
+8
+13
+5
+13
+8
+8
+8
+8
+5
+11
+23
+5
+31
+17
+11
+27
+28
+11
+6
+4
+5
+7
+6
+8
+8
+51
+6
+8
+5
+6
+7
+104
+107
+31
+22
+11
+37
+143
+144
+49
+5
+5
+8
+
+6
+18
+16
+21
+15
+12
+27
+20
+26
+22
+22
+33
+26
+20
+20
+19
+12
+32
+17
+20
+26
+22
+47
+32
+23
+41
+29
+40
+34
+12
+47
+40
+16
+33
+41
+25
+40
+22
+22
+28
+18
+18
+29
+37
+55
+68
+115
+43
+55
+8
+55
+246
+91
+91
+119
+47
+25
+63
+137
+137
+112
+46
+35
+19
+
+0.02
+0.11
+0.05
+0.05
+0.15
+0.05
+0.12
+0.10
+0.10
+0.03
+0.08
+0.07
+0.30
+0.05
+0.08
+0.10
+0.09
+0.10
+0.03
+0.04
+0.27
+0.18
+0.36
+1.33
+2.36
+0.18
+0.10
+0.33
+0.25
+0.06
+2.14
+4.28
+0.49
+0.96
+2.19
+2.10
+2.84
+0.22
+2.71
+0.29
+0.20
+0.21
+0.14
+0.09
+0.91
+5.68
+1.38
+0.38
+0.51
+0.02
+0.08
+2.10
+11.08
+19.23
+1.56
+1.84
+1.92
+15.67
+5.62
+7.63
+8.95
+1.17
+0.62
+0.35
+
+0.02
+0.11
+0.05
+0.05
+0.09
+0.05
+0.12
+0.10
+0.10
+0.03
+0.08
+0.07
+0.29
+0.05
+0.08
+0.10
+0.10
+0.10
+0.07
+2.19
+0.22
+0.19
+0.87
+1.32
+2.33
+0.17
+0.09
+0.32
+0.24
+0.06
+4.35
+0.44
+0.51
+14.61
+2.10
+7.89
+0.15
+18.45
+0.29
+0.20
+0.20
+0.15
+0.08
+0.88
+5.62
+1.35
+0.38
+0.50
+0.02
+0.08
+2.12
+12.43
+18.34
+1.81
+1.87
+5.53
+7.72
+8.53
+1.10
+3.67
+5.85
+
+0.02
+0.13
+9.63
+0.22
+55.82
+7.87
+0.17
+0.06
+5.83
+0.38
+0.14
+0.24
+0.29
+0.03
+0.05
+0.85
+1.07
+0.72
+22.27
+0.43
+0.21
+0.68
+0.68
+0.20
+0.58
+7.90
+0.10
+9.63
+8.83
+0.02
+0.25
+-
+
+0.02
+0.10
+0.08
+0.05
+0.13
+0.04
+0.12
+0.09
+0.12
+0.03
+0.10
+0.17
+0.25
+0.05
+0.07
+0.11
+0.12
+0.10
+0.03
+0.04
+0.20
+0.26
+0.33
+1.31
+2.33
+0.16
+0.10
+0.34
+0.23
+0.06
+2.21
+7.58
+0.42
+1.40
+6.85
+2.52
+3.42
+0.22
+2.49
+0.28
+0.91
+0.91
+0.21
+0.08
+0.82
+10.74
+1.25
+0.35
+0.48
+0.02
+0.07
+1.98
+17.06
+36.35
+1.76
+1.64
+1.72
+13.79
+48.47
+45.32
+7.93
+1.23
+0.94
+0.31
+
+0.01
+0.04
+0.10
+0.04
+0.02
+0.07
+0.06
+0.23
+0.12
+0.09
+0.44
+0.02
+0.03
+0.05
+0.38
+0.80
+1.69
+0.19
+4.94
+0.14
+0.15
+0.02
+10.08
+17.87
+0.78
+0.55
+0.24
+
+0, inc, dec, ≤, 6=
+append
+0, inc, dec, ≤, 6=
+0, inc, dec, ≤, 6=
+=, 6=
+
+append, map
+0, inc, dec, ≤, 6=
+0, inc, dec, =, 6=
+insert at end
+0, inc, dec
+=, 6=
+=, 6=
+is member
+=, 6=
+0, inc, dec, ≤, 6=
+<
+<
+<
+≤, 6=
+insert (sorted)
+foldr, ≤, 6=
+≤, 6=
+extract minimum
+≤, 6=
+split, merge
+≤
+partition, append w/pivot
+false, not, or, =
+0, 1, +
+append
+0, inc, dec, ≤, 6=
+true, false, ≤, 6=
+≤, 6=
+≤, 6=
+≤, 6=
+false, not, or, ≤, 6=
+≤, 6=
+≤, 6=
+≤, 6=
+≤, 6=
+inc
+inc
+rotate, nodeHeight, isSkewed, isLHeavy, isRHeavy
+balance, <
+<
+extract minimum, balance, <
+balance left, right, ≤, 6=
+0, 1, 2
+is private
+append
+
+Table 1. Benchmarks and S YNQUID results. For each benchmark, we report the number of synthesis goals #G; the set of
+provided Components; the number of defined measures #M; cumulative size of Specification and synthesized Code (in AST
+nodes) for all goals; as well as S YNQUID running times (in seconds) with minimal bounds (T-all), with default bounds (T-def ),
+without round-trip checking (T-nrt), without type consistency checking (T-ncc), and without MUSF IX (T-nmus). “-” denotes
+timeout of 2 minutes or out of memory.
+
+13
+
+2016/4/22
+
+proposed synthesis technique compared to existing alternatives. This goal materializes into the following research questions:
+
+helper functions) serves as a synthesis goal in another benchmark; refinements in datatype definitions are also excluded,
+since those definitions are reusable between all benchmarks
+in the same problem domain. Full specifications are available
+from the S YNQUID repository [31].
+The benchmarks are drawn from a variety of problem domains with the goal of exercising different features in S YN QUID . List and tree benchmarks demonstrate pattern matching, structural recursion, the ability to generate and use polymorphic and higher-order functions (such as map and fold),
+as well as reasoning about nontrivial properties of data structures, both universal (e.g. all elements are non-negative) and
+recursive (e.g. size and set of elements). Our most advanced
+benchmarks include sorting and operations over data structures with complex representation invariants, such as binary
+search trees, heaps, and balanced trees. These benchmarks
+showcase expressiveness of refinement types, exercise S YN QUID ’s ability to perform nontrivial reasoning through refinement discovery, and represent a scalability challenge beyond the current state of the art in synthesis. Finally, we included several benchmarks operating on “custom” datatypes
+(including the “address book” case study from [20]) in order
+to demonstrate that S YNQUID’s applicability is not limited to
+standard textbook examples.
+
+(1) Are refinement types supported by S YNQUID expressive
+enough to specify interesting programs, including benchmarks proposed in prior work?
+(2) How concise are S YNQUID’s input specifications compared both to the synthesized solutions and to inputs required by existing techniques?
+(3) Are S YNQUID’s inputs intuitive: in particular, is the algorithm applicable to specifications not tailored for synthesis?
+(4) How scalable is S YNQUID: can it handle benchmarks
+tackled by existing synthesizers? Can it scale to more
+complex programs than those previously reported in the
+literature?
+(5) How is synthesis performance impacted by various features of S YNQUID and its type system?
+4.1
+
+Benchmarks
+
+In order to answer the research questions stated above, we
+arranged a benchmark suite that consists of 64 synthesis challenges from various sources, representing a range of problem
+domains. In the interest of direct comparison with existing
+synthesis tools, our suite includes benchmarks that had been
+used in the evaluation of those tools [1, 4, 12, 14, 20, 21, 24,
+27]. From each of these papers, we picked top three most complex challenges (judging by the reported synthesis times) that
+were expressible in S YNQUID’s refinement logic, plus several
+easier problems that were common or particularly interesting.
+Our second source of benchmarks are verification case
+studies from the LiquidHaskell tutorial [18]. The purpose
+of this second category is two-fold: first, these problems are
+larger and more complex than existing synthesis benchmarks,
+and thus can show whether S YNQUID goes beyond the state of
+the art in synthesis; second, the specifications for these problems have been written by independent researchers and for a
+different purpose, and thus can serve as evidence that input accepted by S YNQUID is sufficiently general and intuitive. Out
+of the total of 14 case studies, we picked 5 that came with sufficiently strong functional specifications (list sorting, binarysearch trees, content-aware lists, unique lists, and AVL trees),
+erased all implementations, and made relatively straightforward syntactic changes in order to obtain valid S YNQUID input.
+Tab. 1 lists the 64 benchmarks together with some metrics of our type-based specifications: the number of synthesis goals including auxiliary functions, the set of components
+provided, the number of measures used, and the cumulative
+size of refinements. Note that the reported specification size
+only includes refinements in the signatures of the synthesis
+goals; refinements in component functions are excluded since
+every such function (except trivial arithmetic operations and
+
+4.2
+
+Results
+
+Evaluation results are summarized in Tab. 1. S YNQUID was
+able to synthesize (and fully verify) solutions for all 64 benchmarks; the table lists sizes of these solutions in AST nodes
+(Code) as well as synthesis times in seconds (T-all).
+The results demonstrate that S YNQUID is efficient in synthesizing a variety of programs: all but 7 benchmarks are synthesized within 5 seconds; it also scales to programs of nontrivial size, including complex recursive (red-black tree insertion of size 69) and non-recursive functions (3-value binary heap constructor of size 246). Even though specification
+sizes for some benchmarks are comparable with the size of the
+synthesized code, for many complex problems the benefits of
+describing computations as refinement types are significant:
+for example, the type-based specifications of the three main
+operations on binary-search trees are over six times more concise than their implementations.
+The synthesis times discussed above were obtained for optimal exploration bounds, which could differ across benchmarks. Tab. 1 also reports synthesis times T-def for a setting
+where all benchmarks in the same category share the same exploration bounds. Although this inevitably slows down synthesis, on most of the benchmarks the performance penalties
+were not drastic: only three benchmarks failed to terminate
+within the two-minute timeout.
+In order to assess the impact on performance of various aspects of our algorithm and implementation, Tab. 1
+reports synthesis times using three variants of S YNQUID,
+where certain features were disabled: the column T-nrt corresponds to replacing round-trip type checking with bidirec14
+
+2016/4/22
+
+L EON
+J EN
+M YTH
+λ2
+E SC
+M YTH 2
+
+Benchmark
+strict sorted list delete
+strict sorted list insert
+merge sort
+BST find
+bin. heap 1-element
+bin. heap find
+sorted list insert
+list rm adjacent dupl.
+BST insert
+list remove duplicates
+list drop
+tree find
+list rm adjacent dupl.
+tree create balanced
+list duplicate each
+BST insert
+sorted list insert
+tree count nodes
+
+Spec
+14
+14
+9
+51
+80
+76
+12
+13
+20
+7
+6
+12
+n/a
+n/a
+n/a
+n/a
+n/a
+n/a
+
+SpecS
+8
+8
+11
+6
+5
+6
+8
+5
+8
+13
+11
+6
+5
+7
+7
+8
+8
+4
+
+Time
+15.1
+14.1
+14.3
+64.8
+61.6
+51.9
+0.12
+0.07
+0.37
+231
+316.4
+4.7
+1
+0.24
+0.16
+1.81
+1.02
+0.45
+
+hardly be explained by improvements in single-core hardware
+performance.
+We split the tools into two categories according to the
+specification and verification mechanism they rely on.
+Formal Specifications with Deductive Verification. The
+first category includes L EON [20] and J ENNISYS [21]; both
+tools use pre- and post-conditions (and data structure invariants) to describe computations, and rely on unbounded,
+SMT-based verification to validate candidate programs (and
+thus provide the same correctness guarantees as S YNQUID).
+Unlike L EON and S YNQUID, J ENNISYS targets imperative,
+heap-based programs; the evaluation in [21], however, focuses on side-effect free benchmarks. Both tools use variants
+of condition abduction, which makes their exploration strategies similar to S YNQUID’s.
+For both tools, translating their three most complex benchmarks into S YNQUID proved to be straightforward. This suggests that our decidable refinement logic is not too limiting
+in practice, compared to other formal specification languages
+used for synthesis. Our specifications are on average slightly
+more concise than L EON’s and significantly more concise
+than those in J ENNISYS; the latter is largely due to the heapbased language, but the results still indicate that embedding
+predicates into types can help curb the verboseness of traditional Hoare-style specifications.
+S YNQUID was able to synthesize solutions to all problems
+tackled by the other two tools in this category. The converse is
+not true: automatic verification of some of S YNQUID’s benchmarks (such as the binary-search tree example in Sec. 2)
+requires invariant discovery, which is not supported by the
+other two tools. This suggests that S YNQUID qualitatively
+differs from other state-of-the-art synthesizers in terms of the
+class of programs for which a verified solution can be synthesized. On the benchmarks where the other tools are applicable, S YNQUID demonstrates considerably smaller running
+times, which suggests that fast verification and early pruning enabled by type-based specifications indeed improve the
+scalability of synthesis.
+Input/Output Examples. Our second category of tools includes M YTH [27], λ2 [12] and E SCHER [1], which synthesize programs from concrete input-output examples, as well
+as M YTH 2 [14], which uses generalized input-output examples. Using refinement types, we were able to express 3 out of
+3, 10, 5, and 7 of their most complex benchmarks, receptively.
+The functions we failed to specify either manipulate nested
+structures in a representation-specific way (such as “insert
+a tree under each leaf of another tree”), or perform filtering
+(“list of nodes in a tree that match a predicate”).
+At the same time, we found cases where refinement types
+are concise and intuitive, while providing input-output examples is extremely tedious. One of those cases is insertion
+into a binary search tree: M YTH requires 20 examples, each
+of which contains two bulky tree instances and has to define the precise position where the new element is to be in-
+
+TimeS
+0.10
+0.18
+2.1
+0.09
+0.02
+0.38
+0.25
+1.33
+0.91
+0.36
+0.1
+0.29
+1.33
+0.14
+0.05
+0.91
+0.25
+0.20
+
+Table 2. Comparison to other synthesizers. For each benchmark
+we report: Spec, specification size (or the number of input-output examples) for respective tool; SpecS, specification size for S YNQUID
+(from Tab. 1); Time, reported running time for respective tool; TimeS,
+running time for S YNQUID (from Tab. 1).
+
+tional type checking (that is, disabling subtyping checks for
+partial applications); T-ncc corresponds to disabling type consistency checks; T-nmus corresponds to replacing MUSF IX
+with naive breadth-first search. The results demonstrate that
+the most significant contribution comes from using MUSF IX: without this feature 37 out of 64 benchmarks time out,
+since breadth-first search cannot handle condition abduction
+even with a moderate number of logical qualifiers. The second most significant feature is round-trip type checking, with
+33 benchmarks timing out when disabled, while consistency
+checks only bring significant speedups for the most complex
+examples.
+4.3
+
+Comparative Evaluation
+
+We compared S YNQUID with state-of-the-art synthesis tools
+that target recursive functional programs and offer a comparable level of automation. The results are summarized in Tab. 2.
+For each tool, we list the three most complex benchmarks reported in the respective paper that were expressible in S YN QUID ’s refinement logic; for each of the three benchmarks we
+report the specification size (if available) and the synthesis
+time; for ease of comparison, we repeat the same two metrics for S YNQUID (copied over from Tab. 1). Note that the
+synthesis times are not directly comparable, since the results
+for other tools are taken from respective papers and were obtained on different hardware; however, the differences of an
+order of magnitude or more are still significant, since they can
+15
+
+2016/4/22
+
+array searchn
+
+maxn
+103
+
+103
+
+eSolver
+Alloy*
+
+Time (s )
+
+102
+101
+
+Alloy*
+
+102
+Synquid
+
+101
+
+100
+
+Synquid
+
+100
+
+10−1
+
+n =
+
+eSolver
+
+2
+
+3
+
+4
+
+5
+
+Puffin
+
+10−1
+
+6
+
+n =
+
+Puffin
+2
+
+3
+
+4
+
+5
+
+6
+
+Figure 7. Evaluation on non-recursive benchmarks.
+serted; the type-based specification for this problem, given
+in Sec. 2, is straightforward and only defines the abstract effect of the operation relevant to the user. This suggests that in
+general, logic-based specification techniques, including refinement types in S YNQUID, are a better fit for describing
+operations that maintain a complex representation invariant
+but have a simple abstract effect, while example-based approaches fare better when describing operations that inherently expose the complex representation of a data structure.
+Experiments with example-based tools only report the
+number of examples required for synthesis and not their sizes;
+however, we can safely assume that each example contains
+multiple AST nodes, and thus conclude that type-based specifications for the benchmarks in Tab. 2 are more concise. By
+imposing more constraints on the set of examples (such as
+trace completeness [27]) and increasing its size, examplebased synthesizers can trade off user effort for synthesis time.
+On the benchmarks under comparison, M YTH appears to
+favor performance, while λ2 prefers smaller example sets.
+S YNQUID tries to offer the best of both world and achieves
+good performance with concise specifications.
+4.4
+
+A LLOY * [24], and P UFFIN [4], a specialized synthesizer
+for conditional integer-arithmetic expressions6 . The results
+show that S YNQUID’s condition abduction scales relatively
+well compared to general synthesizers, but loses to P UFFIN’s
+theory-specific abduction engine.
+
+5.
+
+Related Work
+
+Our work is the first to leverage general decidable refinement
+types for synthesis, but it builds on a number of ideas from
+prior work as has been highlighted already throughout the
+paper. Specifically, our work combines ideas from two areas:
+synthesis of recursive functional programs and refinement
+type inference.
+Synthesis of Recursive Functional Programs. A number of recent systems target recursive functional programs
+and use type information in some form to restrict the search
+space. The most closely related to our work are M YTH [27],
+M YTH 2 [14], and L EON [20].
+M YTH pioneered the idea of leveraging bidirectional type
+checking for synthesis. However, M YTH does not support
+polymorphism or refinement types. Instead, the system relies
+on examples in order to specify the desired functionality. For
+certain functions, providing examples is easy whereas writing
+a refinement type is cumbersome or, due to the limitations of
+decidable refinement logic, even impossible. That said, examples in general do not fully specify a program; thus programming by example always involves a manual verification step.
+Moreover, for some less intuitive problems, such as insertion
+into a balanced tree or AST transformations, providing inputoutput examples requires familiarity with all details and corner cases of the algorithm, whereas refinement types enable a
+more abstract specification. Additionally, M YTH expects the
+set of examples to be trace complete, which means that for
+any example the user provides, there should also be examples
+
+Evaluation on Non-recursive Benchmarks
+
+In order to asses the scalability of MUSF IX on larger search
+spaces, we evaluated S YNQUID on two parametrized benchmarks from the linear integer arithmetic track of the SyGuS’14 competition [3]: maxn (find maximum of n integer
+arguments) and array_searchn (find the position of a value
+in a sorted array with n elements). Both benchmarks target
+non-recursive programs that consist of a series of nested conditionals; moreover, the search space for the branch guards
+grows exponentially with n. This makes the two problems
+ideal benchmarks for condition abduction techniques.
+Fig. 7 shows S YNQUID synthesis times on the two benchmarks for n = 2, 3, . . . , 6. For reference, we also plot the
+results for the enumerative solver (the fastest of the SyGuS baseline solvers), as well as the higher-order solver
+
+6 The results for these tools are taken from their respective papers; only
+
+differences in the order of magnitude are significant.
+
+16
+
+2016/4/22
+
+corresponding to any recursive calls made on that input. Other
+systems that use a combination of types and input-output examples, and thus have similar advantages and disadvantages
+relative to our system, include λ2 [12] and E SCHER [1].
+M YTH 2 generalizes example-based synthesis: it treats examples as singleton types, and extends the input language
+with intersection and union types, as well as parametric polymorphism. This addresses some of the shortcomings of concrete input-output examples (in particular, their verboseness),
+however, in the absence of dependent function types most interesting programs still cannot be fully speficied. Combining S YNQUID’s dependent types with singletons, intersection, and unions found in M YTH 2 is an interesting direction
+for future work.
+In L EON, synthesis problems are defined by first-order
+specifications with recursive predicates, and verification is
+based on a semi-decision procedure [34], implemented on
+top of an SMT solver. L EON’s verification engine does not
+support invariant inference, which prevents it from generating provably correct implementations for problems such as
+insertion into a sorted list or a binary search tree. The general
+synthesis strategy is similar to ours: first decompose the specification and then switch to generate-and-check mode, enhanced with condition abduction. Unlike our system, L EON
+does not perform systematic specification decomposition in
+the generate-and-check mode, and lacks support for polymorphism and high-order functions.
+The use of type information has also proved extremely
+useful for code completion [15, 23, 28], although none of
+these systems rely on a type system as expressive as ours,
+and they are designed for a very different set of tradeoffs
+compared to S YNQUID. For example, because the problem
+is highly under-constrained, these systems place significant
+emphasis on the ranking of solutions.
+Another important body of related work related is hole
+driven development, as embodied in systems like Agda [26]
+and Idris [6], which leverage a rich type system to aid development, but are meant to be used interactively rather than to
+perform complete synthesis. Djinn [5] serves a similar purpose but uses the less expressive Haskell type system.
+Refinement Type Checking. Our type checking algorithm
+is based on liquid type inference [19, 32, 35–37], which pioneered combining Hindley-Miler unification with predicate
+abstraction. We integrate their ideas with bidirectional type
+checking [30], which has been used before both for other
+flavors of refinement types [9, 11, 40] and for unrestricted
+dependent types [8], but not for general decidable refinement types. Another difference with liquid types is that we
+use greatest-fixpoint predicate abstraction procedure inspired
+by [33], and improved using an algorithm for efficient MUS
+enumeration [22].
+Logical Abduction. The concept of abduction in logical
+reasoning has found numerous applications in programming
+languages, including specification inference [2, 10] and pro-
+
+gram synthesis [4, 20, 21]. Abduction techniques based on
+quantifier elimination [2, 10] and theory-specific unification
+operators [4], are precise and efficient, but only applicable
+to restricted domains. S YNQUID performs abduction using
+predicate abstraction and MUS enumeration, which can be
+applied to a wider range of specification logics, but its precision is limited to the given set of logical qualifiers.
+
+Acknowledgements
+We thank Aleksandar Milicevic, Shachar Itzhaky, Ranjit
+Jhala, and the anonymous reviewers for their valuable input.
+This work was funded by DARPA Grant FA8750-14-2-0242
+(MUSE) and NSF Grants CCF-1139056 and CCF-1438969.
+
+References
+[1] A. Albarghouthi, S. Gulwani, and Z. Kincaid. Recursive program synthesis. In CAV, 2013.
+[2] A. Albarghouthi, I. Dillig, and A. Gurfinkel. Maximal specification synthesis. In POPL, 2016.
+[3] R. Alur, R. Bodík, G. Juniwal, M. M. K. Martin,
+M. Raghothaman, S. A. Seshia, R. Singh, A. Solar-Lezama,
+E. Torlak, and A. Udupa. Syntax-guided synthesis. In FMCAD, 2013.
+[4] R. Alur, P. Černý, and A. Radhakrishna. Synthesis through
+unification. In CAV, 2015.
+[5] L. Augustsson. djinn, the official Haskell package webpage.
+http://hackage.haskell.org/package/djinn, 2014.
+[6] E. Brady. Idris, a general-purpose dependently typed programming language: Design and implementation. J. Funct. Program., 23(5):552–593, 2013.
+[7] K. Claessen, M. Johansson, D. Rosén, and N. Smallbone. Hipspec: Automating inductive proofs of program properties. In
+ATx/WInG, 2012.
+[8] T. Coquand. An algorithm for type-checking dependent types.
+Sci. Comput. Program., 26(1-3):167–177, 1996.
+[9] R. Davies and F. Pfenning. Intersection types and computational effects. In ICFP, 2000.
+[10] I. Dillig, T. Dillig, B. Li, and K. L. McMillan. Inductive
+invariant generation via abductive inference. In OOPSLA,
+2013.
+[11] J. Dunfield and F. Pfenning. Tridirectional typechecking. In
+POPL, 2004.
+[12] J. K. Feser, S. Chaudhuri, and I. Dillig. Synthesizing data structure transformations from input-output examples. In PLDI,
+2015.
+[13] C. Flanagan. Hybrid type checking. In POPL, 2006.
+[14] J. Frankle, P. Osera, D. Walker, and S. Zdancewic. Exampledirected synthesis: a type-theoretic interpretation. In POPL,
+2016.
+[15] T. Gvero, V. Kuncak, I. Kuraj, and R. Piskac. Complete completion using types and weights. In PLDI, 2013.
+[16] J. Heras, E. Komendantskaya, M. Johansson, and E. Maclean.
+Proof-pattern recognition and lemma discovery in ACL2. In
+LPAR, 2013.
+
+17
+
+2016/4/22
+
+A.
+
+[17] J. P. Inala, X. Qiu, B. Lerner, and A. Solar-Lezama. Type
+assisted synthesis of recursive transformers on algebraic data
+types. CoRR, abs/1507.05527, 2015.
+
+Soundness and Completeness of
+Round-trip Type Checking
+
+We show properties of round-trip type checking (Fig. 4) relative to the purely bottom-up liquid type inference (Fig. 8),
+using a bidirectional type checking system (Fig. 9) as an intermediate step.
+
+[18] R. Jhala, E. Seidel, and N. Vazou. Programming with refinement types (an introduction to liquidhaskell). https://
+ucsd-progsys.github.io/liquidhaskell-tutorial, 2015.
+[19] M. Kawaguchi, P. M. Rondon, and R. Jhala. Type-based data
+structure verification. In PLDI, 2009.
+
+A.1
+
+[20] E. Kneuss, I. Kuraj, V. Kuncak, and P. Suter. Synthesis modulo
+recursive functions. In OOPSLA, 2013.
+
+Soundness of round-trip type checking
+
+Theorem 1 (Soundness of Round-Trip Type Checking). If
+`Q Γ, Γ `Q S, and Γ `Q t ↓ S, then Γ `Q t :: S 0 and
+Γ ` S 0 <: S.
+
+[21] K. R. M. Leino and A. Milicevic. Program extrapolation with
+Jennisys. In OOPSLA, 2012.
+
+We prove the theorem in two steps. In step 1, assuming
+Γ `Q t ↓ S, we build a derivation of Γ `Q t ↓b S in
+the bidirectional type system given in Fig. 9. The main difference between the two derivations is that the bidirectional system performs a subtyping check on the boundary of the two
+directions, while the round-trip system performs subtyping
+checks more locally. To show that the latter subsumes the former, we prove that whenever the round-trip system concludes
+Γ `Q t ↓ T ↑ let C in T 0 , then Γ; C ` T 0 <: T . In step
+2, we build a derivation of Γ `Q t :: S 0 from Γ `Q t ↓b S.
+
+[22] M. Liffiton, A. Previti, A. Malik, and J. Marques-Silva. Fast,
+flexible mus enumeration. Constraints, pages 1–28, 2015.
+[23] D. Mandelin, L. Xu, R. Bodík, and D. Kimelman. Jungloid
+mining: Helping to navigate the api jungle. In PLDI, 2005.
+[24] A. Milicevic, J. P. Near, E. Kang, and D. Jackson. Alloy*: A
+general-purpose higher-order relational constraint solver. In
+ICSE, 2015.
+[25] O. Montano-Rivas, R. L. McCasland, L. Dixon, and A. Bundy.
+Scheme-based theorem discovery and concept invention. Expert Syst. Appl., 39(2):1637–1646, 2012.
+
+Lemma 1 (Type Strengthening). If Γ `Q t
+
+↓
+
+T
+
+↑
+
+let C in T 0 then Γ; C ` T 0 <: T .
+
+[26] U. Norell. Dependently typed programming in agda. In AFP,
+2009.
+
+Proof. By induction on the structure of the derivation. Cases
+VAR S C, VAR∀, and A PP FO are trivial, since the subtyping
+check is one of the premises. For A PP HO, from the first
+premise by induction hypothesis we have Γ; C ` (Tx0 →
+T 0 ) <: (bot → T ); by definition of function subtyping (<:F UN in Fig. 3) we get Γ; C ` T 0 <: T .
+
+[27] P. Osera and S. Zdancewic. Type-and-example-directed program synthesis. In PLDI, 2015.
+[28] D. Perelman, S. Gulwani, T. Ball, and D. Grossman. Typedirected completion of partial expressions. In PLDI, 2012.
+[29] B. C. Pierce. Types and Programming Languages. MIT Press,
+2002.
+[30] B. C. Pierce and D. N. Turner. Local type inference. ACM
+Trans. Program. Lang. Syst., 22(1):1–44, 2000.
+
+Lemma 2 (Round-trip to Bidirectional). If Γ `Q t ↓ S
+then Γ `Q t ↓b S; additionally, if t is an E-term and
+Γ `Q t ↓ T ↑ Tˆ0 , then Γ `Q t ↑b Tˆ0 .
+
+[31] N. Polikarpova and I. Kuraj. Synquid code repository. https:
+//bitbucket.org/nadiapolikarpova/synquid/, 2015.
+
+Note that there is a one-to-one correspondence between
+the rules of the two systems (given by their names); our
+construction always uses corresponding rules.
+
+[32] P. M. Rondon, M. Kawaguchi, and R. Jhala. Liquid types. In
+PLDI, 2008.
+[33] S. Srivastava and S. Gulwani. Program verification using
+templates over predicate abstraction. In PLDI, 2009.
+
+Proof. By induction on the structure of the derivation. Let us
+first assume an E-term e and a derivation of Γ `Q e ↓ T ↑
+Tˆ0 ; we will build a derivation of Γ `Q e ↑b Tˆ0 . Cases VAR S C
+and VAR∀ are trivial since the bidirectional premises for these
+rules are a subset of the round-trip premises. Rule A PP HO
+has the same structure in the two systems, thus we invoke the
+induction hypothesis in a straightforward manner. Finally, in
+the rule A PP FO, we obtain the first two premises from the
+induction hypothesis; the third premise, Γ; C1 ; C2 ` Tx <:
+{B | ψ}, follows from the round-trip premise Γ; C1 `Q e2 ↓
+{B | ψ} ↑ let C2 in Tx and Lemma 1.
+We are left to deal with the checking rules. For all checking rules except IE we can obtain the required bidirectional
+premises in a straightforward manner from the induction hypothesis. For IE, we obtain the first premise from the induction hypothesis; the second premise, Γ; C ` T 0 <: T , follows
+
+[34] P. Suter, A. S. Köksal, and V. Kuncak. Satisfiability modulo
+recursive programs. In SAS, 2011.
+[35] N. Vazou, P. M. Rondon, and R. Jhala. Abstract refinement
+types. In ESOP, 2013.
+[36] N. Vazou, E. L. Seidel, and R. Jhala. Liquidhaskell: experience
+with refinement types in the real world. In Haskell, 2014.
+[37] N. Vazou, E. L. Seidel, R. Jhala, D. Vytiniotis, and S. L. P.
+Jones. Refinement types for haskell. In ICFP, 2014.
+[38] N. Vazou, A. Bakst, and R. Jhala. Bounded refinement types.
+In ICFP, 2015.
+[39] P. Wadler. Theorems for free! In FPCA, 1989.
+[40] H. Xi and F. Pfenning. Dependent types in practical programming. In POPL, 1999.
+
+18
+
+2016/4/22
+
+Type Inference (Contextual Types)
+
+Γ `Q e :: T̂
+
+Type Inference
+
+Γ(x) = {B | ψ}
+Γ `Q x :: {B | ν = x}
+Γ(x) = ∀αi .T 0
+Γ `Q Ti
+
+VAR S C
+VAR∀
+
+A PP
+
+VAR∀
+
+Γ `Q x ↑b [Ti /α]T 0
+Γ `Q e1 ↑b let C1 in (x : {B | ψ} → T )
+Γ; C1 `Q e2 ↑b let C2 in Tx
+Γ; C1 ; C2 ` Tx <: {B | ψ}
+A PP FO
+Γ `Q e1 e2 ↑b let C1 ; C2 ; x : Tx in T
+Γ `Q e ↑b let C in (Tx → T )
+Γ; C `Q f ↓b Tx
+A PP HO
+Γ `Q e f ↑b let C in T
+
+Γ `Q t :: S
+
+Γ `Q e :: let C in T 0
+Γ; C ` T 0 <: T
+Γ `Q e :: T
+Γ `Q (x : Tx → T )
+Γ; x : Tx `Q t :: T
+A BS
+Γ `Q λx.t :: (x : Tx → T )
+Γ `Q e :: let C in {Bool | ψ}
+Γ `Q T
+Γ; C; [>/ν]ψ `Q t1 :: T
+Γ; C; [⊥/ν]ψ `Q t2 :: T
+Γ `Q if e then t1 else t2 :: T
+Γ `Q e :: let C in {D Tk | ψ}
+j
+0
+Ci = Ti → {D Tk | ψi }
+Γi = {xji : Tij }; [x0 /ν]ψi0
+Γ `Q T
+Γ; C; [x0 /ν]ψ; Γi `Q ti :: T
+S UBT
+
+IF
+
+M ATCH
+
+Type Checking
+
+Γ `Q t ↓b S
+
+Γ `Q e ↑b let C in T 0
+Γ; C ` T 0 <: T
+Γ `Q e ↓b T
+Γ; y : Tx `Q t ↓b [y/x]T
+A BS
+Γ `Q λy.t ↓b (x : Tx → T )
+Γ `Q e ↑b let C in {Bool | ψ}
+Γ; C; [>/ν]ψ `Q t1 ↓b T
+Γ; C; [⊥/ν]ψ `Q t2 ↓b T
+Γ `Q if e then t1 else t2 ↓b T
+Γ `Q e ↑b let C in {D Tk | ψ}
+j
+0
+Ci = Ti → {D Tk | ψi }
+Γi = {xji : Tij }; [x0 /ν]ψi0
+0
+Γ; C; [x /ν]ψ; Γi `Q ti ↓b T
+IE
+
+IF
+
+Γ `Q match e with |i Ci hxji i 7→ ti :: T
+Γ `Q t :: T
+αi not free in Γ
+TA BS
+Γ `Q t :: ∀αi .T
+Γ `Q S
+Γ; x : S `Q t :: S
+F IX
+Γ `Q fix x.t :: S
+
+M ATCH
+
+Figure 8. Rules of liquid type inference.
+from the round-trip premise Γ `Q e ↓ T ↑
+and Lemma 1.
+
+Γ(x) = {B | ψ}
+Γ `Q x ↑b {B | ν = x}
+Γ(x) = ∀αi .T 0
+Γ `Q Ti
+
+VAR S C
+
+Γ `Q x :: [Ti /α]T 0
+Γ `Q e :: let C1 in (x : Tx → T )
+Γ; C1 `Q t :: let C2 in Tx0
+Γ; C1 ; C2 ` Tx0 <: Tx
+Γ `Q e t :: let C1 ; C2 ; x : Tx0 in T
+
+Type Inference (Context-Free Types)
+
+Γ `Q e ↑b T̂
+
+let C in T 0
+
+Γ `Q match e with |i Ci hxji i 7→ ti ↓b T
+Γ `Q t ↓b T
+αi not free in Γ
+TA BS
+Γ `Q t ↓b ∀αi .T
+Γ; x : S ≺ `Q t ↓b S
+F IX
+Γ `Q fix x.t ↓b S
+
+Figure 9. Rules of bidirectional type checking.
+
+Lemma 3 (Bidirectional to Bottom-up). If `Q Γ, Γ `Q S,
+and Γ `Q t ↓b S, then Γ `Q t :: S 0 and Γ ` S 0 <: S;
+additionally if t is an E-term and Γ `Q t ↑b T̂ then Γ `Q t ::
+T̂ .
+
+derivation of Γ `Q λx.t ↓b (x : Tx → T ), we construct
+the derivation of Γ `Q λx.t :: (x : Tx → T ) (i.e. we
+pick the bidirectional goal type as the inferred type); this is
+possible since by the assumptions of the lemma the type is
+liquid: Γ `Q x : Tx → T , which satisfies the first premise
+of the bottom-up rule. To satisfy the second premise, from
+the induction hypothesis we infer Γ; x : Tx `Q t :: T 0 ,
+where Γ; x : Tx ` T 0 <: T , and then using the S UBT
+rule we get Γ; x : Tx `Q t :: T . To apply the induction
+hypothesis, we need to show that T is liquid, which follows
+from the assumption that x : Tx → T is liquid and the
+definition of liquid function types. The cases I F, M ATCH,
+TA BS are analogous to A BS. For F IX we additionally rely
+on the fact that Γ ` S <: S ≺ ; this follows from the definition
+of termination weakening, which only adds refinements to
+preconditions inside S.
+
+Proof. By induction on the structure of the derivation. Let us
+first assume an E-term e and a derivation of Γ `Q e ↑b T̂ ; we
+will build a derivation of Γ `Q e :: T̂ . Cases VAR S C, VAR∀,
+and A PP FO are trivial (in the latter case, A PP FO is replaced
+by A PP). For the A PP HO case, we also construct a derivation
+using A PP as the root; from the second premise of A PP HO,
+Γ; C `Q f ↓b Tx , by induction hypothesis we obtain Tx0 such
+that Γ; C `Q f :: Tx0 and Γ; C ` Tx0 <: Tx . Thus, we obtain
+the two missing premises of A PP (with C2 empty). Note that
+to apply the induction hypothesis, we need to show that the
+argument type Tx is liquid (Γ `Q Tx ); this follows from the
+assumption `Q Γ (since Tx is a precondition of a function
+from Γ).
+For rule IE it is straightforward to obtain the inferred type
+T 0 from the induction hypothesis. For rule A BS, from the
+
+Proof of Theorem 1. Straightforward by combining Lemma 2
+and Lemma 3.
+19
+
+2016/4/22
+
+A.2
+
+e ↑b let C in T , Γ ` U , and Γ; C ` T <: U ; we will build
+a derivation of Γ `Q e ↓ U ↑ let C in T . Cases VAR S C
+and VAR∀ are trivial.
+Consider the rule A PP FO: to get the first premise of the
+round-trip version, we apply the induction hypothesis, picking {B | ⊥} → U as the goal; it is easy to show that this type
+is well-formed in Γ (since so is U ); the challenging part is to
+show Γ; C1 ` (x : {B | ψ} → T ) <: (x : {B | ⊥} → U ).
+By the definition of function subtyping, this simplifies to
+Γ; C1 ` {B | ⊥} <: {B | ψ} (trivial), and Γ; C1 ; x :
+{B | ⊥} ` T <: U . We know by the assumption the lemma
+makes about U that Γ; C1 ; C2 ; x : Tx ` T <: U , so the
+only thing left to show is that JΓ; C1 ; x : {B | ⊥}KT <:U ⇒
+JΓ; C1 ; C2 ; x : Tx KT <:U (note that C2 only contains bindings
+for variables that appear inside Tx and nowhere else). We consider two cases: if x does not actually appear in T , then both
+formulas above are equivalent to JΓ; C1 KT <:U , and thus the
+implication holds; otherwise, one of the conjuncts in the lefthand side is ⊥, and thus the implication also holds.
+To get the second second premise of A PP FO, we pick
+{B | ψ} (the precondition from the inferred type of e1 ) as
+the goal. It is easy to show that this type is well-formed in
+Γ; C1 ; and moreover Γ; C1 ; C2 ` Tx <: {B | ψ} by the
+third premise of the bidirectional rule. The third premise of
+A PP FO follows directly from the lemma’s assumption about
+U.
+Consider the rule A PP HO. Obtaining its first premise is
+similar to the case of A PP FO, except it is easier to show
+that Γ; C ` Tx → T <: bot → U , since these function
+types are not dependent and thus the above is equivalent to
+Γ; C ` T <: U (which we get directly from the lemma’s
+assumption about U ). The second premise is obtained directly
+from the induction hypothesis.
+For the rule IE, we construct the required premise Γ `Q
+e ↓ T ↑ let C in T 0 from the bidirectional derivation
+for Γ `Q e ↑b let C in T 0 , taking into account that Γ; C `
+T 0 <: T is required by the bidirectional rule, and thus T is a
+valid goal type for the round-trip derivation.
+The rest of the rules are trivial, since they have the same
+shape in both systems; the only two exceptions are the first
+premises of I F and M ATCH, which require a strengthening
+judgment; in both cases it is straightforward to show that the
+respective goal types (Bool and top) are supertypes of the type
+inferred by the bidirectional system.
+
+Completeness of round-trip type checking
+
+As noted in Sec. 3.3, we show completeness for a terminationoblivious variant of the round-trip system, obtained from
+Fig. 4 by replacing S ≺ in the premise of the F IX rule by S.
+We denote the checking judgment of the modified system as
+Γ `∗Q t ↓ S.
+Theorem 2 (Completeness of round-trip type checking). If
+Γ `Q t :: S, then Γ `∗Q t ↓ S.
+Like in the case of soundness, we do the proof in two
+steps. We first go from a bottom-up derivation to a bidirectional derivation, essentially by replacing all inference judgments for I-terms with checking judgments. Going from a
+bidirectional derivation to a round-trip one is more complex: it amounts to proving that the “early” checks of the
+round-trip system—that is, subtyping checks on incomplete
+applications—only reject terms that would be later rejected
+by the bidirectional IE rule.
+Lemma 4 (Bottom-up to Bidirectional). If Γ `Q t :: S, then
+Γ `∗Q t ↓b S; additionally if t is an E-term and Γ `Q t :: T̂ ,
+then Γ `∗Q t ↑b T̂ .
+Proof. By induction on the structure of the derivation. Let us
+first assume an E-term e and a derivation of Γ `Q e :: T̂ ;
+we will build a derivation of Γ `∗Q e ↑b T̂ . Cases VAR S C
+and VAR∀ are trivial. For A PP, we have to consider two
+cases, depending on whether the argument is an E-term or a
+function term (remember, branching terms are disallowed on
+right-hand sides of applications). In the former case, we can
+build a derivation with A PP FO in a straightforward manner.
+In the latter case, note that the context C2 has to be empty,
+because the only rule that could have inferred the type of t is
+A BS, and that rule does not generate contextual types. With
+that observation, we can build a derivation with A PP HO: we
+get Γ; C1 `Q t :: Tx0 and Γ; C1 ` Tx0 <: Tx , yielding
+Γ; C1 `Q t :: Tx by S UBT, which gives us the required
+second premise of A PP HO by the induction hypothesis.
+For all the context-free inference rules, it is straightforward to construct a bidirectional derivation using the corresponding checking rule, since the premises of these rules are
+a subset of the premises of their bottom-up counterparts.
+Lemma 5 (Bidirectional to Round-Trip). If Γ `Q t ↓b S
+then Γ `Q t ↓ S; additionally if t is an E-term and
+Γ `Q t ↑b let C in T and there exists a type U such that
+Γ ` U and Γ; C ` T <: U then Γ `Q t ↓ U ↑ let C in T .
+
+Proof of Theorem 2. Straightforward by combining Lemma 4
+and Lemma 5.
+
+Proof. By induction on the structure of the derivation. Let
+us first assume an E-term e and a type U , such that Γ `Q
+
+20
+
+2016/4/22
+
+

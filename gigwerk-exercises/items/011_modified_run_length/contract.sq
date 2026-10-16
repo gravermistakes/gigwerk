@@ -1,0 +1,71 @@
+--------------------------------------------------------------------------------
+-- Exercise 011: Modified Run-Length Encoding
+--
+-- Specification only.  `encoding` is a logical measure, not an executable
+-- helper.  The only algorithmic goal is `encode = ??`; no implementation body
+-- is supplied for it or for any target helper.
+--
+-- The result is exact: `encoding` recursively describes the ordered list of
+-- maximal, adjacent-equality runs.  `One` is used exactly for a run of one;
+-- `Many n` is used exactly for a run of n >= 2.  Thus it preserves order,
+-- multiplicity, run boundaries, and canonical tags—not merely a set/length.
+--------------------------------------------------------------------------------
+
+type Pos = {Int | _v > 0}
+
+-- Trusted generic primitive/component, supplied by the lowering backend.
+-- It is not a run-length algorithm and carries no exercise-specific behavior.
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+
+qualifier {x == y, x != y, x <= y, x > 0}
+
+data Rle a where
+  One  :: x: a -> Rle a
+  Many :: n: Pos -> x: a -> Rle a
+
+data List a where
+  Nil  :: List a
+  Cons :: x: a -> xs: List a -> List a
+
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+
+-- Synquid measures must range over a datatype using exactly that datatype's
+-- own type parameters.  RleList is mechanically lowered by the backend to
+-- OCaml's homogeneous `rle list`; it exists only to make that representation
+-- available as a first-order logical-measure argument.
+data RleList a where
+  RNil  :: RleList a
+  RCons :: item: Rle a -> rest: RleList a -> RleList a
+
+-- The following are logical measures used only in refinements.  They define
+-- the canonical result of the exercise without supplying executable code.
+measure rle_matches :: x: a -> Rle a -> Bool where
+  One y -> x == y
+  Many n y -> x == y
+
+measure same_head :: x: a -> RleList a -> Bool where
+  RNil -> False
+  RCons hd tl -> rle_matches x hd
+
+measure promote :: Rle a -> Rle a where
+  One x -> Many 2 x
+  Many n x -> Many (n + 1) x
+
+measure bump_head :: RleList a -> RleList a where
+  RNil -> RNil
+  RCons hd tl -> RCons (promote hd) tl
+
+measure encoding :: List a -> RleList a where
+  Nil -> RNil
+  Cons x xs ->
+    if same_head x (encoding xs)
+    then bump_head (encoding xs)
+    else RCons (One x) (encoding xs)
+
+-- Target: exact source-level shape after mechanical lowering is
+-- type 'a rle = One of 'a | Many of int * 'a
+-- val encode : 'a list -> 'a rle list
+encode :: xs: List a -> {RleList a | _v == encoding xs}
+encode = ??

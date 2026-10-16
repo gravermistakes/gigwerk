@@ -1,0 +1,9 @@
+append :: xs:List a -> ys:List a -> {List a|_v == appendModel ys xs}
+contract.sq:22: Error:
+  Cannot match shape 'Bool'
+  with shape '_'
+  when checking eq ::
+  X1:_ -> X0:_ -> _ in
+  \xs . \ys . 
+      match eq ?? ?? with
+

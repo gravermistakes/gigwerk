@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "dune exec --root \"$CLAUDE_PROJECT_DIR/ocaml\" --no-print-directory --display=quiet ./bin/main.exe -- answers --db \"$CLAUDE_PROJECT_DIR/gigwerk.db\"",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}

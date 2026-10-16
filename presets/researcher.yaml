@@ -21,7 +21,7 @@ data:
     wall_ms: 60000           # network waits
     mem_bytes: 268435456
     msg_quota: 1000
-    gigs_per_hr: 30
+    commissions_per_hr: 30
 
 capabilities:
   - name: http_get

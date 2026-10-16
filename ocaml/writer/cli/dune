@@ -1,0 +1,3 @@
+(executable
+ (name writer_cli)
+ (libraries writer gigwerk unix))

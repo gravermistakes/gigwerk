@@ -1,0 +1,3 @@
+command: ocamlc -o negative_control generated.ml test_generated.ml && ./negative_control
+exit_code: 1
+rotate_list tests: FAIL: official example: rotate left by 3

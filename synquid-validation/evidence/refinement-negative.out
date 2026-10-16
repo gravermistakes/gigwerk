@@ -1,0 +1,8 @@
+insert :: x:a -> t:BST a -> {BST a|telems _v == telems t + [x]}
+contracts/BST-Insert-negative.sq:16: Error:
+  Cannot find sufficiently strong refinements
+  when checking t ::
+  {BST a|telems _v == telems t + [x]}
+  in
+  \x . \t . t
+

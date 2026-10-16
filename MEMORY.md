@@ -93,7 +93,7 @@ Not built yet, and it needs a constraint stated before it is:
 **The model MUST introspect, not simply query a ledger. This is the source of understanding that makes the rest of this valuable.**
 
 Introspection is the closed loop this whole design exists to enable safely — a model
-rating its own behaviour has no referent. Reading `span`, `gig_outcome`,
+rating its own behaviour has no referent. Reading `span`, `commission_outcome`,
 `crash`, and `booking_verdict` about *itself* is a judgment of recorded behaviour,
 which is a different thing.
 

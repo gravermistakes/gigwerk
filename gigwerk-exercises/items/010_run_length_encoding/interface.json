@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "exercise_id": "010_run_length_encoding",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "encode",
+      "ocaml_signature": "'a list -> (int * 'a) list",
+      "parameters": [
+        {
+          "name": "xs",
+          "ocaml_type": "'a list",
+          "constraint": "finite input list"
+        }
+      ],
+      "returns": {
+        "ocaml_type": "(int * 'a) list",
+        "constraint": "one positive count and representative per maximal, non-empty contiguous equal-value run, in input traversal order"
+      },
+      "effects": "pure",
+      "failures": "none specified",
+      "randomness": "none",
+      "mutable_state": "none",
+      "infinite_streams": "not applicable; contract is over finite OCaml lists",
+      "equality_note": "Run boundaries use OCaml polymorphic equality, consistent with a polymorphic 'a list interface."
+    }
+  ],
+  "necessary_type_declarations": [
+    {
+      "language": "OCaml",
+      "declaration": "type 'a run = int * 'a",
+      "note": "Descriptive alias only; output is structurally (int * 'a) list."
+    },
+    {
+      "language": "Synquid",
+      "declaration": "data List a where Nil :: List a; Cons :: x:a -> xs:List a -> List a"
+    },
+    {
+      "language": "Synquid",
+      "declaration": "data Run a where Run :: x:a -> xs:List {a | _v == x} -> Run a; data Runs a <p :: a -> Runs a -> Bool> where RNil :: Runs a <p>; RCons :: r:Run a -> rs:{Runs a <p> | p (runVal r) _v} -> Runs a <p>"
+    }
+  ],
+  "trusted_primitive_declarations": [
+    {
+      "name": "==",
+      "Synquid_type": "x:a -> y:a -> {Bool | _v <=> x == y}",
+      "role": "trusted equality decision used only to distinguish adjacent run values",
+      "category": "generic primitive; not the final algorithm"
+    },
+    {
+      "name": "structural lowering",
+      "declaration": "Run x xs -> (1 + length xs, x); RNil -> []; RCons r rs -> lower r :: lower rs",
+      "role": "typed backend conversion from the positive structural Synquid representation to OCaml (int * 'a) list",
+      "category": "backend responsibility; not a synthesized final algorithm"
+    }
+  ],
+  "unsynthesized_final_algorithm": [
+    "encode"
+  ],
+  "lowering_boundary": "No OCaml implementation is supplied. Any Synquid candidate remains a candidate until a backend mechanically lowers it and the independent OCaml semantic tests pass."
+}

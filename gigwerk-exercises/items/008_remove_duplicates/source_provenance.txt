@@ -1,0 +1,11 @@
+AUTHORITATIVE SOURCE
+repository: ocaml/ocaml.org
+commit: 7b4c04b90b5433050bcecb25772880bc48bae4d0
+path: data/exercises/008_remove_duplicates.md
+retrieval: gh api (read-only)
+
+QUARANTINE PROCEDURE
+The fetched Base64 payload was decoded in a scratch directory. The exact section beginning with a level-2 heading `## Solution` was removed through the next level-2 heading or EOF before any source content was displayed or inspected. The solution section is not copied into this output directory.
+
+INSPECTED NON-SOLUTION CONTENT
+Front matter title/description, Statement, and its sole OCaml example only.

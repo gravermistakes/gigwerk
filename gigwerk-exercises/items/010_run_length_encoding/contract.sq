@@ -1,0 +1,67 @@
+-- Exercise 010: Run-Length Encoding
+-- Exact candidate contract for the pinned Synquid runtime.
+-- All algorithmic bodies are synthesis holes; this file contains no solution.
+--
+-- Lowering convention (outside Synquid):
+--   Run x xs  -> (1 + length xs, x)
+--   RNil      -> []
+--   RCons r rs -> lower r :: lower rs
+-- Thus `CRuns a` lowers mechanically to `(int * a) list`.
+
+qualifier {x == y, x != y}
+
+data List a where
+  Nil :: List a
+  Cons :: x:a -> xs:List a -> List a
+
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+
+-- One run stores a leader and zero or more further copies of exactly that leader.
+-- Its lowering therefore has a strictly positive integer count.
+data Run a where
+  Run :: x:a -> xs:List {a | _v == x} -> Run a
+
+termination measure runLen :: Run a -> {Int | _v > 0} where
+  Run x xs -> 1 + len xs
+
+measure runVal :: Run a -> a where
+  Run x xs -> x
+
+measure runSeq :: Run a -> List a where
+  Run x xs -> Cons x xs
+
+-- Abstract refinement p relates an emitted run's representative to the
+-- remaining runs. Parameterizing by `a` avoids nesting Run in a predicate sort.
+data Runs a <p :: a -> Runs a -> Bool> where
+  RNil :: Runs a <p>
+  RCons :: r:Run a -> rs:{Runs a <p> | p (runVal r) _v} -> Runs a <p>
+
+-- The only canonicality condition needed is between adjacent output runs.
+-- It allows the same value to reappear after an intervening distinct run.
+measure headDiff :: x:a -> Runs a -> Bool where
+  RNil -> True
+  RCons s ss -> x != runVal s
+
+type CRuns a = Runs a <{headDiff _0 _1}>
+
+-- `append suffix prefix` denotes prefix followed by suffix. It recurses only
+-- over its final (structural) list argument; `suffix` is a constant measure arg.
+measure append :: suffix:List a -> List a -> List a where
+  Nil -> suffix
+  Cons x xs -> Cons x (append suffix xs)
+
+-- Exact ordered expansion of output runs. This preserves all positions and
+-- multiplicities, unlike a Set-valued measure.
+measure flat :: Runs a -> List a where
+  RNil -> Nil
+  RCons r rs -> append (flat rs) (runSeq r)
+
+-- Trusted generic primitive, not an implementation of the target.
+eq :: x:a -> y:a -> {Bool | _v == (x == y)}
+
+-- Full contract: canonical positive runs whose exact expansion is xs.
+-- `encode` is the sole final algorithm and remains unsynthesized.
+encode :: xs:List a -> {CRuns a | flat _v == xs}
+encode = ??

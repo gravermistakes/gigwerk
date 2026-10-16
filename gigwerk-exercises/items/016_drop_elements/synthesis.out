@@ -1,0 +1,3 @@
+contract.sq:19: Resolution Error:
+  Constant arguments to measure dropNth must not change in recursive call dropNth n n xs
+

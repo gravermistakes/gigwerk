@@ -1,0 +1,36 @@
+{-
+  Benchmark 008 — exact consecutive-run compression.
+
+  `runCompress` is a logical specification measure, not an implementation.
+  The sole synthesis goal is `compress = ??`.  `eq` is an explicitly trusted
+  generic primitive corresponding to OCaml polymorphic structural equality;
+  it is not an unsynthesized algorithm supplied by this benchmark.
+-}
+
+qualifier {x == y, x != y}
+
+data List a where
+  Nil :: List a
+  Cons :: x: a -> xs: List a -> List a
+
+{- A total logical head observation: its default is used only for Nil. -}
+measure headOr :: d: a -> List a -> a where
+  Nil -> d
+  Cons x xs -> x
+
+{-
+  Exact target sequence.  For a nonempty input x::xs, discard x exactly when
+  xs is nonempty and its head equals x; otherwise retain x before the exact
+  compression of xs.  Thus the result retains the first item of each maximal
+  equal contiguous run, in source order.
+-}
+measure runCompress :: List a -> List a where
+  Nil -> Nil
+  Cons x xs -> if x == headOr x xs then runCompress xs else Cons x (runCompress xs)
+
+{- Trusted primitive/component; lower mechanically to OCaml (=). -}
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+
+{- The final exercise algorithm remains a synthesis hole. -}
+compress :: xs: List a -> {List a | _v == runCompress xs}
+compress = ??

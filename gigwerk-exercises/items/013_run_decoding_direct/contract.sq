@@ -1,0 +1,73 @@
+-- Exercise 013.  This is a contract, not a hand-authored implementation.
+-- The IR uses RList so its constructor refinement can state run canonicality.
+-- Mechanical lowering: RNil -> []; RCons r rs -> r :: rs; One/Many map to the
+-- stated OCaml rle constructors.  No implementation body is provided here.
+
+type Pos2 = {Int | _v >= 2}
+
+data List a where
+  Nil :: List a
+  Cons :: x: a -> xs: List a -> List a
+
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+
+-- One output node represents exactly one positive equality-run.
+-- Many is intentionally restricted to counts >= 2; singleton runs use One.
+data RLE a where
+  One :: x: a -> RLE a
+  Many :: n: Pos2 -> x: a -> RLE a
+
+-- A dedicated run-list representation makes canonical maximal boundaries a
+-- datatype invariant.  It lowers losslessly to the required OCaml 'a rle list.
+data RList a where
+  RNil :: RList a
+  RCons :: r: RLE a -> rs: {RList a | !(rvalue r in rheads _v)} -> RList a
+
+-- Logical observations only; these are not executable helper algorithms.
+measure rvalue :: RLE a -> a where
+  One x -> x
+  Many n x -> x
+
+measure rheads :: RList a -> Set a where
+  RNil -> []
+  RCons r rs -> [rvalue r]
+
+measure rtail :: RList a -> RList a where
+  RNil -> RNil
+  RCons r rs -> rs
+
+measure rcount :: RLE a -> Int where
+  One x -> 1
+  Many n x -> n
+
+measure rheadcount :: RList a -> Int where
+  RNil -> 0
+  RCons r rs -> rcount r
+
+-- decodes rs xs means that rs expands to exactly xs in exact left-to-right
+-- order.  It consumes one source cell at a time.  The intermediate RList
+-- terms exist solely in the specification to decrease a currently active run.
+measure decodes :: rs: RList a -> List a -> Bool where
+  Nil -> rs == RNil
+  Cons x xs ->
+    (x in rheads rs) &&
+    (if rheadcount rs <= 0 then False
+     else if rheadcount rs == 1 then decodes (rtail rs) xs
+     else if rheadcount rs == 2 then decodes (RCons (One x) (rtail rs)) xs
+     else decodes (RCons (Many (rheadcount rs - 1) x) (rtail rs)) xs)
+
+-- Trusted generic support primitive, to be mechanically lowered/modelled as
+-- OCaml equality.  It is not the exercise algorithm.
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+
+-- Trusted arithmetic support components, not target/helper algorithms.  They
+-- permit a synthesized direct encoder to create/increase run counts.
+zero :: {Int | _v == 0}
+inc :: n: Int -> {Int | _v == n + 1}
+
+-- Target hole only.  It must be synthesized, then mechanically lowered and
+-- tested; it is not an asserted final solution.
+encode :: xs: List a -> {RList a | decodes _v xs}
+encode = ??

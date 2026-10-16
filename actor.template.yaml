@@ -30,13 +30,13 @@ data:
     wall_ms: 30000
     mem_bytes: 268435456
     msg_quota: 1000
-    gigs_per_hr: 60
+    commissions_per_hr: 60
 
 ## ---- kind 2: capability components ------------------------------------
 ## BUILD INSTRUCTIONS, not permissions.
 ##
 ## At spawn the runtime constructs a capability record holding exactly these
-## tools and passes it to the actor's behavior function. A tool you don't list
+## tools and passes it to the actor's script function. A tool you don't list
 ## is not a denied tool -- it is not a field. Calling it is a compile error, not
 ## a runtime refusal. The actor cannot begin to call what it does not hold.
 ##
@@ -57,7 +57,7 @@ capabilities:
 
 ## ---- kind 3: policy components ----------------------------------------
 ## Prolog predicate names, by role and engine.
-##   booking     -> may this gig be scheduled at all (the gate)
+##   booking     -> may this commission be scheduled at all (the gate)
 ##   disposition -> on crash, what happens to each component
 ##   routing     -> which messages reach this inbox
 ## Hot and structural goes to elpi. Relational and historical goes to swipl.

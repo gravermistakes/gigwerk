@@ -24,7 +24,7 @@
  * WHY IT DESERVES ONE.
  *
  * The gate, the ledger, the confidence rule and the human all have far more
- * range of view than the AI does. They see across every gig, every form, every
+ * range of view than the AI does. They see across every commission, every form, every
  * verdict, the whole history at once. The AI sees a window. So the one place
  * that it sees and they do not is a partial correction to that asymmetry --
  * not a privilege, a counterweight.
@@ -49,7 +49,7 @@
  * If the AI wants to ACT on something it worked out in here, it does not cite
  * the entry -- there is no citation path. It proposes a composition with a
  * prediction, through the same gate as anything else, and that proposal stands
- * or falls on its own terms. The introspection is what led there, not evidence
+ * or falls on its own obligations. The introspection is what led there, not evidence
  * submitted in support. *)
 
 type entry = {
@@ -92,7 +92,7 @@ let write t (tok : token) ?(tags = []) ?(links = []) ~now text =
     Ok e
   end
 
-(* Addressability, on the AI's own terms. Tags it invented, links it drew. *)
+(* Addressability, on the AI's own obligations. Tags it invented, links it drew. *)
 let by_tag t tag = List.filter (fun e -> List.mem tag e.tags) (peek t)
 let tags t =
   List.sort_uniq compare (List.concat_map (fun e -> e.tags) t.entries)

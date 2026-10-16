@@ -1,0 +1,66 @@
+{
+  "id": "019_rotate_list",
+  "title": "Rotate a List N Places to the Left",
+  "contract_status": "ambiguous",
+  "synthesis_status": "not_attempted",
+  "specification_strength": "partial",
+  "elapsed_seconds": 0,
+  "notes": "The permitted upstream text leaves negative and over-length rotation semantics unspecified. No full order/multiplicity-sensitive Synquid relation was available in the inspected runtime examples, so no weak contract or synthesis attempt was made. Independent tests cover only the unambiguous finite range and reject an identity negative-control stub.",
+  "entrypoints": [
+    "rotate"
+  ],
+  "required_features": [
+    "An authoritative rule for negative rotation counts",
+    "An authoritative rule for counts greater than the input-list length, including whether they normalize modulo length or are out of domain",
+    "For a full Synquid contract after the source ambiguity is resolved: an order- and multiplicity-sensitive sequence/list relation (the inspected list examples provide length and Set-valued elems measures only, which are insufficient)"
+  ],
+  "semantic_obligations": [
+    "Expose the curried OCaml entrypoint rotate : 'a list -> int -> 'a list, with the list argument first.",
+    "For the directly unambiguous finite domain 0 <= n <= length xs, output the suffix of xs starting at index n followed by the prefix of xs ending before n.",
+    "Preserve the order inside both suffix and prefix; preserve every input occurrence, including duplicates.",
+    "For an empty input, return the empty list (no rotation can create an element).",
+    "For the official example, rotate [\"a\"; \"b\"; \"c\"; \"d\"; \"e\"; \"f\"; \"g\"; \"h\"] 3 must equal [\"d\"; \"e\"; \"f\"; \"g\"; \"h\"; \"a\"; \"b\"; \"c\"].",
+    "Do not invent semantics for negative n or n > length xs; the supplied authoritative non-solution text does not settle them."
+  ],
+  "source_provenance": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/019_rotate_list.md",
+    "retrieval": "read-only gh API",
+    "solution_quarantine": "The level-2 Solution section was stripped before inspection; its contents were not read or used."
+  },
+  "contract_artifact": {
+    "path": null,
+    "reason_absent": "No contract.sq was authored. A full contract would require silently choosing unspecified count behavior; a weak length/set contract would be unsound for a transformation whose required result is order- and multiplicity-sensitive."
+  },
+  "synthesis": {
+    "attempt_count": 0,
+    "command": null,
+    "stdout_artifact": null,
+    "stderr_artifact": null,
+    "reason_not_attempted": "The task prohibits running weak upstream-style length/set contracts. No exact contract was available without fabricating source semantics."
+  },
+  "tests": {
+    "path": "test_generated.ml",
+    "independence": "Uses a test-only split-and-append oracle; it is not provided to Synquid and no rotate implementation is included.",
+    "coverage": [
+      "official example",
+      "zero shift",
+      "full finite cycle",
+      "duplicate elements",
+      "empty input",
+      "all binary lists of lengths 0 through 4 for every n from 0 through length"
+    ],
+    "negative_control": {
+      "expected": "An identity implementation fails the official positive rotation assertion.",
+      "verification_artifact": "negative_control_verification.txt",
+      "observed_exit_code": 1,
+      "observed_failure": "official example: rotate left by 3"
+    }
+  },
+  "caveats": [
+    "No OCaml implementation was authored, translated, or represented as synthesized.",
+    "No Android build was attempted or claimed.",
+    "A future backend candidate remains only a candidate until mechanically lowered and independently compiled and executed against test_generated.ml."
+  ]
+}

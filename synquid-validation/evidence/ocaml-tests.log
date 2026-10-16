@@ -1,0 +1,1 @@
+PASS: 2950 independently generated BSTs; 26550 exhaustive insertion cases; 20000 random sequence steps; 308280 assertions

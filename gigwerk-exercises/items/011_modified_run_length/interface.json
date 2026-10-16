@@ -1,0 +1,50 @@
+{
+  "id": "011_modified_run_length",
+  "title": "Modified Run-Length Encoding",
+  "ocaml": {
+    "type_declarations": [
+      "type 'a rle = One of 'a | Many of int * 'a"
+    ],
+    "entrypoints": [
+      {
+        "name": "encode",
+        "signature": "'a list -> 'a rle list",
+        "semantics": "Return the ordered list of maximal adjacent-equality runs. A singleton run is One x; every run of count n >= 2 is Many (n, x)."
+      }
+    ]
+  },
+  "entrypoint_names": ["encode"],
+  "synquid_lowering": {
+    "source_input_type": "List a",
+    "source_output_type": "RleList a",
+    "type_mapping": [
+      "Rle a -> 'a rle",
+      "One x -> One x",
+      "Many n x -> Many (n, x)",
+      "RleList a -> 'a rle list",
+      "RNil -> []",
+      "RCons item rest -> item :: rest"
+    ],
+    "note": "RleList is a logical/source-level homogeneous wrapper required by Synquid measure signatures; it is not an additional OCaml public type."
+  },
+  "trusted_primitives": [
+    {
+      "name": "eq",
+      "synquid_signature": "x: a -> y: a -> {Bool | _v == (x == y)}",
+      "role": "Generic equality decision used to branch on adjacent values during synthesis.",
+      "final_ocaml_api": false,
+      "exercise_algorithm": false
+    },
+    {
+      "name": "integer literals and addition",
+      "synquid_role": "Built-in refinement/expression arithmetic used only to express or construct run counts 2 and n + 1.",
+      "final_ocaml_api": false,
+      "exercise_algorithm": false
+    }
+  ],
+  "excluded_from_interface": [
+    "No comparator parameter is added.",
+    "No seed or random source is added.",
+    "No exception, option, result, mutable state, stream, string-specialized, or float-specialized entrypoint is added."
+  ]
+}

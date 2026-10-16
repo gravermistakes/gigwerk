@@ -1,0 +1,4 @@
+contract.sq:30:10: Parse Error:
+  Unexpected reserved word "match"
+  expecting refinement term
+

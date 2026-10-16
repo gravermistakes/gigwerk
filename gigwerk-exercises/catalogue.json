@@ -1,0 +1,354 @@
+{
+  "source": "https://ocaml.org/exercises",
+  "revision": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+  "items": [
+    {
+      "id": "001_tail",
+      "filename": "001_tail.md"
+    },
+    {
+      "id": "002_tail_penultimate",
+      "filename": "002_tail_penultimate.md"
+    },
+    {
+      "id": "003_nth_element",
+      "filename": "003_nth_element.md"
+    },
+    {
+      "id": "004_length_of_list",
+      "filename": "004_length_of_list.md"
+    },
+    {
+      "id": "005_reverse_list",
+      "filename": "005_reverse_list.md"
+    },
+    {
+      "id": "006_palindrome",
+      "filename": "006_palindrome.md"
+    },
+    {
+      "id": "007_flatten_list",
+      "filename": "007_flatten_list.md"
+    },
+    {
+      "id": "008_remove_duplicates",
+      "filename": "008_remove_duplicates.md"
+    },
+    {
+      "id": "009_pack_duplicates",
+      "filename": "009_pack_duplicates.md"
+    },
+    {
+      "id": "010_run_length_encoding",
+      "filename": "010_run_length_encoding.md"
+    },
+    {
+      "id": "011_modified_run_length",
+      "filename": "011_modified_run_length.md"
+    },
+    {
+      "id": "012_run_length_decoding",
+      "filename": "012_run_length_decoding.md"
+    },
+    {
+      "id": "013_run_decoding_direct",
+      "filename": "013_run_decoding_direct.md"
+    },
+    {
+      "id": "014_duplicate_elements",
+      "filename": "014_duplicate_elements.md"
+    },
+    {
+      "id": "015_replicate_elements",
+      "filename": "015_replicate_elements.md"
+    },
+    {
+      "id": "016_drop_elements",
+      "filename": "016_drop_elements.md"
+    },
+    {
+      "id": "017_split_list",
+      "filename": "017_split_list.md"
+    },
+    {
+      "id": "018_extract_slice",
+      "filename": "018_extract_slice.md"
+    },
+    {
+      "id": "019_rotate_list",
+      "filename": "019_rotate_list.md"
+    },
+    {
+      "id": "020_remove_nth_element",
+      "filename": "020_remove_nth_element.md"
+    },
+    {
+      "id": "021_insert_element",
+      "filename": "021_insert_element.md"
+    },
+    {
+      "id": "022_create_list",
+      "filename": "022_create_list.md"
+    },
+    {
+      "id": "023_extract_random",
+      "filename": "023_extract_random.md"
+    },
+    {
+      "id": "024_lotto",
+      "filename": "024_lotto.md"
+    },
+    {
+      "id": "025_generate_permutations",
+      "filename": "025_generate_permutations.md"
+    },
+    {
+      "id": "026_generate_combinations",
+      "filename": "026_generate_combinations.md"
+    },
+    {
+      "id": "027_group_elements",
+      "filename": "027_group_elements.md"
+    },
+    {
+      "id": "028_sort_list",
+      "filename": "028_sort_list.md"
+    },
+    {
+      "id": "031_is_prime",
+      "filename": "031_is_prime.md"
+    },
+    {
+      "id": "032_gcd",
+      "filename": "032_gcd.md"
+    },
+    {
+      "id": "033_is_coprime",
+      "filename": "033_is_coprime.md"
+    },
+    {
+      "id": "034_euler_totient",
+      "filename": "034_euler_totient.md"
+    },
+    {
+      "id": "035_prime_factor",
+      "filename": "035_prime_factor.md"
+    },
+    {
+      "id": "036_prime_factor_2",
+      "filename": "036_prime_factor_2.md"
+    },
+    {
+      "id": "037_euler_totent_improved",
+      "filename": "037_euler_totent_improved.md"
+    },
+    {
+      "id": "038_compare_totient",
+      "filename": "038_compare_totient.md"
+    },
+    {
+      "id": "039_list_prime",
+      "filename": "039_list_prime.md"
+    },
+    {
+      "id": "040_goldbach_conjecture",
+      "filename": "040_goldbach_conjecture.md"
+    },
+    {
+      "id": "041_goldbach_composition",
+      "filename": "041_goldbach_composition.md"
+    },
+    {
+      "id": "046_truth_table",
+      "filename": "046_truth_table.md"
+    },
+    {
+      "id": "048_truth_table_2",
+      "filename": "048_truth_table_2.md"
+    },
+    {
+      "id": "049_gray_code",
+      "filename": "049_gray_code.md"
+    },
+    {
+      "id": "050_huffman_code",
+      "filename": "050_huffman_code.md"
+    },
+    {
+      "id": "055_balanced_btree",
+      "filename": "055_balanced_btree.md"
+    },
+    {
+      "id": "056_symmetric_btree",
+      "filename": "056_symmetric_btree.md"
+    },
+    {
+      "id": "057_bst",
+      "filename": "057_bst.md"
+    },
+    {
+      "id": "058_generate_and_test",
+      "filename": "058_generate_and_test.md"
+    },
+    {
+      "id": "059_height_balanced_btree",
+      "filename": "059_height_balanced_btree.md"
+    },
+    {
+      "id": "060_height_balanced_btree_2",
+      "filename": "060_height_balanced_btree_2.md"
+    },
+    {
+      "id": "061A_count_leaves",
+      "filename": "061A_count_leaves.md"
+    },
+    {
+      "id": "061B_collect_leaves",
+      "filename": "061B_collect_leaves.md"
+    },
+    {
+      "id": "062A_collect_nodes",
+      "filename": "062A_collect_nodes.md"
+    },
+    {
+      "id": "062B_collect_nodes_2",
+      "filename": "062B_collect_nodes_2.md"
+    },
+    {
+      "id": "063_create_btree",
+      "filename": "063_create_btree.md"
+    },
+    {
+      "id": "064_btree_layout_1",
+      "filename": "064_btree_layout_1.md"
+    },
+    {
+      "id": "065_btree_layout_2",
+      "filename": "065_btree_layout_2.md"
+    },
+    {
+      "id": "066_btree_layout_3",
+      "filename": "066_btree_layout_3.md"
+    },
+    {
+      "id": "067_string_of_btree",
+      "filename": "067_string_of_btree.md"
+    },
+    {
+      "id": "068_sort_btree",
+      "filename": "068_sort_btree.md"
+    },
+    {
+      "id": "069_dotstring_of_btree",
+      "filename": "069_dotstring_of_btree.md"
+    },
+    {
+      "id": "070A_create_mtree",
+      "filename": "070A_create_mtree.md"
+    },
+    {
+      "id": "070B_count_mtree_nodes",
+      "filename": "070B_count_mtree_nodes.md"
+    },
+    {
+      "id": "071_internal_path",
+      "filename": "071_internal_path.md"
+    },
+    {
+      "id": "072_bottom_up_seq",
+      "filename": "072_bottom_up_seq.md"
+    },
+    {
+      "id": "073_lisp_of_mtree",
+      "filename": "073_lisp_of_mtree.md"
+    },
+    {
+      "id": "080_conversions",
+      "filename": "080_conversions.md"
+    },
+    {
+      "id": "081_node_path",
+      "filename": "081_node_path.md"
+    },
+    {
+      "id": "082_node_cycle",
+      "filename": "082_node_cycle.md"
+    },
+    {
+      "id": "083_spanning_trees",
+      "filename": "083_spanning_trees.md"
+    },
+    {
+      "id": "084_minimal_spanning_tree",
+      "filename": "084_minimal_spanning_tree.md"
+    },
+    {
+      "id": "085_graph_isomorphism",
+      "filename": "085_graph_isomorphism.md"
+    },
+    {
+      "id": "086_node_degree",
+      "filename": "086_node_degree.md"
+    },
+    {
+      "id": "087_depth_first_traversal",
+      "filename": "087_depth_first_traversal.md"
+    },
+    {
+      "id": "088_connected_components",
+      "filename": "088_connected_components.md"
+    },
+    {
+      "id": "089_bipartite_graphs",
+      "filename": "089_bipartite_graphs.md"
+    },
+    {
+      "id": "090_generate_graph",
+      "filename": "090_generate_graph.md"
+    },
+    {
+      "id": "091_eight_queens",
+      "filename": "091_eight_queens.md"
+    },
+    {
+      "id": "092_knights_tour",
+      "filename": "092_knights_tour.md"
+    },
+    {
+      "id": "093_von_koch",
+      "filename": "093_von_koch.md"
+    },
+    {
+      "id": "094_arithmetic_puzzle",
+      "filename": "094_arithmetic_puzzle.md"
+    },
+    {
+      "id": "095_english_number_words",
+      "filename": "095_english_number_words.md"
+    },
+    {
+      "id": "096_syntax_checker",
+      "filename": "096_syntax_checker.md"
+    },
+    {
+      "id": "097_sudoku",
+      "filename": "097_sudoku.md"
+    },
+    {
+      "id": "098_nonograms",
+      "filename": "098_nonograms.md"
+    },
+    {
+      "id": "099_crosswords",
+      "filename": "099_crosswords.md"
+    },
+    {
+      "id": "diag",
+      "filename": "diag.md"
+    },
+    {
+      "id": "stream",
+      "filename": "stream.md"
+    }
+  ]
+}

@@ -23,7 +23,7 @@
 
 CREATE TABLE mem_record (
   id        INTEGER PRIMARY KEY,
-  gig_id    INTEGER REFERENCES gig(id),
+  commission_id    INTEGER REFERENCES commission(id),
   subject   TEXT NOT NULL,
   predicate TEXT NOT NULL,
   object    TEXT NOT NULL,

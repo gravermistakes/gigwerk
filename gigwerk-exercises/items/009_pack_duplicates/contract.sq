@@ -1,0 +1,52 @@
+-- Benchmark 009: Pack Consecutive Duplicates
+-- Full logical contract; `pack = ??` is an unsynthesized target, not an implementation.
+-- `Runs a` is representation-isomorphic to OCaml `a list list`:
+-- RNil lowers to []; RCons x tail rest lowers to (x :: tail) :: rest.
+-- Making the first element a constructor field makes empty output groups
+-- impossible by construction while preserving the required OCaml interface.
+
+-- Generic input list.
+data List a where
+  Nil :: List a
+  Cons :: x: a -> xs: List a -> List a
+
+-- Logical outer list of non-empty groups, mechanically lowerable to OCaml
+-- `a list list` at the stable boundary in interface.json.
+data Runs a where
+  RNil :: Runs a
+  RCons :: x: a -> tail: List a -> rest: Runs a -> Runs a
+
+-- Trusted generic supporting primitive, corresponding to OCaml `( = )`.
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+
+-- Logical append: append suffix prefix = prefix followed by suffix.
+-- It is only a specification measure, not a callable target algorithm.
+measure append :: suffix: List a -> List a -> List a where
+  Nil -> suffix
+  Cons x xs -> Cons x (append suffix xs)
+
+-- Exact flattening, preserving ordering and multiplicity.
+measure flatten :: Runs a -> List a where
+  RNil -> Nil
+  RCons x tail rest -> Cons x (append (flatten rest) tail)
+
+-- The tail of a run must contain only its representative.
+measure allEq :: x: a -> List a -> Bool where
+  Nil -> True
+  Cons y ys -> (x == y) && allEq x ys
+
+-- Adjacent representatives must differ; non-adjacent repetitions remain legal.
+measure nextDistinct :: x: a -> Runs a -> Bool where
+  RNil -> True
+  RCons y tail rest -> x != y
+
+-- Canonical run-partition condition. Structural `Runs` encoding gives
+-- non-empty groups; `allEq` gives uniform groups; `nextDistinct` gives
+-- maximal group boundaries.
+measure wellPacked :: Runs a -> Bool where
+  RNil -> True
+  RCons x tail rest -> allEq x tail && nextDistinct x rest && wellPacked rest
+
+-- Full target relation.
+pack :: xs: List a -> {Runs a | flatten _v == xs && wellPacked _v}
+pack = ??

@@ -34,14 +34,14 @@ an `exec` needs `SCM_RIGHTS` or re-derivation under a Landlock ruleset applied
 before the exec. Phase 1 uses fork only. **This is the one thing to settle before
 subprocess actors with distinct binaries.**
 
-**3. An unclaimed capability is not a field.** Behaviors declare their
+**3. An unclaimed capability is not a field.** Script declare their
 requirements in their type — `critic : critic_caps -> artifact:string -> verdict`
 versus `echo : unit -> msg:string -> verdict`. Handing echo's empty record to
 `critic` is a compile error, verified with a negative build:
 
 ```
 Error: This expression should not be a unit literal, the expected type is
-       Gigwerk.Behaviors.critic_caps
+       Gigwerk.Script.critic_caps
 ```
 
 ## Two bugs the ledger caught
@@ -49,7 +49,7 @@ Error: This expression should not be a unit literal, the expected type is
 Both were invisible until real rows existed.
 
 `last_insert_rowid()` is per-connection and the `sqlite3` CLI opens a new one per
-invocation, so every gig got `id=0` and every outcome was orphaned. Fixed by
+invocation, so every commission got `id=0` and every outcome was orphaned. Fixed by
 running the insert and the rowid read in one script.
 
 `matched` was reporting `yes` for a critic that couldn't read its artifact.
@@ -62,7 +62,7 @@ they predicted things about the artifact rather than about the actor.
 ## Deliberate Phase 1 shortcuts
 
 - **`sqlite3` CLI, not libsqlite3.** Keeps Phase 1 opam-free. Every call goes
-  through `lib/store.ml`; swap it when the dependency is worth having.
+  through `lib/agency.ml`; swap it when the dependency is worth having.
 - **`Unix.alarm`, not `setrlimit`.** Catches the wall clock. Memory and fd
   limits are not enforced yet.
 - **No gate.** Compositions are read and constructed; nothing validates them

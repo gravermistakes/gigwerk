@@ -112,7 +112,7 @@ git add ocaml native android
 - Modify: `ocaml/lib/booking.ml`
 - Modify: `ocaml/lib/actor.ml`
 - Modify: `ocaml/lib/conditions.ml`
-- Modify: `ocaml/lib/store.ml`
+- Modify: `ocaml/lib/agency.ml`
 - Modify: `sql/schema.sql`
 - Create: `sql/migrations/0002_operational_gate.sql`
 - Create: `ocaml/test/test_gate.ml`
@@ -163,7 +163,7 @@ Add project records keyed by repository identity, secure OAuth/PKCE token storag
 
 **Step 4: Run policy tests.**
 
-Verify cross-repository isolation, toggle persistence, token redaction, approval expiry, and denial behavior while offline or rate-limited.
+Verify cross-repository isolation, toggle persistence, token redaction, approval expiry, and denial script while offline or rate-limited.
 
 **Step 5: Commit.**
 
@@ -301,6 +301,6 @@ Provide the debug APK, source archive, reproducible build instructions, verifica
 
 ## Execution Notes
 
-The implementation must preserve the workshop’s central invariant: the composer proposes; the gate decides; the actor executes deterministic code; the critic checks outcomes; and the ledger records evidence. A Svelte control can request an operation, but it cannot grant itself capabilities or bypass project policy. GitHub write actions are independent per repository, disabled by default, and always require an explicit approval event even when the repository toggle is enabled.
+The implementation must preserve the workshop’s central invariant: the agent proposes; the gate decides; the actor executes deterministic code; the critic checks outcomes; and the ledger records evidence. A Svelte control can request an operation, but it cannot grant itself capabilities or bypass project policy. GitHub write actions are independent per repository, disabled by default, and always require an explicit approval event even when the repository toggle is enabled.
 
 The project should be built in small commits, with tests preceding each implementation slice. The first implementation checkpoint is toolchain provisioning because the current environment does not contain the Android SDK/NDK or OCaml/Dune toolchain required to produce a verifiable APK.

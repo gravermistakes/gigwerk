@@ -1,0 +1,41 @@
+{
+  "id": "007_flatten_list",
+  "title": "Flatten a List",
+  "contract_status": "requires_features",
+  "specification_strength": "full",
+  "synthesis_status": "not_attempted",
+  "elapsed_seconds": 0,
+  "entrypoints": ["flatten"],
+  "required_features": [
+    "A refinement-level ordered sequence theory (or an equivalent inductive relational predicate) over polymorphic leaf values.",
+    "Sequence concatenation together with a proof-preserving relation connecting a nested node list to its depth-first, left-to-right leaf sequence.",
+    "A sequence representation that preserves duplicates; extensional Set equality is insufficient."
+  ],
+  "semantic_obligations": [
+    "For a top-level node list, emit leaves in depth-first, left-to-right traversal order.",
+    "One x emits x exactly once.",
+    "Many children emits exactly the flattening of children at that location.",
+    "Many [] emits no leaves.",
+    "Preserve every occurrence, including duplicates.",
+    "Do not reverse, reorder, deduplicate, omit, or add leaves.",
+    "Be total and pure on finite values of 'a node list."
+  ],
+  "pinned_runtime_evidence": {
+    "runtime": "Synquid 0.4",
+    "rootfs": "/home/ubuntu/synquid-runtime/bundle/rootfs",
+    "source_checked": "/home/ubuntu/jobs/42a912fe9212_a0/synquid",
+    "collection_sorts_observed": ["Bool", "Int", "Set", "uninterpreted/data"],
+    "missing_sorts_observed": ["ordered sequence", "multiset/bag"],
+    "relevant_local_example": "test/current/List-Concat.sq specifies concat only by total length; test/current/List-Append.sq uses Set equality, which loses duplicate count and sequence order."
+  },
+  "test_negative_control": {
+    "stub_location": "/home/ubuntu/jobs/ba5db0259f3c_a6/generated.ml",
+    "stub_role": "explicitly labelled deliberately incorrect scratch control; not a candidate or deliverable",
+    "generated_compile_exit": 0,
+    "tests_compile_exit": 0,
+    "test_run_exit": 2,
+    "observed_failure": "official example semantic assertion rejected an empty result instead of the required five-leaf sequence"
+  },
+  "synthesis_attempts": [],
+  "synthesis_rationale": "No contract.sq was emitted and Synquid was not invoked for synthesis: any available length-only or Set-based contract would be unsoundly weaker than the required observable order and multiplicity."
+}

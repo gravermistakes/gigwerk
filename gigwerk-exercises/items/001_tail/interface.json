@@ -1,0 +1,43 @@
+{
+  "benchmark_id": "001_tail",
+  "title": "Tail of a List",
+  "entrypoints": [
+    {
+      "name": "last",
+      "ocaml_signature": "'a list -> 'a option",
+      "input": "A finite OCaml list of arbitrary element type 'a.",
+      "output": "None exactly for []; Some x exactly when x is the final element of a non-empty input list.",
+      "effects": "Pure and total for finite lists; no exceptions, mutation, I/O, randomness, or ambient state."
+    }
+  ],
+  "necessary_type_declarations": [
+    "OCaml built-in polymorphic list: [] | (::) of 'a * 'a list",
+    "OCaml built-in polymorphic option: None | Some of 'a"
+  ],
+  "synquid_lowering_types": [
+    "List a: Nil | Cons a (List a)",
+    "Maybe a: Nothing | Just a"
+  ],
+  "trusted_primitive_declarations": [
+    {
+      "name": "List constructors ([], (::))",
+      "role": "Language-provided finite-list representation only; not an algorithmic component."
+    },
+    {
+      "name": "Option constructors (None, Some)",
+      "role": "Language-provided result representation only; not an algorithmic component."
+    },
+    {
+      "name": "Integer arithmetic/equality in refinements",
+      "role": "Trusted logical theory used solely for list length and zero/nonzero case distinctions."
+    }
+  ],
+  "unsynthesized_algorithm_components": [
+    "last"
+  ],
+  "forbidden_substitutions": [
+    "Do not change the signature to accept a seed, bound, index, comparator, or accumulator.",
+    "Do not replace the exact final-position requirement with membership, set equality, or length-only behavior.",
+    "Do not use mutable state, effects, randomness, or an infinite-stream approximation."
+  ]
+}

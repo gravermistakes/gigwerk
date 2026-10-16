@@ -23,9 +23,9 @@ SELECT 'form(''' || sig || ''', ''' || cap_set || ''', ''' || policy_set
        || ''', ''' || state_shape || ''', ' || widen_epoch || ').'
 FROM form;
 
--- gig_result(GigId, Entity, Tier, Shape, NCaps, NEffectful, Outcome, Good).
+-- commission_result(CommissionId, Entity, Tier, Shape, NCaps, NEffectful, Outcome, Good).
 -- Flat and ILP-shaped, so Aleph can search over SHAPE rather than only result.
-SELECT 'gig_result(' || gig_id || ', ''' || entity || ''', ' || tier || ', '''
+SELECT 'commission_result(' || commission_id || ', ''' || entity || ''', ' || tier || ', '''
        || shape || ''', ' || n_caps || ', ' || n_effectful || ', '
        || COALESCE(outcome, 'pending') || ', '
        || COALESCE(CAST(good AS TEXT), 'unknown') || ').'

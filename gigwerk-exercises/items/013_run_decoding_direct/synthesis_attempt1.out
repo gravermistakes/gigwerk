@@ -1,0 +1,4 @@
+contract.sq:39:9: Parse Error:
+  Unexpected "("
+  expecting identifier or "->"
+

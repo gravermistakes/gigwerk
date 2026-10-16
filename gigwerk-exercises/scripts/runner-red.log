@@ -1,0 +1,71 @@
+FFFFFF
+======================================================================
+FAIL: test_compiler_and_semantic_success (__main__.RunnerTests.test_compiler_and_semantic_success)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_runner.py", line 26, in test_compiler_and_semantic_success
+    self.assertEqual(self.verify()['status'], 'fulfilled')
+                     ^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_runner.py", line 11, in verify
+    self.assertTrue(MODULE.exists(), 'missing catalogue verification runner')
+AssertionError: False is not true : missing catalogue verification runner
+
+======================================================================
+FAIL: test_hole_not_lowered (__main__.RunnerTests.test_hole_not_lowered)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_runner.py", line 41, in test_hole_not_lowered
+    self.assertEqual(self.verify(output='f = \\xs . ??\n')['status'], 'lowering_failed')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_runner.py", line 11, in verify
+    self.assertTrue(MODULE.exists(), 'missing catalogue verification runner')
+AssertionError: False is not true : missing catalogue verification runner
+
+======================================================================
+FAIL: test_missing_tests_not_fulfilled (__main__.RunnerTests.test_missing_tests_not_fulfilled)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_runner.py", line 35, in test_missing_tests_not_fulfilled
+    self.assertNotEqual(self.verify(with_tests=False)['status'], 'fulfilled')
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_runner.py", line 11, in verify
+    self.assertTrue(MODULE.exists(), 'missing catalogue verification runner')
+AssertionError: False is not true : missing catalogue verification runner
+
+======================================================================
+FAIL: test_partial_contract_never_fulfilled (__main__.RunnerTests.test_partial_contract_never_fulfilled)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_runner.py", line 38, in test_partial_contract_never_fulfilled
+    self.assertEqual(self.verify(strength='partial')['status'], 'tests_passed_partial_contract')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_runner.py", line 11, in verify
+    self.assertTrue(MODULE.exists(), 'missing catalogue verification runner')
+AssertionError: False is not true : missing catalogue verification runner
+
+======================================================================
+FAIL: test_semantic_failure_is_not_solved (__main__.RunnerTests.test_semantic_failure_is_not_solved)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_runner.py", line 29, in test_semantic_failure_is_not_solved
+    self.assertEqual(self.verify(output='f = \\xs . Nil\n')['status'], 'tests_failed')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_runner.py", line 11, in verify
+    self.assertTrue(MODULE.exists(), 'missing catalogue verification runner')
+AssertionError: False is not true : missing catalogue verification runner
+
+======================================================================
+FAIL: test_wrong_signature_is_compile_failure (__main__.RunnerTests.test_wrong_signature_is_compile_failure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_runner.py", line 32, in test_wrong_signature_is_compile_failure
+    self.assertEqual(self.verify(signature='bool -> int list')['status'], 'compile_failed')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/gigwerk-exercises/scripts/test_runner.py", line 11, in verify
+    self.assertTrue(MODULE.exists(), 'missing catalogue verification runner')
+AssertionError: False is not true : missing catalogue verification runner
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.001s
+
+FAILED (failures=6)

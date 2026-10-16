@@ -1,0 +1,119 @@
+FFFFFFFFFFF
+======================================================================
+FAIL: test_constructor_application_becomes_tuple (__main__.LowererTests.test_constructor_application_becomes_tuple)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 22, in test_constructor_application_becomes_tuple
+    result = self.lower('insert = \\x . \\t . Node x t Empty\n')
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 10, in lower
+    self.assertTrue(MODULE.exists(), 'missing checked syntax adapter')
+AssertionError: False is not true : missing checked syntax adapter
+
+======================================================================
+FAIL: test_keeps_body_instead_of_substituting_algorithm (__main__.LowererTests.test_keeps_body_instead_of_substituting_algorithm)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 17, in test_keeps_body_instead_of_substituting_algorithm
+    result = self.lower('insert = \\x . \\t . t\n')
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 10, in lower
+    self.assertTrue(MODULE.exists(), 'missing checked syntax adapter')
+AssertionError: False is not true : missing checked syntax adapter
+
+======================================================================
+FAIL: test_layout_match_and_pattern_arguments (__main__.LowererTests.test_layout_match_and_pattern_arguments)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 26, in test_layout_match_and_pattern_arguments
+    result = self.lower('insert = \\x . \\t .\n  match t with\n    Empty -> Empty\n    Node key left right -> Node key left right\n(Goals: 1)\n')
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 10, in lower
+    self.assertTrue(MODULE.exists(), 'missing checked syntax adapter')
+AssertionError: False is not true : missing checked syntax adapter
+
+======================================================================
+FAIL: test_preserves_comparison_and_nested_conditionals (__main__.LowererTests.test_preserves_comparison_and_nested_conditionals)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 31, in test_preserves_comparison_and_nested_conditionals
+    result = self.lower('insert = \\x . \\t . if x <= x then if x <= x then t else Empty else t\n')
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 10, in lower
+    self.assertTrue(MODULE.exists(), 'missing checked syntax adapter')
+AssertionError: False is not true : missing checked syntax adapter
+
+======================================================================
+FAIL: test_rejects_duplicate_goal (__main__.LowererTests.test_rejects_duplicate_goal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 62, in test_rejects_duplicate_goal
+    self.lower('insert = \\x . \\t . t\ninsert = \\x . \\t . Empty\n')
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 10, in lower
+    self.assertTrue(MODULE.exists(), 'missing checked syntax adapter')
+AssertionError: False is not true : missing checked syntax adapter
+
+======================================================================
+FAIL: test_rejects_holes (__main__.LowererTests.test_rejects_holes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 42, in test_rejects_holes
+    self.lower('insert = \\x . \\t . ??\n')
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 10, in lower
+    self.assertTrue(MODULE.exists(), 'missing checked syntax adapter')
+AssertionError: False is not true : missing checked syntax adapter
+
+======================================================================
+FAIL: test_rejects_partial_match (__main__.LowererTests.test_rejects_partial_match)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 54, in test_rejects_partial_match
+    self.lower('insert = \\x . \\t . match t with\n  Empty -> t\n')
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 10, in lower
+    self.assertTrue(MODULE.exists(), 'missing checked syntax adapter')
+AssertionError: False is not true : missing checked syntax adapter
+
+======================================================================
+FAIL: test_rejects_unbound_variable (__main__.LowererTests.test_rejects_unbound_variable)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 58, in test_rejects_unbound_variable
+    self.lower('insert = \\x . \\t . missing\n')
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 10, in lower
+    self.assertTrue(MODULE.exists(), 'missing checked syntax adapter')
+AssertionError: False is not true : missing checked syntax adapter
+
+======================================================================
+FAIL: test_rejects_unknown_symbol (__main__.LowererTests.test_rejects_unknown_symbol)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 38, in test_rejects_unknown_symbol
+    self.lower('insert = \\x . \\t . system x\n')
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 10, in lower
+    self.assertTrue(MODULE.exists(), 'missing checked syntax adapter')
+AssertionError: False is not true : missing checked syntax adapter
+
+======================================================================
+FAIL: test_rejects_wrong_constructor_arity (__main__.LowererTests.test_rejects_wrong_constructor_arity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 46, in test_rejects_wrong_constructor_arity
+    self.lower('insert = \\x . \\t . Node x t\n')
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 10, in lower
+    self.assertTrue(MODULE.exists(), 'missing checked syntax adapter')
+AssertionError: False is not true : missing checked syntax adapter
+
+======================================================================
+FAIL: test_rejects_wrong_pattern_arity (__main__.LowererTests.test_rejects_wrong_pattern_arity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 50, in test_rejects_wrong_pattern_arity
+    self.lower('insert = \\x . \\t . match t with\n  Node key -> t\n')
+  File "/home/ubuntu/synquid-validation/tools/test_lower.py", line 10, in lower
+    self.assertTrue(MODULE.exists(), 'missing checked syntax adapter')
+AssertionError: False is not true : missing checked syntax adapter
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.003s
+
+FAILED (failures=11)

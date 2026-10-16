@@ -96,7 +96,7 @@ check R E :-
 
 % 4. two systems claiming write on one component.
 %
-% Store health, not composition health: it fires for every entity because it is
+% Agency health, not composition health: it fires for every entity because it is
 % a property of the store. Kept in `check` so a booking cannot proceed while the
 % write-ownership table is broken, but ordered comparison stops it reporting the
 % same clash twice.

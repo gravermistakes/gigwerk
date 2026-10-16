@@ -1,0 +1,29 @@
+{
+  "id": "016",
+  "title": "Drop Every N'th Element From a List",
+  "entrypoints": [
+    {
+      "name": "drop",
+      "ocaml_signature": "'a list -> int -> 'a list",
+      "arguments": [
+        {"name": "xs", "type": "'a list", "position": 1},
+        {"name": "n", "type": "int", "position": 2, "semantic_domain": "positive periods only"}
+      ],
+      "result": {"type": "'a list"}
+    }
+  ],
+  "necessary_type_declarations": [],
+  "trusted_primitive_declarations": {
+    "ocaml_backend": [],
+    "rejected_synquid_attempt_only": [
+      {
+        "name": "dec",
+        "signature": "Int -> {Int | _v == x - 1}",
+        "role": "generic arithmetic support; no target or helper algorithm was supplied"
+      }
+    ]
+  },
+  "semantic_precondition": "The source defines the task only for a positive N; tests use n > 0.",
+  "nonpositive_n_behavior": "Not specified by the authoritative source; intentionally not asserted by this benchmark item.",
+  "effects": "pure; no randomness, I/O, mutable state, streams, strings, or floats are required"
+}

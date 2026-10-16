@@ -18,6 +18,11 @@ run() { [ "$want" = all ] || [ "$want" = "$1" ]; }
 say() { printf '\n== %s\n' "$1"; }
 bad() { printf '  FAIL %s\n' "$1"; fails=$((fails + 1)); }
 ok()  { printf '  ok   %s\n' "$1"; }
+# A section whose tool is missing FAILS rather than passing on nothing. Each
+# check below greps the tool's output for an error, and a shell's "not found"
+# matches none of those patterns, so without this gate a missing elpi printed
+# ok for every file, and a missing swipl printed ok for the whole test suite.
+need() { command -v "$1" >/dev/null 2>&1 || { bad "$1 not installed, so $2 did not run"; return 1; }; }
 
 OCAMLLIB="$(ocamlc -where 2>/dev/null || echo /usr/lib/ocaml)"
 
@@ -42,6 +47,56 @@ if run ocaml; then
       done
     else printf '  skipped: no .ocamlformat (adopting one would reflow every comment)\n'; fi
   fi
+fi
+
+# ------------------------------------------------------- impersonation
+# GigWerk never impersonates its talent. Two structural rules, checked on the
+# source rather than trusted to review:
+#
+#   1. Only talent constructs a Production.artifact. Talent is a lib module
+#      that implements Code_actor.S. Anything else building one is the Agency
+#      producing work and filing it under an Actor's name.
+#   2. Nothing the labor tier can reach, transitively, is the model. The labor
+#      tier is the talent plus the modules that run it; Agent_api is the only
+#      door to a model. Closure is computed from ocamldep, not from grep, so a
+#      reference through an intermediate module counts.
+#
+# Proven against: an artifact literal added to producer.ml (rule 1), a type
+# alias to Agent_api.request in proc.ml (rule 2, direct), and the same alias in
+# workspace.ml, which proc.ml never names but the talent reaches (rule 2,
+# transitive).
+if run ocaml; then
+  say "ocaml -- no impersonation: who builds artifacts, who can reach the model"
+  talent=$(grep -lE ':[[:space:]]*Code_actor\.S[[:space:]]*=[[:space:]]*struct' ocaml/lib/*.ml)
+  [ -n "$talent" ] || bad "no talent found: the rule would pass vacuously"
+  for f in $(grep -lE 'requirement_id[[:space:]]*=' ocaml/lib/*.ml ocaml/bin/*.ml); do
+    case " $(echo $talent) " in
+      *" $f "*) ok "$f builds artifacts and is talent" ;;
+      *) bad "$f builds a Production.artifact but implements no Code_actor.S" ;;
+    esac
+  done
+  deps() {  # module name -> direct lib dependencies, as module names
+    src="ocaml/lib/$(printf '%s' "$1" | tr 'A-Z' 'a-z' | cut -c1)$(printf '%s' "$1" | cut -c2-).ml"
+    [ -f "$src" ] || return 0
+    ocamldep -modules "$src" | cut -d: -f2 | tr ' ' '\n' | grep -v '^$'
+  }
+  labor="Code_actor Actor Proc Producer Verifier"
+  for f in $talent; do
+    m=$(basename "$f" .ml); labor="$labor $(printf '%s' "$m" | cut -c1 | tr 'a-z' 'A-Z')$(printf '%s' "$m" | cut -c2-)"
+  done
+  for root in $labor; do
+    seen=" "; queue="$root"
+    while set -- $queue; [ $# -gt 0 ]; do
+      m=$1; shift; queue="$*"
+      case "$seen" in *" $m "*) continue ;; esac
+      seen="$seen$m "
+      queue="$queue $(deps "$m" | tr '\n' ' ')"
+    done
+    case "$seen" in
+      *" Agent_api "*) bad "$root reaches Agent_api: the labor tier can call the model" ;;
+      *) ok "$root cannot reach Agent_api" ;;
+    esac
+  done
 fi
 
 # ------------------------------------------------------------------- c
@@ -93,6 +148,33 @@ if run sql; then
         | grep -vE '^(wal|memory)$')
   [ -z "$out" ] && ok "sql/seed_memory.sql" || { printf '  %s\n' "$out"; bad "sql/seed_memory.sql"; }
 
+  # The soul files were not linted at all. adopt_v1 is the genesis version;
+  # propose_v2 is a PROPOSAL carrying one signature. Both must parse, and the
+  # proposal must land PENDING rather than current -- a half-signed soul that
+  # somehow became current would be the co-signature rule failing quietly.
+  out=$(sqlite3 :memory: ".bail on" ".read sql/schema.sql" ".read sql/soul.sql" \
+        ".read soul/adopt_v1.sql" 2>&1 | grep -vE '^(wal|memory)$')
+  [ -z "$out" ] && ok "soul/adopt_v1.sql" || { printf '  %s\n' "$out"; bad "soul/adopt_v1.sql"; }
+
+  out=$(sqlite3 :memory: ".bail on" ".read sql/schema.sql" ".read sql/soul.sql" \
+        ".read soul/adopt_v1.sql" ".read soul/propose_v2.sql" 2>&1 \
+        | grep -vE '^(wal|memory)$')
+  [ -z "$out" ] && ok "soul/propose_v2.sql" || { printf '  %s\n' "$out"; bad "soul/propose_v2.sql"; }
+
+  # Asserts WHICH version is live, not just how many. A forged second
+  # signature would keep the count at 1 while silently swapping the soul.
+  souls() {
+    sqlite3 :memory: ".read sql/schema.sql" ".read sql/soul.sql" \
+      ".read soul/adopt_v1.sql" ".read soul/propose_v2.sql" "$1" 2>/dev/null \
+      | grep -vE '^(wal|memory)$'
+  }
+  cur=$(souls "SELECT version FROM v_soul_current;")
+  pend=$(souls "SELECT version || ' awaiting ' || awaiting FROM v_soul_pending;")
+  v2=$(souls "SELECT version FROM soul WHERE parent IS NOT NULL;")
+  [ "$cur" = "f4003163f950" ] && [ "$pend" = "$v2 awaiting human" ] \
+    && ok "a proposed soul stays pending; v1 is still the live soul" \
+    || bad "proposal state wrong: current='$cur' pending='$pend'"
+
   say "sql -- the CHECKs must actually reject (a check that cannot fail is not a check)"
   neg=$(sqlite3 :memory: ".read sql/schema.sql" ".read sql/seed.sql" \
     "INSERT INTO booking_verdict (entity_id,composition_sig,decision,reasons,decided_at,decided_by,attaches_to) VALUES (1,'x','maybe','r',0,'conditions','composition');" 2>&1 | grep -c "CHECK constraint failed")
@@ -113,6 +195,7 @@ fi
 # `p(X) :- q(1).` -> "Singleton variables: [X]".
 if run prolog; then
   say "prolog -- swipl consult + check/0"
+  if need swipl "consult, check/0 and the test suite"; then
   for f in prolog/*.pl; do
     out=$(swipl -q -g "consult('$f'), check" -t halt 2>&1 | grep -vE '^\s*$')
     [ -z "$out" ] && ok "$f" || { printf '  %s\n' "$out" | head -20; bad "$f"; }
@@ -123,15 +206,17 @@ if run prolog; then
     *failed*|*error*) printf '  %s\n' "$out"; bad "confidence.pl tests" ;;
     *) ok "confidence.pl tests" ;;
   esac
+  fi
 fi
 
 # ---------------------------------------------------------------- elpi
 # elpi typechecks on load; there is no separate -typecheck flag in 3.7.2 (it was
-# tried, and it is not an option). Accumulating the file from a driver is
+# tried, and it is not an option), and 1.17.4 has only -no-tc to turn it off. Accumulating the file from a driver is
 # therefore the check. Proven against: changing `type capability string -> ...`
 # to `int -> ...` -> "Cap has type string but capability expects ... int".
 if run elpi; then
   say "elpi -- typecheck on accumulate"
+  need elpi "the typecheck" &&
   for f in elpi/gate.elpi elpi/hoas.elpi; do
     [ -f "$f" ] || continue
     base=$(printf '%s' "$f" | sed 's/\.elpi$//')
@@ -144,10 +229,21 @@ if run elpi; then
     # warning, so a real warning is not lost in noise.
     printf 'accumulate "%s/%s".\npred gw_lint_probe i:list string.\ngw_lint_probe _ :- print "typechecked".\n' \
       "$PWD" "$base" > "$drv"
-    out=$(elpi "$drv" -exec gw_lint_probe 2>&1 \
-          | grep -E "Typechecker:|Fatal error|Parsing error|Undeclared globals" | head -5)
+    # Three conditions, because grepping for error wording alone is
+    # version-bound: elpi 1.17 reports "Error: Cap has type string but is used
+    # with type int" and then "Type error.", which matched none of the 3.x
+    # patterns, so a real type error passed. The exit status is the signal
+    # that holds across versions (1 on a type or parse error), and the probe
+    # printing "typechecked" proves the file was loaded and run at all.
+    full=$(elpi "$drv" -exec gw_lint_probe 2>&1); rc=$?
     rm -f "$drv"
-    [ -z "$out" ] && ok "$f" || { printf '  %s\n' "$out"; bad "$f"; }
+    out=$(printf '%s\n' "$full" \
+          | grep -E "Typechecker:|Fatal error|Parsing error|Undeclared globals|Error:|Type error" | head -5)
+    if [ "$rc" -eq 0 ] && [ -z "$out" ] && printf '%s\n' "$full" | grep -q typechecked; then
+      ok "$f"
+    else
+      printf '  exit %s\n' "$rc"; [ -n "$out" ] && printf '  %s\n' "$out"; bad "$f"
+    fi
   done
 fi
 

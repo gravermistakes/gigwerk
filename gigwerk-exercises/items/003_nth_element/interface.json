@@ -1,0 +1,73 @@
+{
+  "id": "003_nth_element",
+  "title": "N'th Element of a List",
+  "language": "OCaml",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "at",
+      "ocaml_signature": "int -> 'a list -> 'a option",
+      "arguments": [
+        {
+          "name": "index",
+          "ocaml_type": "int",
+          "constraint": "The source specifies nonnegative, zero-based lookup. For i >= 0, i is in bounds exactly when i < List.length xs. The public statement does not specify behavior for negative OCaml ints."
+        },
+        {
+          "name": "xs",
+          "ocaml_type": "'a list",
+          "constraint": "Finite immutable OCaml list; preserves list order and duplicate occurrences."
+        }
+      ],
+      "result": {
+        "ocaml_type": "'a option",
+        "guarantees": [
+          "For index >= 0, returns Some x exactly when index < list length and x is the element at that zero-based list position.",
+          "For index >= 0, returns None exactly when index >= list length.",
+          "Negative-index behavior is source-unspecified and is intentionally not asserted by this benchmark contract or its tests.",
+          "Does not raise an out-of-bounds exception."
+        ]
+      }
+    }
+  ],
+  "necessary_type_declarations": {
+    "synquid": [
+      "data List a <p :: Int -> a -> Bool> where Nil :: List a <p>; Cons :: x:{a | p 0 _v} -> xs:List a <{p (_0 + 1) _1}> -> List a <p>",
+      "termination measure len :: List a -> {Int | _v >= 0}",
+      "data Maybe a <q :: a -> Bool> where Nothing :: Maybe a <q>; Just :: x:{a | q _v} -> Maybe a <q>",
+      "measure isJust :: Maybe a -> Bool"
+    ],
+    "ocaml": [
+      "Uses standard built-in 'a list and 'a option (None | Some of 'a)."
+    ]
+  },
+  "trusted_primitive_declarations": [
+    {
+      "name": "zero",
+      "synquid_signature": "{Int | _v == 0}",
+      "kind": "generic arithmetic primitive",
+      "trusted": true,
+      "not_an_exercise_algorithm": true
+    },
+    {
+      "name": "dec",
+      "synquid_signature": "x:Int -> {Int | _v == x - 1}",
+      "kind": "generic arithmetic primitive",
+      "trusted": true,
+      "not_an_exercise_algorithm": true
+    }
+  ],
+  "unsynthesized_final_algorithm": {
+    "name": "at",
+    "status": "hole in contract.sq",
+    "manual_ocaml_implementation_present": false
+  },
+  "nonfunctional_constraints": [
+    "Pure and deterministic.",
+    "No random seed or randomness.",
+    "No mutable state or effects.",
+    "For the stated nonnegative domain, no exceptions for index failure; failure is represented with None.",
+    "No requirement on strings or floats specifically; the element type is polymorphic.",
+    "No infinite/coinductive inputs."
+  ]
+}

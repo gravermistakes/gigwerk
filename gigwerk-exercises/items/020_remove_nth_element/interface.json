@@ -1,0 +1,41 @@
+{
+  "id": "020",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "remove_at",
+      "ocaml_signature": "int -> 'a list -> 'a list",
+      "preconditions": [
+        "0 <= index",
+        "index < List.length xs"
+      ],
+      "postconditions": [
+        "The output length is List.length xs - 1.",
+        "For every output position j, output[j] = xs[j] when j < index, and output[j] = xs[j + 1] when j >= index.",
+        "Consequently, order is preserved and exactly the selected occurrence is removed; equal values at other positions are retained."
+      ],
+      "unspecified_by_authoritative_statement": [
+        "negative indices",
+        "indices greater than or equal to List.length xs",
+        "empty-list calls (which cannot satisfy the valid-index precondition)"
+      ]
+    }
+  ],
+  "necessary_type_declarations": [
+    "OCaml polymorphic finite list type: 'a list",
+    "Synquid internal list family is index-refined: List a <p :: Int -> a -> Bool>."
+  ],
+  "trusted_primitive_declarations": [
+    {
+      "language": "Synquid",
+      "declaration": "zero :: {Int | _v == 0}",
+      "role": "Generic arithmetic constant available to the synthesizer; not an exercise algorithm."
+    },
+    {
+      "language": "Synquid",
+      "declaration": "dec :: x: Int -> {Int | _v == x - 1}",
+      "role": "Generic arithmetic predecessor available to the synthesizer; not an exercise algorithm."
+    }
+  ],
+  "implementation_boundary": "No OCaml implementation is included. contract.sq leaves only remove_at as a synthesis hole; test_generated.ml contains an independent test oracle only."
+}

@@ -5,7 +5,7 @@
 | Context Delivery | partial | `skill/SKILL.md` instructs read-before-propose; not enforced |
 | Tool Integration | **covered, stronger** | `Caps` (ocap), `Grants` (closed variant) |
 | Planning Mechanism | **missing** | no plan step exists |
-| Action Execution | covered | `Actor.run_gig`, forked, bounded |
+| Action Execution | covered | `Actor.run_commission`, forked, bounded |
 | Verification Process | **covered, differently** | see disagreement 1 |
 | Permissions | **covered, differently** | see disagreement 2 |
 | Monitoring | **was missing** | now `Trace` + `span` table |
@@ -29,7 +29,7 @@ something that is not the agent and cannot be argued with by it.
 
 Here: the **critic** is deterministic code (a failing critic means something is
 actually wrong, every time), and the **judge** is a second model that never sees
-the composer's justification, with ties refusing. Neither is the thing that
+the agent's justification, with ties refusing. Neither is the thing that
 produced the work.
 
 Build the checklist's version and you get a system that reports success at
@@ -43,13 +43,13 @@ arbitrary, and arbitrary orderings leak — something ends up above a line it
 should never have crossed because a number said so.
 
 Here: an unordered capability **set** (`Grants`), a kernel-enforced root
-(`Caps`), and quantity/expiry (`Terms`). Three bounds, no ordering, nothing to
+(`Caps`), and quantity/expiry (`Obligations`). Three bounds, no ordering, nothing to
 get backwards.
 
-### 3. "Store prior interactions and user preferences"
+### 3. "Agency prior interactions and user preferences"
 
 Two things with different trust in one box. Prior interactions are facts the
-runtime observed. Preferences are inferred and drift. Store them together and a
+runtime observed. Preferences are inferred and drift. Agency them together and a
 drifted preference reads with the same authority as a recorded outcome.
 
 Here: the ledger holds facts, confidence bands derive from human review, and
@@ -74,6 +74,6 @@ gate anywhere in the list. A harness whose strongest control is a permission
 check is a harness that cannot say *no, not this shape, here is why*.
 
 **The loop has no stopping condition.** "Planning and Execution Loop" names
-plan, act, verify, and never terminates. `Terms` (budget, expiry) and `Phases`
+plan, act, verify, and never terminates. `Obligations` (budget, expiry) and `Phases`
 (a terminal phase emitted by deterministic code) are the two conditions here,
 and neither is the model's to assert.

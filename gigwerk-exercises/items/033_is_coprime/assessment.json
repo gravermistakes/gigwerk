@@ -1,0 +1,35 @@
+{
+  "id": "033",
+  "title": "Determine Whether Two Positive Integer Numbers Are Coprime",
+  "contract_status": "requires_features",
+  "synthesis_status": "not_attempted",
+  "specification_strength": "full",
+  "elapsed_seconds": 0,
+  "entrypoints": [
+    "coprime"
+  ],
+  "required_features": [
+    "A sound, built-in integer divisibility or greatest-common-divisor predicate whose semantics are linked to OCaml int inputs.",
+    "Refinement support sufficient to state gcd(a,b)=1 exactly (for example, divisibility plus quantification over positive common divisors, or a verified built-in gcd relation).",
+    "If a GCD primitive is exposed to synthesis, a checked contract proving that primitive's relationship to divisibility; an opaque declaration is insufficient."
+  ],
+  "semantic_obligations": [
+    "Expose coprime : int -> int -> bool.",
+    "Accept only positive inputs under the authoritative precondition a > 0 and b > 0.",
+    "Return true if and only if the mathematical gcd of the two inputs is 1.",
+    "Return false exactly when the positive inputs have a common divisor greater than 1.",
+    "Match the official examples: coprime 13 27 = true and coprime 20536 7826 = false.",
+    "Do not invent behavior for zero or negative inputs."
+  ],
+  "synquid_runtime_evidence": {
+    "runtime": "Synquid v0.4, 2016-08-11 in the supplied pinned rootfs",
+    "project_source_inspected": "/home/ubuntu/jobs/42a912fe9212_a0/synquid",
+    "logic_evidence": "src/Synquid/Logic.hs defines arithmetic refinement operators Times, Plus, and Minus and comparisons, but no integer division or modulus operator; src/Synquid/Tokens.hs likewise exposes no div/mod token. The formula grammar has no existential quantifier syntax."
+  },
+  "decision": "No contract.sq was emitted and no synthesis was attempted. Any available approximation based only on examples, a bounded grid, or an opaque gcd declaration would be weaker than the required iff relationship and is therefore rejected.",
+  "test_artifacts": {
+    "semantic_test": "test_generated.ml",
+    "negative_control_stub": "negative_control_generated.ml",
+    "negative_control_result": "negative_control_result.md"
+  }
+}

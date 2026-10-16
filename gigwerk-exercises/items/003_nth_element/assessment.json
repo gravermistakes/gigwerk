@@ -1,0 +1,69 @@
+{
+  "id": "003_nth_element",
+  "title": "N'th Element of a List",
+  "contract_status": "ambiguous",
+  "specification_strength": "partial",
+  "synthesis_status": "rejected",
+  "elapsed_seconds": 1.408959966,
+  "entrypoints": ["at"],
+  "semantic_obligations": [
+    "The public OCaml interface is at : int -> 'a list -> 'a option.",
+    "For every nonnegative i with i < list length, return Some of the element at exactly zero-based position i.",
+    "For every nonnegative i with i >= list length, return None rather than an exception.",
+    "Selection is positional: preserve list order and distinguish duplicate occurrences by index.",
+    "The entrypoint is polymorphic in list element type and has no effects, mutation, randomness, string-specific, float-specific, or infinite-stream behavior."
+  ],
+  "source_ambiguity": {
+    "topic": "negative integer indices",
+    "evidence": "The pinned statement gives only nonnegative zero-based examples and contrasts List.nth out-of-bounds failure; it never defines at (-1) xs.",
+    "treatment": "Negative-index behavior is deliberately not asserted in contract.sq or test_generated.ml. This prevents inventing a benchmark semantic requirement."
+  },
+  "required_features": [
+    "Synquid abstract refinements relating a finite-list position to its element",
+    "Synquid algebraic option datatype with a payload refinement",
+    "Synquid measures for finite-list length and option constructor discrimination",
+    "Linear integer arithmetic and Boolean implications"
+  ],
+  "trusted_primitives": [
+    "zero : {Int | _v == 0}",
+    "dec : x:Int -> {Int | _v == x - 1}",
+    "eq : x:Int -> y:Int -> {Bool | _v <==> (x == y)}"
+  ],
+  "synthesis_attempts": [
+    {
+      "attempt": 1,
+      "elapsed_seconds": 0.020727741,
+      "exit_code": 1,
+      "limit_seconds": 60,
+      "result": "resolution error: variable _v was not in scope in the abstract-refinement parameter position",
+      "artifacts": ["synthesis_attempt1.out", "synthesis_attempt1.err", "synthesis_attempt1.meta"]
+    },
+    {
+      "attempt": 2,
+      "elapsed_seconds": 1.388232225,
+      "exit_code": 1,
+      "limit_seconds": 60,
+      "result": "rejected: Cannot find sufficiently strong refinements when attempting the zero-index recursive branch; the attempted component environment omitted integer equality",
+      "artifacts": ["synthesis.out", "synthesis.err", "synthesis.meta"]
+    }
+  ],
+  "post_attempt_contract_note": "The explicit generic eq primitive was added after attempt 2 because the error identified it as missing. No third synthesis was run: the task permits at most two reasoned attempts. Therefore no candidate is claimed.",
+  "tests": {
+    "file": "test_generated.ml",
+    "coverage": [
+      "official examples",
+      "head, last, empty, and past-end cases",
+      "duplicate positional selection",
+      "polymorphic payload",
+      "small exhaustive nonnegative index/list cases",
+      "deliberately incorrect off-by-one negative-control expectation"
+    ],
+    "negative_control_evidence": {
+      "stub_location": "/home/ubuntu/jobs/ba5db0259f3c_a2/negative-control-final/Generated.ml",
+      "compile_exit_code": 0,
+      "run_exit_code": 2,
+      "observed_failure": "official: index 2: expected Some <value>, got None"
+    }
+  },
+  "implementation_boundary": "No final OCaml implementation was authored, copied, or mechanically lowered. A Synquid result would remain only a candidate until a backend lowers it and the independent OCaml semantic tests pass."
+}

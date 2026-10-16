@@ -1,0 +1,9 @@
+append :: xs:List a -> ys:List a -> {List a|_v == cat ys xs}
+contract.sq:23: Error:
+  Cannot match shape 'a'
+  with shape 'List (A2)'
+  when checking ys :: List List A2
+  in
+  \xs . \ys . 
+      match Cons Nil ys with
+

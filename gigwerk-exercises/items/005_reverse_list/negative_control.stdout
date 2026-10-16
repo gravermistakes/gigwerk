@@ -1,0 +1,8 @@
+FAIL official example: strings: official example: expected exact reverse ["c"; "b"; "a"], but rev raised Failure("unsynthesized")
+FAIL empty list: empty: expected exact reverse [], but rev raised Failure("unsynthesized")
+FAIL singleton list: singleton: expected exact reverse [42], but rev raised Failure("unsynthesized")
+FAIL duplicate multiplicity and order: duplicates: expected exact reverse [2; 3; 1; 2; 1], but rev raised Failure("unsynthesized")
+FAIL negative control: reject identity: negative control: rev must return [3; 2; 1], not raise Failure("unsynthesized")
+FAIL polymorphism: preserve function identities: function values: expected a returned function list, but rev raised Failure("unsynthesized")
+FAIL exhaustive lists over {-1,0,1}, lengths 0..5: exhaustive case 0: expected exact reverse [], but rev raised Failure("unsynthesized")
+FAIL involution over {0,1,2}, lengths 0..4: involution case 0: first rev raised Failure("unsynthesized")

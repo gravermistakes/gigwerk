@@ -23,7 +23,7 @@ data:
     wall_ms: 250
     mem_bytes: 16777216
     msg_quota: 10
-    gigs_per_hr: 3600
+    commissions_per_hr: 3600
 
 capabilities: []             # correct here and nowhere else
 

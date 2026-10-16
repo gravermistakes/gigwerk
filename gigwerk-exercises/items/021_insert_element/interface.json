@@ -1,0 +1,30 @@
+{
+  "id": "021",
+  "title": "Insert an Element at a Given Position Into a List",
+  "source": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/021_insert_element.md",
+    "blob_sha": "f32f84b83e22f2b2b05571ce43d7b9d05b48a9c0",
+    "solution_quarantine": "A unique H2 Solution section was removed before inspection."
+  },
+  "interface_status": "ambiguous",
+  "entrypoints": [],
+  "exact_ocaml_signatures": [],
+  "necessary_type_declarations": [],
+  "trusted_primitive_declarations": [],
+  "source_supported_semantics": [
+    "Insert an element at a specified position within a list.",
+    "The position uses a 0-based index."
+  ],
+  "unresolved_requirements": [
+    "OCaml entrypoint identifier",
+    "argument order and currying shape",
+    "exact polymorphic type signature",
+    "valid index range (including whether appending at length is valid)",
+    "out-of-range and negative-index behavior",
+    "official examples"
+  ],
+  "contract_file": null,
+  "reason_no_contract": "A Synquid declaration requires an exact callable interface and total/precondition or failure behavior. The permitted upstream text provides neither, and selecting either would weaken or alter the exercise."
+}

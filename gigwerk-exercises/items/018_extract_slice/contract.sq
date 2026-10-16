@@ -1,0 +1,36 @@
+-- GigWerk benchmark 018: Extract a Slice From a List
+-- LOGICAL-ONLY measure `segment` defines exact positional sequence semantics.
+-- It is not a trusted executable component and must not appear in a lowered OCaml candidate.
+
+qualifier {x <= y, x != y}
+
+data List a where
+  Nil :: List a
+  Cons :: x: a -> xs: List a -> List a
+
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+
+-- i, k, and n are immutable measure constants; n is the original list length.
+-- Thus n - len current-list is the current head's original 0-based index.
+-- `segment i k n xs` preserves sequence order and duplicate occurrences.
+measure segment :: i: Int -> k: Int -> n: Int -> List a -> List a where
+  Nil -> Nil
+  Cons x xs ->
+    if i <= n - len (Cons x xs) && n - len (Cons x xs) <= k
+      then Cons x (segment i k n xs)
+      else segment i k n xs
+
+-- Trusted generic integer primitive supplied by the later lowering backend.
+-- It is not a list algorithm and does not implement the exercise.
+zero :: {Int | _v == 0}
+dec :: x: Int -> {Int | _v == x - 1}
+
+-- Exact OCaml call order: slice xs i k.
+-- The source only states behavior on the valid-index domain below.
+slice :: xs: List a ->
+         i: {Int | 0 <= _v && _v < len xs} ->
+         k: {Int | i <= _v && _v < len xs} ->
+         {List a | _v == segment i k (len xs) xs}
+slice = ??

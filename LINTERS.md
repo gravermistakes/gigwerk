@@ -72,7 +72,7 @@ Verified against this tree, not assumed. Type-at-point on `Booking.form_sig`:
 
 and error reporting on a buffer with an unbound field:
 
-    $ ocamlmerlin single errors -filename lib/terms.ml
+    $ ocamlmerlin single errors -filename lib/obligations.ml
     {"type":"typer","message":"Unbound record field nope","line":79,"col":27}
 
 Merlin reads dune's generated config, so it needs `dune build @check` to have run

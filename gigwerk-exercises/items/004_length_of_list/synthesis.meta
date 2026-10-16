@@ -1,0 +1,4 @@
+attempt=2
+exit_code=1
+elapsed_seconds=0.079
+command=timeout 60s proot -R /home/ubuntu/synquid-runtime/bundle/rootfs -b /home/ubuntu/gigwerk-exercises/items/004_length_of_list:/work -w /work /root/.cabal/bin/synquid contract.sq --output=Plain --print-stats

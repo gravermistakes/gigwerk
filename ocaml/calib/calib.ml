@@ -9,7 +9,7 @@ let pairs_unrelated = [
 let pairs_related = [
   "the gate refused a widened envelope", "a composition widened its scope and was refused";
   "a critic checked the artifact and passed", "the critic emitted a passing verdict on the file";
-  "budget exhausted after twenty actions", "terms ran out of budget partway through the gig";
+  "budget exhausted after twenty actions", "obligations ran out of budget partway through the commission";
   "openat2 resolve beneath refused the traversal", "the kernel refused a dotdot escape from the root";
   "prediction error is the surprise signal", "surprise comes from the gap between predicted and observed";
 ]

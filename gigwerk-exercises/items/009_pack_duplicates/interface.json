@@ -1,0 +1,40 @@
+{
+  "id": "009_pack_duplicates",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "pack",
+      "ocaml_signature": "'a list -> 'a list list",
+      "purity": "pure",
+      "determinism": "deterministic",
+      "semantics": "Return the maximal non-empty consecutive runs of polymorphically equal input values, in input order."
+    }
+  ],
+  "necessary_type_declarations": [],
+  "trusted_primitives": [
+    {
+      "name": "polymorphic_equality",
+      "ocaml_expression": "( = )",
+      "logical_contract": "eq : x:a -> y:a -> {Bool | _v == (x == y)}",
+      "role": "Generic equality decision used to detect whether adjacent input values belong to the same run.",
+      "status": "trusted generic supporting primitive; not the target algorithm"
+    }
+  ],
+  "target_components": [
+    {
+      "name": "pack",
+      "status": "unsynthesized final algorithm",
+      "must_not_be_replaced_by": ["List.group", "an externally supplied packing routine", "a manually authored implementation"]
+    }
+  ],
+  "unsupported_or_absent_domains": {
+    "randomness": "absent",
+    "effects": "absent",
+    "mutable_state": "absent",
+    "infinite_or_coinductive_streams": "absent",
+    "strings_as_special_theory": "absent; strings occur only in the official example",
+    "floats": "absent",
+    "options_or_failure": "absent"
+  },
+  "source_interface_note": "The pinned upstream non-solution statement supplies the function name and a string-list REPL example, but no explicit val declaration. The polymorphic signature above is the principal OCaml interface for the stated equality-based list operation."
+}

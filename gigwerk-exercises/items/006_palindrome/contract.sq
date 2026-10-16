@@ -1,0 +1,33 @@
+-- GigWerk benchmark contract for OCaml exercise 006_palindrome.
+-- Exact sequence semantics are modeled below. All algorithms remain synthesis holes.
+
+-- Finite immutable lists corresponding to OCaml's 'a list.
+data List a where
+  Nil :: List a
+  Cons :: x: a -> xs: List a -> List a
+
+-- Exact sequence append. Its last argument is structurally recursive.
+measure appendModel :: ys: List a -> List a -> List a where
+  Nil -> ys
+  Cons x xs -> Cons x (appendModel ys xs)
+
+-- Exact sequence reversal. This relation preserves both order and multiplicity.
+measure reverseModel :: List a -> List a where
+  Nil -> Nil
+  Cons x xs -> appendModel (Cons x Nil) (reverseModel xs)
+
+-- Supporting algorithms are synthesis goals, not setup-agent implementations.
+-- Each remains an explicit hole for the synthesizer.
+append :: xs: List a -> ys: List a -> {List a | _v == appendModel ys xs}
+append = ??
+
+reverse :: xs: List a -> {List a | _v == reverseModel xs}
+reverse = ??
+
+-- Explicit trusted generic primitive: OCaml structural equality after backend lowering.
+-- This is a generic component, not an implementation of this exercise.
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+
+-- Exercise entry point: true exactly when the finite input sequence equals its reverse.
+is_palindrome :: xs: List a -> {Bool | _v == (xs == reverseModel xs)}
+is_palindrome = ??

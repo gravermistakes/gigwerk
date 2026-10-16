@@ -1,0 +1,33 @@
+{
+  "id": "018_extract_slice",
+  "title": "Extract a Slice From a List",
+  "module": "Generated",
+  "entrypoints": [
+    {
+      "name": "slice",
+      "ocaml_signature": "'a list -> int -> int -> 'a list",
+      "call_order": "slice xs i k",
+      "type_declarations": [
+        "Uses OCaml's built-in polymorphic list type: 'a list"
+      ],
+      "valid_input_domain": "0 <= i <= k < List.length xs",
+      "outside_domain": "Unspecified by the authoritative statement; no failure, option, or clamping behavior is required."
+    }
+  ],
+  "trusted_primitive_declarations": [
+    {
+      "name": "zero",
+      "synquid_signature": "{Int | _v == 0}",
+      "kind": "generic integer constant",
+      "not_an_exercise_algorithm": true
+    },
+    {
+      "name": "dec",
+      "synquid_signature": "x:Int -> {Int | _v == x - 1}",
+      "kind": "generic integer primitive",
+      "not_an_exercise_algorithm": true
+    }
+  ],
+  "unsynthesized_final_algorithm": "slice",
+  "notes": "The exact output relation is logical measure segment in contract.sq. It is a specification-only measure, not a trusted executable component and not a manually authored implementation."
+}

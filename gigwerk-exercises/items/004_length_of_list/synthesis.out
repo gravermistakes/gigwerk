@@ -1,0 +1,9 @@
+length :: xs:List a -> {Int|_v == len xs}
+contract.sq:20: Error:
+  Cannot match shape 'a'
+  with shape 'List (A2)'
+  when checking xs :: List List A2
+  in
+  \xs . 
+    match Cons Nil xs with
+

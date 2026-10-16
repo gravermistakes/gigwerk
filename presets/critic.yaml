@@ -25,7 +25,7 @@ data:
     wall_ms: 5000
     mem_bytes: 134217728
     msg_quota: 200
-    gigs_per_hr: 240
+    commissions_per_hr: 240
 
 capabilities:
   - name: fs_read

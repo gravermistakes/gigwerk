@@ -1,0 +1,43 @@
+{
+  "id": "021",
+  "title": "Insert an Element at a Given Position Into a List",
+  "contract_status": "ambiguous",
+  "synthesis_status": "not_attempted",
+  "specification_strength": "partial",
+  "elapsed_seconds": 0,
+  "entrypoints": [],
+  "required_features": [
+    "Authoritative OCaml entrypoint name and exact polymorphic signature",
+    "Argument order/currying convention",
+    "Index-domain boundary, including whether index = length denotes append",
+    "Negative and out-of-range behavior (exception, option/result, precondition, or another stated rule)",
+    "Official examples or other non-solution behavioral cases"
+  ],
+  "semantic_obligations": [
+    "Source states that an element is inserted into a list at a specified position.",
+    "Source states that positions are 0-based indices.",
+    "No stronger ordering, multiplicity, boundary, or failure obligation is stated in the permitted non-solution text; such obligations must not be invented."
+  ],
+  "source_validation": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/021_insert_element.md",
+    "blob_sha": "f32f84b83e22f2b2b05571ce43d7b9d05b48a9c0",
+    "solution_heading_count": 1,
+    "extraction": "Only text preceding the unique H2 Solution heading was examined."
+  },
+  "contract": {
+    "path": null,
+    "attempted": false,
+    "reason": "Not supportable without inventing an exact OCaml interface and unspecified invalid-index semantics."
+  },
+  "synthesis_attempts": [],
+  "test_harness": {
+    "path": "test_generated.ml",
+    "candidate_calls": false,
+    "reason": "No source-declared candidate name or type exists to call.",
+    "oracle_scope": "Valid 0-based positions only; the oracle is isolated from synthesis inputs.",
+    "negative_control": "Run with --negative-control; it intentionally asserts [1;2;9] for insertion of 9 at index 1 into [1;2] and must fail."
+  },
+  "caveat": "No final implementation was authored or labeled synthesized. A later backend must obtain a non-solution authoritative interface/failure-policy addendum before lowering or candidate validation."
+}

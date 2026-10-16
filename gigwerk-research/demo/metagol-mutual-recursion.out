@@ -1,0 +1,7 @@
+% learning even/1
+% clauses: 1
+% clauses: 2
+% clauses: 3
+even(A):-s(A,B),even_1(B).
+even_1(A):-s(A,B),even(B).
+even(0).

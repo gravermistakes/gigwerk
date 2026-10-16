@@ -1,0 +1,9 @@
+encode :: xs:List a -> {CRuns a|flat _v == xs}
+contract.sq:67: Error:
+  Cannot match shape 'Bool'
+  with shape '_'
+  when checking eq ::
+  X1:_ -> X0:_ -> _ in
+  \xs . 
+    match eq ?? ?? with
+

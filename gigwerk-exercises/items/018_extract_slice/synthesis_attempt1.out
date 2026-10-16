@@ -1,0 +1,2 @@
+contract.sq:17: Resolution Error:
+  Constant arguments to measure segment must not change in recursive call segment (i - 1) (k - 1) xs

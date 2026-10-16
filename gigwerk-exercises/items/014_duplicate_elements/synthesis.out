@@ -1,0 +1,4 @@
+contract.sq:11:34: Parse Error:
+  Unexpected "="
+  expecting operator or "}"
+

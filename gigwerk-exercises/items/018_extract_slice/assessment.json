@@ -1,0 +1,34 @@
+{
+  "id": "018_extract_slice",
+  "title": "Extract a Slice From a List",
+  "contract_status": "ready",
+  "synthesis_status": "rejected",
+  "specification_strength": "full",
+  "required_features": [],
+  "semantic_obligations": [
+    "The valid input domain is 0 <= i <= k < length xs.",
+    "The result is exactly xs[i..k] with both endpoints included.",
+    "Result order is original left-to-right order, not reverse order or an unordered set.",
+    "Equal values retain their positional multiplicity.",
+    "Output length is k - i + 1 on the valid domain.",
+    "Behavior outside the valid domain is intentionally unspecified because the source does not define it."
+  ],
+  "entrypoints": ["slice"],
+  "elapsed_seconds": 23.617242162,
+  "attempts": [
+    {
+      "number": 1,
+      "exit_code": 1,
+      "elapsed_seconds": 0.020427304,
+      "result": "resolver rejection: multi-argument measure constants cannot vary in recursive calls"
+    },
+    {
+      "number": 2,
+      "exit_code": 1,
+      "elapsed_seconds": 23.596814858,
+      "result": "no candidate: search attempted to use zero where a List was required"
+    }
+  ],
+  "candidate": null,
+  "notes": "No synthesized candidate exists. Attempt 2 reached synthesis after the exact logical sequence measure was accepted, but failed under its then-declared component set. The final contract adds generic dec for a normal recursive lowering; it was not retried because this item exhausted its two-attempt cap. A candidate must still be mechanically lowered and pass test_generated.ml before being considered fulfilled."
+}

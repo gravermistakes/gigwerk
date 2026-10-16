@@ -1,0 +1,8 @@
+at :: <p :: Int -> a -> Bool> . i:Int -> xs:List a <p> -> {Maybe a <p i _0>|(0 <= i && i < len xs ==> isJust _v) && (0 <= i && len xs <= i ==> !isJust _v)}
+contract.sq:43: Error:
+  Cannot find sufficiently strong refinements
+  when checking zero ::
+  {Int|_v >= 0 && _v < i} in
+  \i . \xs . 
+      match at zero ?? with
+

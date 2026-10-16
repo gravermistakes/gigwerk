@@ -1,0 +1,30 @@
+{
+  "id": "025_generate_permutations",
+  "title": "Generate a Random Permutation of the Elements of a List",
+  "contract_status": "requires_features",
+  "synthesis_status": "not_attempted",
+  "specification_strength": "full",
+  "elapsed_seconds": 0,
+  "entrypoints": ["permutation"],
+  "required_features": [
+    "Polymorphic occurrence-sensitive multiset/bag equality for lists, rather than a set or length approximation.",
+    "Effectful/probabilistic random selection of a finite-list occurrence without changing the public unary OCaml interface.",
+    "Effect-aware verification; finite-run tests can check individual outputs but cannot prove randomness or an unstated distribution."
+  ],
+  "semantic_obligations": [
+    "permutation has exact OCaml interface 'a list -> 'a list.",
+    "Every output contains exactly the input occurrences, including duplicate multiplicities, and no others.",
+    "Every output has the same length as its input.",
+    "Ordering is random; no fixed output order is required or inferred from the illustrative official example.",
+    "Do not add a seed, RNG state, option, exception, or altered interface not stated by the source."
+  ],
+  "provenance": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/025_generate_permutations.md",
+    "blob_sha": "5103b3d0bce1c43fd5c3e66a0e65c4aedb1c60cf",
+    "solution_section": "quarantined before inspection"
+  },
+  "attempts": [],
+  "notes": "No contract.sq or synthesis logs are produced. A length/set-only Synquid refinement would materially weaken occurrence multiplicity and randomness, so running it would not be a valid synthesis attempt."
+}

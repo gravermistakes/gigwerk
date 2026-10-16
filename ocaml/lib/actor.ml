@@ -1,6 +1,6 @@
 (* The labor tier.
  *
- * A gig runs in a forked child. The parent survives whatever the child does,
+ * A commission runs in a forked child. The parent survives whatever the child does,
  * which is the boundary that every earlier draft of this design lost to its own
  * capability layer -- a Python AST walk defeated by eval, a Lua _ENV defeated
  * by FFI. Here the frozen core is an address-space boundary.
@@ -32,7 +32,7 @@ let apply_limits ~wall_ms =
   let secs = max 1 ((wall_ms + 999) / 1000) in
   ignore (Unix.alarm secs)
 
-let run_gig ~wall_ms ~(work : unit -> string) : outcome =
+let run_commission ~wall_ms ~(work : unit -> string) : outcome =
   let r, w = Unix.pipe () in
   match Unix.fork () with
   | 0 ->
@@ -72,3 +72,75 @@ let run_gig ~wall_ms ~(work : unit -> string) : outcome =
        | Unix.WSIGNALED n, _ -> Crashed (Printf.sprintf "killed by signal %d" n)
        | Unix.WEXITED n, _ -> Crashed (Printf.sprintf "exit %d" n)
        | Unix.WSTOPPED n, _ -> Crashed (Printf.sprintf "stopped %d" n))
+
+(* ------------------------------------------------------ the performance ----
+ *
+ * How a booked actor works through its part. Three parties, three questions:
+ *
+ *   the actor     which input next. Its own policy, from its own state. Nobody
+ *                 hands it the next move, so nobody is directing.
+ *   the machine   whether that input exists from here. A move δ does not
+ *                 declare is a breach, not an unknown.
+ *   obligations   whether the move is affordable and granted. Charged BEFORE
+ *                 the move runs, at least one unit per move, so the walk
+ *                 terminates on budget even if the actor never stops choosing.
+ *
+ * Arrival at a terminal phase is a condition read off the machine, never a
+ * report from the actor. *)
+
+type 's halt =
+  | Arrived of { at : string; state : 's }
+  | Stopped of { at : string; input : string; why : string }
+  | No_edge of { at : string; input : string }
+  | Unchosen of { at : string }
+  | Breached of { at : string; input : string; breach : Obligations.breach }
+
+type 's performance = {
+  halt : 's halt;
+  trail : string list;          (* phases arrived at, in order, initial first *)
+  obligations : Obligations.t;  (* as left after every charge *)
+}
+
+let halt_to_string = function
+  | Arrived { at; _ } -> Printf.sprintf "arrived at %s" at
+  | Stopped { at; input; why } -> Printf.sprintf "stopped at %s on %s: %s" at input why
+  | No_edge { at; input } ->
+      Printf.sprintf "chose %S at %s, which the machine does not declare" input at
+  | Unchosen { at } -> Printf.sprintf "chose nothing at non-terminal %s" at
+  | Breached { at; input; breach } ->
+      Printf.sprintf "%s before %s at %s" (Obligations.breach_to_string breach) input at
+
+let run_machine (m : Phases.machine) ~obligations ~now ~cost ~choose ~perform s0 =
+  let terminal name =
+    List.exists (fun (p : Phases.phase) -> p.Phases.name = name && p.Phases.terminal)
+      m.Phases.states
+  in
+  let rec charge ob = function
+    | [] -> Ok ob
+    | a :: rest ->
+        (match Obligations.spend ob ~now:(now ()) ~action:a with
+         | Ok ob -> charge ob rest
+         | Error e -> Error e)
+  in
+  let finish halt trail ob = { halt; trail = List.rev trail; obligations = ob } in
+  let rec go at s ob trail =
+    if terminal at then finish (Arrived { at; state = s }) trail ob
+    else
+      match choose s at with
+      | None -> finish (Unchosen { at }) trail ob
+      | Some input ->
+          match Phases.step m at input with
+          | None -> finish (No_edge { at; input }) trail ob
+          | Some next ->
+              let charged = match cost input with
+                | [] -> Obligations.tick ob ~now:(now ())
+                | actions -> charge ob actions
+              in
+              match charged with
+              | Error breach -> finish (Breached { at; input; breach }) trail ob
+              | Ok ob ->
+                  match perform s input with
+                  | Error why -> finish (Stopped { at; input; why }) trail ob
+                  | Ok s -> go next s ob (next :: trail)
+  in
+  go m.Phases.initial s0 obligations [ m.Phases.initial ]

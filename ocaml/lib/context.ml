@@ -3,7 +3,7 @@
  * This is the wiring MEMORY.md's band 2 was missing: `Working` had the two-band
  * shape and the condensing process, but nothing in the running program handed
  * it real material. Here it is handed the store, so `gigwerk context` assembles
- * the same context the composer would carry into a turn.
+ * the same context the agent would carry into a turn.
  *
  * WHO IS PINNED, AND WHY IT IS NOT A RANKING. Soul and live rulings never
  * contract and never evict. Not because they scored highest -- they are not in
@@ -31,7 +31,7 @@ let soul_pinned () =
      multi-line soul into one "row" per line, match none of them, and pin
      nothing -- silently dropping the one thing that must never fall out of the
      window. Any real soul body is multi-line. *)
-  match Store.query_scalar "SELECT body FROM v_soul_current LIMIT 1" with
+  match Agency.query_scalar "SELECT body FROM v_soul_current LIMIT 1" with
   | Some body when String.trim body <> "" ->
       [ Working.item ~pinned:true ~salience:1.0 (String.trim body) ]
   | _ -> []
@@ -43,7 +43,7 @@ let soul_pinned () =
 let ruling_pinned () =
   (* query_column: one ruling per line, and a '|' inside a ruling's text must
      not split it into a row this code then fails to match. *)
-  Store.query_column
+  Agency.query_column
     "SELECT subject || ' ' || predicate || ' ' || object FROM mem_ruling \
      WHERE retired_at IS NULL ORDER BY at"
   |> List.filter_map (fun s ->

@@ -1,0 +1,16 @@
+{
+  "attempt_count": 2,
+  "attempt_1": {
+    "exit_code": 1,
+    "elapsed_seconds": 0.831,
+    "contract_form": "trusted external eq declaration"
+  },
+  "resolve_only": {
+    "exit_code": 0
+  },
+  "attempt_2": {
+    "exit_code": 1,
+    "elapsed_seconds": 0.07,
+    "contract_form": "eq and compress are synthesis holes; no manual implementation"
+  }
+}

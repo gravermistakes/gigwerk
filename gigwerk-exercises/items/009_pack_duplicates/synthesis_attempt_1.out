@@ -1,0 +1,2 @@
+contract.sq:21: Resolution Error:
+  Type parameters of measure flatten must be the same as in the datatype declaration

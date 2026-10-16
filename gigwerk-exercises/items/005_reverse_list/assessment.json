@@ -1,0 +1,53 @@
+{
+  "id": "005_reverse_list",
+  "title": "Reverse a List",
+  "contract_status": "ready",
+  "specification_strength": "full",
+  "synthesis_status": "rejected",
+  "elapsed_seconds": 2.296,
+  "required_features": [
+    "Parametric algebraic datatypes for finite lists",
+    "Logical measures with algebraic-datatype-valued outputs",
+    "Exact equality refinements over logical list values",
+    "Structurally terminating recursive synthesis"
+  ],
+  "semantic_obligations": [
+    "rev [] = []",
+    "For input [x1; ...; xn], output is exactly [xn; ...; x1]",
+    "Preserve every occurrence, including duplicate multiplicity",
+    "Preserve no input order except the required total reversal",
+    "Remain parametric in the element type: elements are neither compared nor changed",
+    "Do not depend on List.rev, List.length, List.append, effects, mutable state, randomness, or partial/error behavior"
+  ],
+  "entrypoints": [
+    "rev : 'a list -> 'a list"
+  ],
+  "attempts": [
+    {
+      "number": 1,
+      "elapsed_seconds": 0.966,
+      "exit_code": 1,
+      "timeout_seconds": 60,
+      "outcome": "rejected",
+      "contract_variant": "binary cat measure + exact reverseSpec",
+      "diagnostic": "Synquid started the append goal, then exited while exploring an ill-typed speculative match: Cannot match shape 'a' with shape 'List (A2)' when checking ys :: List List A2."
+    },
+    {
+      "number": 2,
+      "elapsed_seconds": 1.33,
+      "exit_code": 1,
+      "timeout_seconds": 60,
+      "outcome": "rejected",
+      "contract_variant": "snocSpec measure + exact reverseSpec",
+      "diagnostic": "Synquid started the snoc goal, then exited while exploring an ill-typed speculative match: Cannot match shape 'a' with shape 'List (A2)' when checking xs :: List List A2."
+    }
+  ],
+  "candidate": null,
+  "test_evidence": {
+    "test_suite": "test_generated.ml",
+    "negative_control_stub": "A separately labelled failwith(\"unsynthesized\") test stub compiled with the suite; the executable exited 1 with eight expected semantic assertion failures.",
+    "candidate_tested": false,
+    "reason": "Neither synthesis attempt emitted a candidate. A Synquid candidate, if obtained later, still requires mechanical OCaml lowering and this independent OCaml semantic suite before it can be claimed fulfilled."
+  },
+  "notes": "The final contract is full-strength: it uses logical List-valued reverseSpec equality rather than length/set contracts. Both attempts were externally limited by timeout 60s; neither approached the cap. No --partial, nontermination mode, disabled checks, model call, candidate translation, or production implementation was used."
+}

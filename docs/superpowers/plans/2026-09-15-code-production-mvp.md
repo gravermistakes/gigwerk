@@ -4,7 +4,7 @@
 
 **Goal:** Turn the existing GigWerk OCaml core into a minimal specification-to-code production loop whose generated artifact is compiled and tested against explicit requirements.
 
-**Architecture:** Keep the existing Conditions → Terms → Kit → Actor booking boundary intact. Add a separate code-production domain: a specification is parsed into explicit requirements, requirements become deterministic implementation obligations, an `Actor` implementation produces source files through a narrow interface, and a verifier runs the project's compiler/tests while recording evidence. The first actor is intentionally deterministic and template-backed; no new model abstraction is introduced.
+**Architecture:** Keep the existing Conditions → Obligations → Role → Actor booking boundary intact. Add a separate code-production domain: a specification is parsed into explicit requirements, requirements become deterministic implementation obligations, an `Actor` implementation produces source files through a narrow interface, and a verifier runs the project's compiler/tests while recording evidence. The first actor is intentionally deterministic and template-backed; no new model abstraction is introduced.
 
 **Tech Stack:** OCaml, Dune, Opam, Unix, standard library only for the production path; Alcotest for tests only if already available, otherwise ordinary executable assertions. Generated projects are verified with Dune/OCaml toolchain commands.
 

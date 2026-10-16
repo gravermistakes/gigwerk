@@ -1,0 +1,69 @@
+{
+  "benchmark_id": "001_tail",
+  "title": "Tail of a List",
+  "contract_status": "ready",
+  "specification_strength": "full",
+  "synthesis_status": "rejected",
+  "elapsed_seconds": 0.043696105,
+  "entrypoints": ["last"],
+  "required_features": [
+    "Algebraic finite lists and option-like result datatype",
+    "Parametric abstract refinements over zero-based list positions",
+    "Termination measure len over lists",
+    "Boolean measure over the option-like result",
+    "Linear integer arithmetic/equality in refinements"
+  ],
+  "semantic_obligations": [
+    "For [] return None.",
+    "For every non-empty finite list [x1; ...; xn], return Some xn.",
+    "Select the element at final zero-based position len(xs)-1, not merely any member.",
+    "Preserve order-sensitive behavior in the presence of repeated values.",
+    "Remain polymorphic, pure, deterministic, total over finite lists, and exception-free."
+  ],
+  "contract_model": {
+    "input_relation": "The abstract refinement p i x states that x is at zero-based position i in xs.",
+    "nonempty_result": "A Just result must satisfy p (len xs - 1) value.",
+    "empty_result": "isNothing result == (len xs == 0), so Nothing is permitted exactly for the empty input.",
+    "strength_note": "The positional relation makes this strictly stronger than a length-only or set/membership contract."
+  },
+  "trusted_primitives": [
+    "List/Nil/Cons and Maybe/Nothing/Just data constructors",
+    "Integer arithmetic and equality in Synquid refinements",
+    "true and false refined Boolean declarations used by isNothing"
+  ],
+  "synthesis_attempts": [
+    {
+      "attempt": 1,
+      "command": "timeout --foreground 60s proot -R /home/ubuntu/synquid-runtime/bundle/rootfs -b /home/ubuntu/gigwerk-exercises/items/001_tail:/work -w /work /root/.cabal/bin/synquid contract.sq --output=Plain --print-stats",
+      "external_timeout_seconds": 60,
+      "actual_exit_code": 1,
+      "elapsed_seconds": 0.020063692,
+      "stdout": "contract.sq:26: Resolution Error: Variable x is not in scope",
+      "stderr": "",
+      "diagnosis": "The constructor refinement used x rather than Synquid's refinement value variable _v."
+    },
+    {
+      "attempt": 2,
+      "command": "timeout --foreground 60s proot -R /home/ubuntu/synquid-runtime/bundle/rootfs -b /home/ubuntu/gigwerk-exercises/items/001_tail:/work -w /work /root/.cabal/bin/synquid contract.sq --output=Plain --print-stats",
+      "external_timeout_seconds": 60,
+      "actual_exit_code": 1,
+      "elapsed_seconds": 0.023632413,
+      "stdout": "contract.sq:30: Resolution Error: Variable true is not in scope",
+      "stderr": "",
+      "diagnosis": "This Synquid runtime requires explicit refined declarations for true and false before they are used in a measure body."
+    }
+  ],
+  "post_attempt_contract_change": "After attempt 2, contract.sq added the standard true/false refined declarations seen in the pinned runtime's List-Null.sq. The target remains `last = ??`. No third attempt was run because the item limit is two attempts.",
+  "candidate": null,
+  "test_evidence": {
+    "test_file": "test_generated.ml",
+    "oracle_isolation": "The independently written oracle_last occurs only in the OCaml test; it is absent from contract.sq and no implementation was emitted.",
+    "negative_control": "An explicitly labelled failwith unsynthesized stub compiled with the tests and produced the expected labelled semantic failure; this is not a candidate implementation.",
+    "backend_test_status": "Not run: no synthesized candidate was produced and no OCaml lowering was authored."
+  },
+  "caveats": [
+    "A synthesis candidate is not available; no claim is made that a generated OCaml program compiles or satisfies the tests.",
+    "The final true/false declaration correction was not re-run through Synquid because the two-attempt limit was exhausted.",
+    "The benchmark concerns finite OCaml lists only; it has no randomness, effects, mutable state, string-specific, float-specific, or coinductive/infinite-stream requirement."
+  ]
+}

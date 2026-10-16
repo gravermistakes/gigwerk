@@ -1,0 +1,159 @@
+(* Roles — what an actor is assembled FROM.
+ *
+ * The AI reads the fact store, retrieves to work out what is needed, and then
+ * assembles from roles. A role is not a preset: a preset is a finished actor you
+ * copy, a role is a set of parts that go together and a statement of what they
+ * cannot do.
+ *
+ * Every role declares its grants, and no role may declare a agent-only grant.
+ * That is checked here rather than left to whoever writes the role -- a role is
+ * the thing that gets reused, so a mistake in one propagates into every actor
+ * built from it. *)
+
+type t = {
+  name        : string;
+  purpose     : string;
+  grants      : Grants.action list;
+  state_shape : string;
+  ladder      : Phases.ladder;      (* the tool declares its own phases *)
+  (* A role may declare the transition relation its ladder only implies. When
+     it does, validation stops asking whether a terminal phase was DECLARED and
+     starts asking whether one is REACHABLE, which is the property the comment
+     below has always claimed. Optional so existing roles are unaffected. *)
+  machine     : Phases.machine option;
+  budget_ms   : int;
+  (* How many Obligations-countable actions this script takes to reach its terminal
+     phase. Declared by the TOOL, for the same reason the ladder is: the role is
+     the thing that knows its own shape. A agent that got to name this could
+     name a number large enough that the per-commission bound stops bounding anything,
+     and then `budget` is a figure in a record nobody reads. *)
+  budget_actions : int;
+}
+
+type rejection =
+  | Composer_only of Grants.action
+  | No_terminal_phase
+  | Terminal_unreachable
+  | Dead_states of string list
+  | Nondeterministic
+  | Empty_purpose
+  | Cannot_act of { grants : int; budget_actions : int }
+
+let rejection_to_string = function
+  | Composer_only a ->
+      Printf.sprintf "role declares agent-only grant %s"
+        (Grants.action_to_string a)
+  | No_terminal_phase -> "role's ladder has no terminal phase, so it can never finish"
+  | Terminal_unreachable ->
+      "role declares a terminal phase but no path of transitions arrives at one, \
+       so it burns its allowance and reports budget_exceeded instead"
+  | Dead_states names ->
+      Printf.sprintf "role declares states nothing can reach: %s"
+        (String.concat ", " names)
+  | Nondeterministic ->
+      "two transitions share a (state, input); an actor is a DFA or it is an \
+       actor with an oracle"
+  | Empty_purpose -> "role has no stated purpose"
+  | Cannot_act { grants; budget_actions } ->
+      Printf.sprintf
+        "role claims %d grants but is allotted %d actions, so it can never use them"
+        grants budget_actions
+
+(* A role that cannot finish is worse than one that fails: it consumes budget
+   until Obligations cuts it off, and the outcome reads as budget_exceeded rather
+   than as the design error it is. *)
+let validate k =
+  match List.find_opt Grants.agent_only k.grants with
+  | Some a -> Error (Composer_only a)
+  | None ->
+      if not (List.exists (fun (p : Phases.phase) -> p.Phases.terminal) k.ladder)
+      then Error No_terminal_phase
+      else if (match k.machine with
+               | Some m -> not (Phases.deterministic m)
+               | None -> false)
+      then Error Nondeterministic
+      else if (match k.machine with
+               | Some m -> not (Phases.terminal_reachable m)
+               | None -> false)
+      then Error Terminal_unreachable
+      else if (match k.machine with
+               | Some m -> Phases.unreachable_states m <> []
+               | None -> false)
+      then Error (Dead_states
+                    (match k.machine with
+                     | Some m -> Phases.unreachable_states m
+                     | None -> []))
+      else if String.trim k.purpose = "" then Error Empty_purpose
+      (* Same failure class as No_terminal_phase, one layer down: a role that may
+         act but has no allowance to act runs until Obligations cuts it off, and the
+         ledger reads budget_exceeded rather than the design error it is. A role
+         with no grants at all legitimately needs no allowance -- echo. *)
+      else if k.grants <> [] && k.budget_actions < 1 then
+        Error (Cannot_act { grants = List.length k.grants;
+                            budget_actions = k.budget_actions })
+      else Ok k
+
+let make ~name ~purpose ~grants ~state_shape ~ladder ~budget_ms ~budget_actions =
+  validate { name; purpose; grants; state_shape; ladder; machine = None;
+             budget_ms; budget_actions }
+
+(* A role that knows its transition relation declares it here and gets the
+   reachability, determinism and dead-state checks instead of the weaker
+   "a terminal phase appears in the list". *)
+let make_with_machine ~name ~purpose ~grants ~state_shape ~machine ~budget_ms
+    ~budget_actions =
+  validate { name; purpose; grants; state_shape;
+             ladder = Phases.states_of machine; machine = Some machine;
+             budget_ms; budget_actions }
+
+(* --------------------------------------------------------------- stock ---- *)
+
+let critic = make ~name:"critic"
+  ~purpose:"read an artifact and emit a deterministic verdict"
+  ~grants:[ Grants.Read; Grants.Query ]
+  ~state_shape:"verdict_log" ~ladder:Phases.critic_ladder ~budget_ms:5000
+  (* read the artifact, query the ledger for the db name it reports. two. *)
+  ~budget_actions:2
+
+let echo = make ~name:"echo"
+  ~purpose:"prove delivery, step and outcome with no capability at all"
+  ~grants:[] ~state_shape:"last_message"
+  ~ladder:Phases.echo_ladder ~budget_ms:250 ~budget_actions:0
+
+(* Deliberately invalid, kept as a fixture: the mistake a role author makes is
+   granting the actor the retrieval the agent used to design it. *)
+let bad_researcher = make ~name:"researcher"
+  ~purpose:"look things up and summarise"
+  ~grants:[ Grants.Read; Grants.Retrieve ]
+  ~state_shape:"notes" ~ladder:Phases.critic_ladder ~budget_ms:60000
+  ~budget_actions:20
+
+(* Grants Write, whose capability is requires_booking=1 in the seed. Exists to
+   exercise the QUEUE path: Conditions returns Queue before obligations are issued, so
+   this role's own numbers never get consulted. There is deliberately no script
+   wired for it -- a queued composition that also had a runner would let a
+   mistake in the gate turn straight into a side effect. *)
+let scribe = make ~name:"scribe"
+  ~purpose:"write an artifact beneath the capability root"
+  ~grants:[ Grants.Write ]
+  ~state_shape:"notes" ~ladder:Phases.scribe_ladder
+  ~budget_ms:10000 ~budget_actions:3
+
+(* The part a synthesis actor is cast to. The machine is the one phases.ml
+   transcribed from the harness's classify, so what "done" means here is
+   tests_passed, never fulfilled: that verdict is on the material.
+   Three moves read, run and write (3 units each), two only run (1 each). *)
+let writing = make_with_machine ~name:"writing"
+  ~purpose:"derive an OCaml module from a part's own tests and deliver it \
+            once the part's own check passes"
+  ~grants:[ Grants.Read; Grants.Write; Grants.Spawn ]
+  ~state_shape:"material_dir" ~machine:Phases.writer_machine
+  ~budget_ms:1_200_000 ~budget_actions:5
+
+let synthesis = make_with_machine ~name:"synthesis"
+  ~purpose:"derive a program from a refinement-typed contract and carry it \
+            through lowering, the required interface, compilation and the \
+            production's own test"
+  ~grants:[ Grants.Read; Grants.Write; Grants.Spawn ]
+  ~state_shape:"material_dir" ~machine:Phases.synthesis_machine
+  ~budget_ms:300_000 ~budget_actions:11

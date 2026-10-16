@@ -1,0 +1,25 @@
+-- Benchmark contract: OCaml exercise 005, Reverse a List.
+-- Exact sequence semantics; no set/length-only weakening.
+-- All executable functions below are synthesis holes.
+
+data List a where
+  Nil :: List a
+  Cons :: x: a -> xs: List a -> List a
+
+-- snocSpec x xs is xs followed by x.
+measure snocSpec :: x: a -> List a -> List a where
+  Nil -> Cons x Nil
+  Cons y ys -> Cons y (snocSpec x ys)
+
+-- reverseSpec is exact order reversal, retaining each occurrence.
+measure reverseSpec :: List a -> List a where
+  Nil -> Nil
+  Cons x xs -> snocSpec x (reverseSpec xs)
+
+-- Not trusted: a helper required to be synthesized.
+snoc :: x: a -> xs: List a -> {List a | _v == snocSpec x xs}
+snoc = ??
+
+-- Required benchmark entrypoint; not trusted and not implemented here.
+rev :: xs: List a -> {List a | _v == reverseSpec xs}
+rev = ??

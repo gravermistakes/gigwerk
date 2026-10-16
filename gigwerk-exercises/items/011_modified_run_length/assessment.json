@@ -1,0 +1,54 @@
+{
+  "id": "011_modified_run_length",
+  "title": "Modified Run-Length Encoding",
+  "contract_status": "ready",
+  "specification_strength": "full",
+  "synthesis_status": "runtime_error",
+  "elapsed_seconds": 0.055,
+  "attempts": [
+    {
+      "number": 1,
+      "exit_code": 1,
+      "elapsed_seconds": 0.021,
+      "limit_seconds": 60,
+      "result": "Resolver error: Type parameters of measure same_head must be the same as in the datatype declaration.",
+      "disposition": "Corrected by introducing RleList a so each measure's final datatype argument carries that datatype's own parameter list."
+    },
+    {
+      "number": 2,
+      "exit_code": 1,
+      "elapsed_seconds": 0.034,
+      "limit_seconds": 60,
+      "result": "Resolver error: Predicate or measure inc is undefined.",
+      "disposition": "Corrected in contract.sq by replacing the executable-only inc reference in the logical measure with built-in arithmetic n + 1. No third attempt was run: the item limit is two reasoned attempts."
+    }
+  ],
+  "final_contract_validation": "The retained contract.sq incorporates the second correction but was not submitted for a third run, by design. It is therefore a full source-level contract awaiting a later bounded validation/synthesis invocation, not a synthesized candidate.",
+  "semantic_obligations": [
+    "Encode the unique maximal left-to-right partition of the input into nonempty adjacent-equality runs.",
+    "Emit One x if and only if that run's length is exactly 1.",
+    "Emit Many (n, x) if and only if that run's length is n >= 2.",
+    "Preserve complete input order, each run boundary, and multiplicity; never merge separated equal values.",
+    "Return [] exactly for empty input.",
+    "Retain exact stated public OCaml signature: type 'a rle = One of 'a | Many of int * 'a; encode : 'a list -> 'a rle list."
+  ],
+  "required_features": [
+    "Parametric algebraic datatypes and structural recursion.",
+    "Datatype-valued first-order logical measures and equality over those values.",
+    "A trusted generic equality decision for arbitrary element values.",
+    "Integer arithmetic sufficient for run-count promotion."
+  ],
+  "not_required": [
+    "Randomness or a seed",
+    "Effects or mutable state",
+    "Infinite/coinductive streams",
+    "Failure, option, or result behavior",
+    "String- or float-specific operations"
+  ],
+  "test_evidence": {
+    "file": "test_generated.ml",
+    "scope": "official example; empty/singleton/all-equal/mixed-boundary edge cases; exhaustive ternary inputs through length 6; deliberately incorrect negative-control expectation",
+    "negative_control_stub": "An explicitly labelled failwith \"unsynthesized\" stub compiled against the test file and exited 2 with Failure(\"unsynthesized\"), demonstrating the suite rejects an absent implementation."
+  },
+  "candidate_claim": "None. There is no synthesized or manually authored final OCaml implementation in this item."
+}

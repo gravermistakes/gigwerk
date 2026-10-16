@@ -1,0 +1,60 @@
+{
+  "id": "004",
+  "title": "Length of a List",
+  "contract_status": "ready",
+  "specification_strength": "full",
+  "synthesis_status": "rejected",
+  "elapsed_seconds": 0.103,
+  "attempts": [
+    {
+      "attempt": 1,
+      "exit_code": 1,
+      "elapsed_seconds": 0.024,
+      "out_file": "synthesis.attempt1.out",
+      "err_file": "synthesis.attempt1.err",
+      "result": "rejected",
+      "diagnostic": "Datatype Nat is undefined in sort Nat; corrected the measure codomain to the pinned repository's explicit refinement form before one final attempt."
+    },
+    {
+      "attempt": 2,
+      "exit_code": 1,
+      "elapsed_seconds": 0.079,
+      "out_file": "synthesis.out",
+      "err_file": "synthesis.err",
+      "result": "rejected",
+      "diagnostic": "The runtime generated an ill-shaped match attempt and rejected it: Cannot match shape 'a' with shape 'List (A2)' while checking xs. No candidate was produced."
+    }
+  ],
+  "required_features": [
+    "finite algebraic data types",
+    "structural termination measures",
+    "integer refinements and equality",
+    "recursive synthesis with pattern matching",
+    "sound polymorphic constructor instantiation during synthesis"
+  ],
+  "semantic_obligations": [
+    "length [] = 0",
+    "for every finite xs, length xs equals the count of xs cons cells",
+    "each duplicate occurrence is counted separately",
+    "result is nonnegative",
+    "behavior is polymorphic and independent of element values",
+    "tail recursion is optional, not an acceptance condition",
+    "no delegation to OCaml List.length"
+  ],
+  "source": {
+    "repository": "ocaml/ocaml.org",
+    "commit": "7b4c04b90b5433050bcecb25772880bc48bae4d0",
+    "path": "data/exercises/004_length_of_list.md",
+    "content_sha": "70816f08b0b11eb69004dd14688ba8a00c3fdcb8",
+    "solution_section": "quarantined; not read, used, or reproduced"
+  },
+  "test_evidence": {
+    "negative_control": "A scratch-only Generated.length implementation that always returns 0 compiled with test_generated.ml and exited 2 at the official nonempty example: expected 3, got 0.",
+    "candidate_ocaml_tests": "not run: Synquid produced no candidate and no OCaml implementation was authored."
+  },
+  "limitations": [
+    "The second attempt demonstrates a runtime synthesis rejection, not a proof that the full refinement contract is unsatisfiable.",
+    "A future backend must mechanically lower any candidate and run test_generated.ml; Synquid success alone would still be only candidate status.",
+    "The contract covers finite inductive lists only; OCaml lists are finite strict values."
+  ]
+}

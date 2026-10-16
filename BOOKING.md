@@ -1,20 +1,20 @@
 # The booking path
 
-`Conditions → Terms → Kit → Actor booked to match`
+`Conditions → Obligations → Role → Actor booked to match`
 
     gigwerk propose critic --artifact notes.txt --grant read,query
 
 ## Why that order, since it is not the order the types suggest
 
-My instinct was Kit → Terms: the kit knows which actions it needs, so let it hand
-those to Terms. That is backwards, and the way it is backwards is the same
-failure the whole design exists to prevent. **If the kit supplies the budget, the
-thing that runs inside the bound is the thing that set the bound.** A kit author
+My instinct was Role → Obligations: the role knows which actions it needs, so let it hand
+those to Obligations. That is backwards, and the way it is backwards is the same
+failure the whole design exists to prevent. **If the role supplies the budget, the
+thing that runs inside the bound is the thing that set the bound.** A role author
 who wants more room writes a bigger number, and the number stops being a bound
 and becomes a declaration.
 
-So the envelope is authored *above* the kit, and the kit is then checked to see
-whether it fits inside. Terms first, kit second, and a kit needing an action the
+So the envelope is authored *above* the role, and the role is then checked to see
+whether it fits inside. Obligations first, role second, and a role needing an action the
 envelope does not grant is refused rather than accommodated.
 
 This is the discipline `Caps` applies to space — the dirfd has no parent —
@@ -27,45 +27,45 @@ proposal would fit by construction. Which is why this refuses:
 
     $ gigwerk propose critic --artifact notes.txt
     decision  refuse
-    kit needs actions the envelope does not grant: read, query
+    role needs actions the envelope does not grant: read, query
 
 The refusal *is* the mechanism working.
 
 ## What "booked to match" means, and both halves are checked
 
 **1. The actor's grants are the KIT's, not the envelope's.** Envelope permits
-read+write+spawn+query, kit only reads and queries → the booked actor holds read
+read+write+spawn+query, role only reads and queries → the booked actor holds read
 and query. Least authority, computed at booking, not trusted at runtime. This is
 the single most important line in `booking.ml`; a test proves the narrowing by
 booking a deliberately over-wide envelope and asserting the two actions the actor
 must *not* have.
 
-**2. The wall clock is `min(kit ask, terms remaining)`.** Whichever is tighter,
-always, resolved before the fork so no code inside the gig participates.
+**2. The wall clock is `min(role ask, obligations remaining)`.** Whichever is tighter,
+always, resolved before the fork so no code inside the commission participates.
 
 ## The fork problem, stated rather than papered over
 
-A gig runs in a forked child. Terms is an immutable OCaml value, so
-`Terms.spend` inside the child mutates a copy that dies with the child — the
+A commission runs in a forked child. Obligations is an immutable OCaml value, so
+`Obligations.spend` inside the child mutates a copy that dies with the child — the
 parent never learns what was consumed. A per-action counter therefore **cannot**
-be a global bound across gigs, and pretending otherwise would be a budget figure
+be a global bound across commissions, and pretending otherwise would be a budget figure
 nobody reads.
 
-Two Terms values instead, each bounding what it can actually bound:
+Two Obligations values instead, each bounding what it can actually bound:
 
 | | held by | bounds | dies with the child? |
 |---|---|---|---|
 | `envelope` | the parent | bookings, debited once before the fork | no — that is the point |
-| `gig_terms` | the child | actions within one gig | yes, and that is correct |
+| `commission_obligations` | the child | actions within one commission | yes, and that is correct |
 
-`gig_terms` dying is not a leak: it was never a running total. The wall clock
+`commission_obligations` dying is not a leak: it was never a running total. The wall clock
 (SIGALRM) is the one bound the child cannot lie about, which is why it is the
 backstop rather than the accountant.
 
 ## Phases cross the fork, which is the point
 
 The child reports `PHASE \x1f PAYLOAD` on the pipe. The **parent** checks the
-phase against the kit's ladder. An undeclared phase is a breach detected by the
+phase against the role's ladder. An undeclared phase is a breach detected by the
 reader, not a self-report the reader trusts. `\x1f` because the verdict encoding
 already owns `|`, and only the first separator splits — a payload cannot forge a
 second transition.
@@ -93,7 +93,7 @@ Neither was visible from any module in isolation.
 **A transient refusal permanently killed a shape.** `booking_verdict` was doing
 two incompatible jobs: the audit log of every refusal *and* the dead set that
 `not_refused_before` reads. So refusing a proposal because the envelope the human
-authored *this time* did not cover the kit wrote a `refuse` row against the
+authored *this time* did not cover the role wrote a `refuse` row against the
 **form** — and the form, whose identity deliberately ignores envelopes, could
 never book again. One `attaches_to` column fixes the whole class:
 
@@ -103,7 +103,7 @@ never book again. One `attaches_to` column fixes the whole class:
 - `proposal` — the envelope was too narrow, expired, exhausted; or the
   adversarial judge outweighed the proposer *this time*; or a human was asked.
   Says nothing about the shape. **One skeptical judge cannot kill a form.**
-- `kit` — the kit is malformed; every composition built from it is affected, the
+- `role` — the role is malformed; every composition built from it is affected, the
   composition that reached for it is not itself dead.
 
 `Conditions` makes the composition/proposal call itself rather than having it
@@ -123,22 +123,22 @@ testing* — dropping the length prefix left every other identity test green.
     $ gigwerk propose critic --artifact notes.txt --grant read,query
     form      0db8c5c23fc175db
     decision  book
-    gig_terms critic@0db8c5c2...[read,query] budget=2
+    commission_obligations critic@0db8c5c2...[read,query] budget=2
     matched   yes
     phase     verdict_emitted (settled)
 
-    $ gigwerk review --gig 1 --held yes --critic pass --judge clear
+    $ gigwerk review --commission 1 --held yes --critic pass --judge clear
     recorded review 1 for form 0db8c5c23fc175db
     band      c_needs_review  certainty 0.0667      <- cold start pins the
                                                        denominator at 15
     ... fourteen more clean reviews ...
     band      a_autopass      certainty 1.0000
 
-    $ gigwerk review --gig 16 --held no ...
+    $ gigwerk review --commission 16 --held no ...
     band      b_last_review   certainty 0.9333      <- one recent failure blocks
                                                        autopass at 93%
 
-    $ gigwerk review --gig 17 --held yes --judge refuted
+    $ gigwerk review --commission 17 --held yes --judge refuted
     band      b_last_review   certainty 0.8667      <- the judge burns the slot
                                                        despite a held prediction
 
@@ -155,8 +155,8 @@ inserting nothing.
 | `Refused` (structural) | composition | a widened scope, a missing capability, two writers, an unresolved shape, an actor claiming `Retrieve` |
 | `Refused` (adversarial) | proposal | `refutation ≥ support` with refutation > 0 — ties refuse |
 | `Queued` | proposal | a claimed capability has `requires_booking = 1` and no human verdict exists |
-| `Envelope_carries_composer_grant` | proposal | `--grant retrieve` — the envelope is what gets narrowed into the actor's terms, so the check belongs one layer above the kit |
+| `Envelope_carries_composer_grant` | proposal | `--grant retrieve` — the envelope is what gets narrowed into the actor's obligations, so the check belongs one layer above the role |
 | `Envelope_dead` | proposal | expired, or its booking budget is spent |
-| `Kit_rejected` | kit | composer-only grant, no terminal phase, empty purpose, grants with no action allowance |
+| `Kit_rejected` | role | agent-only grant, no terminal phase, empty purpose, grants with no action allowance |
 | `Kit_exceeds_envelope` | proposal | names exactly the missing actions |
-| `No_wall_left` | proposal | a kit asking for zero wall clock; the terms side cannot reach zero because `Terms` is second-granular and `live` refuses expiry first |
+| `No_wall_left` | proposal | a role asking for zero wall clock; the obligations side cannot reach zero because `Obligations` is second-granular and `live` refuses expiry first |
