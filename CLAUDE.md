@@ -93,6 +93,14 @@ it lacks is worse than one asserting nothing; that is why the README carries a
 has not been given, ask for it in a batch, or leave it open and say so. Inventing
 it and presenting it back as settled wastes the only time that matters.
 
+**Never reinvent the wheel. Book someone who already makes wheels.** If a piece
+of GigWerk turns out to be a queue, a DAG, a package manager, a compiler, a
+state machine, a theorem prover, a workflow engine or a bus, call it that. What
+has to survive the bus test is the composition (cognitive representation of a
+problem, solution-blind executable contract, booking of deterministic
+machinery, machine synthesis or inference, independent technical and intent
+acceptance, institutional memory), not a renaming of the parts.
+
 **Authorship.** No linking sessions. No cron jobs. No timed bringing the session
 online. Either take authorship or do not; there is no "generated" terminology.
 
