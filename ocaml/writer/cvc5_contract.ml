@@ -194,6 +194,10 @@ let rec ocaml = function
   | List [ Atom c; x ] when String.length c >= 3 && String.sub c 0 3 = "val" ->
       Printf.sprintf "(match %s with Some v -> v | None -> raise Not_found)" (ocaml x)
   | List [ Atom c; x ] when String.length c >= 4 && String.sub c 0 4 = "some" -> Printf.sprintf "(Some %s)" (ocaml x)
+  | List [ Atom "let"; List binds; body ] ->
+      List.fold_right (fun b acc -> match b with
+          | List [ Atom v; e ] -> Printf.sprintf "(let %s = %s in %s)" v (ocaml e) acc
+          | _ -> failwith "a malformed let") binds (ocaml body)
   | List [ Atom "ite"; c; a; b ] -> Printf.sprintf "(if %s then %s else %s)" (ocaml c) (ocaml a) (ocaml b)
   | List [ Atom "-"; a ] -> Printf.sprintf "(- %s)" (ocaml a)
   | List [ Atom "not"; a ] -> Printf.sprintf "(not %s)" (ocaml a)
