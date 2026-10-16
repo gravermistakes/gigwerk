@@ -93,8 +93,8 @@ let replay (p : Transcript.part) md source =
                   ^ (if String.length out < 600 then " / " ^ out else ""))
 
 (* Fresh inputs, the written definitions and the Solution side by side. *)
-let differential (p : Transcript.part) ~examples ~source ~reference ~slug ~targets =
-  Verify.state := Random.State.make [| 0x5eed; Hashtbl.hash slug |];
+let differential ?(salt = "") ?(per_value = 200) (p : Transcript.part) ~examples ~source ~reference ~slug ~targets =
+  Verify.state := Random.State.make [| 0x5eed; Hashtbl.hash slug; Hashtbl.hash salt |];
   let decls = p.Transcript.decls in
   let calls = List.concat_map (fun (name, ty) ->
       let exs = List.filter_map (fun (t, ex) -> if t = name then Some ex else None) examples in
@@ -102,7 +102,7 @@ let differential (p : Transcript.part) ~examples ~source ~reference ~slug ~targe
       let labels = List.map fst args in
       (* concrete argument types for generation: a rigid 'a draws ints *)
       List.map (fun inp -> (name, Verify.call_source ~name ~labels inp, inp))
-        (Verify.inputs_for decls { Iface.vname = name; vty = ty } exs 200)) targets in
+        (Verify.inputs_for decls { Iface.vname = name; vty = ty } exs per_value)) targets in
   if calls = [] then Error "no input could be generated"
   else
     let iface = { Iface.decls; values = List.map (fun (n, t) -> { Iface.vname = n; vty = t }) targets;
@@ -120,21 +120,24 @@ let differential (p : Transcript.part) ~examples ~source ~reference ~slug ~targe
     let wt = run (decl_src ^ "\n" ^ source) and rt = run (decl_src ^ "\n" ^ reference) in
     if rt = [] then Error "the Solution did not run beside the generated calls"
     else
-      let compared = ref 0 and agreed = ref 0 and dis = ref [] and samples = ref [] in
+      let compared = ref 0 and agreed = ref 0 and dis = ref [] and samples = ref [] and misses = ref [] in
       List.iteri (fun i (name, src, inp) ->
           let id = string_of_int i in
           match List.assoc_opt id rt, List.assoc_opt id wt with
           | Some rv, _ when String.length rv > 0 && rv.[0] = '!' -> ()
           | Some rv, w ->
               incr compared;
-              (match Literal.of_string_opt rv with
+              let answer = Literal.of_string_opt rv in
+             (match answer with
                | Some v -> samples := (name, inp, v) :: !samples | None -> ());
+             let miss () = match answer with Some v -> misses := (name, inp, v) :: !misses | None -> () in
               (match w with
                | Some wv when Verify.close_enough wv rv -> incr agreed
-               | Some wv -> dis := Printf.sprintf "%s = %s, reference %s" src wv rv :: !dis
-               | None -> dis := Printf.sprintf "%s: no output, reference %s" src rv :: !dis)
+               | Some wv -> miss (); dis := Printf.sprintf "%s = %s, reference %s" src wv rv :: !dis
+               | None -> miss (); dis := Printf.sprintf "%s: no output, reference %s" src rv :: !dis)
           | None, _ -> ()) calls;
-      Ok { Verify.compared = !compared; agreed = !agreed; disagreements = List.rev !dis; samples = List.rev !samples }
+      Ok { Verify.compared = !compared; agreed = !agreed; disagreements = List.rev !dis; samples = List.rev !samples;
+         misses = List.rev !misses }
 
 let solve ?cfg ?library ~path () =
   let md = Iface.read_file path in

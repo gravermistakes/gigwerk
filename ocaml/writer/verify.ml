@@ -18,6 +18,7 @@ type verdict = {
   agreed : int;
   disagreements : string list;   (* call, writer's value, reference's value *)
   samples : (string * Value.t list * Value.t) list;   (* fresh inputs and the reference's answers *)
+  misses : (string * Value.t list * Value.t) list;    (* those of them the written module got wrong *)
 }
 
 (* Random.State with a fixed seed: reproducible, and without the short
@@ -218,8 +219,9 @@ let close_enough a b =
   | Some x, Some y -> Value.equal x y
   | _ -> a = b
 
-let differential ~env ~scratch ~exercise_dir ~slug ~(iface : Iface.t) ~examples ~source ~reference ?(per_value = 300) () =
-  state := Random.State.make [| 0x5eed; Hashtbl.hash slug |];
+let differential ~env ~scratch ~exercise_dir ~slug ~(iface : Iface.t) ~examples ~source ~reference
+    ?(per_value = 300) ?(salt = "") () =
+  state := Random.State.make [| 0x5eed; Hashtbl.hash slug; Hashtbl.hash salt |];
   let decls = iface.Iface.decls in
   let calls = List.concat_map (fun (v : Iface.value_spec) ->
       let exs = List.filter_map (fun (t, ex) -> if t = v.Iface.vname then Some ex else None) examples in
@@ -241,18 +243,21 @@ let differential ~env ~scratch ~exercise_dir ~slug ~(iface : Iface.t) ~examples 
             | Some i -> Some (String.sub line 0 i, String.sub line (i + 1) (String.length line - i - 1))
             | None -> None) l in
         let wt = table wl and rt = table rl in
-        let compared = ref 0 and agreed = ref 0 and dis = ref [] and samples = ref [] in
+        let compared = ref 0 and agreed = ref 0 and dis = ref [] and samples = ref [] and misses = ref [] in
         List.iteri (fun i (name, src, inp) ->
             let id = string_of_int i in
             match List.assoc_opt id rt, List.assoc_opt id wt with
             | Some rv, _ when String.length rv > 0 && rv.[0] = '!' -> ()        (* outside the domain *)
             | Some rv, w ->
                 incr compared;
-                (match Literal.of_string_opt rv with
+                let answer = Literal.of_string_opt rv in
+               (match answer with
                  | Some v -> samples := (name, inp, v) :: !samples | None -> ());
+               let miss () = match answer with Some v -> misses := (name, inp, v) :: !misses | None -> () in
                 (match w with
                  | Some wv when close_enough wv rv -> incr agreed
-                 | Some wv -> dis := Printf.sprintf "%s = %s, reference %s" src wv rv :: !dis
-                 | None -> dis := Printf.sprintf "%s: no output, reference %s" src rv :: !dis)
+                 | Some wv -> miss (); dis := Printf.sprintf "%s = %s, reference %s" src wv rv :: !dis
+                 | None -> miss (); dis := Printf.sprintf "%s: no output, reference %s" src rv :: !dis)
             | None, _ -> ()) calls;
-        Ok { compared = !compared; agreed = !agreed; disagreements = List.rev !dis; samples = List.rev !samples }
+        Ok { compared = !compared; agreed = !agreed; disagreements = List.rev !dis; samples = List.rev !samples;
+         misses = List.rev !misses }
