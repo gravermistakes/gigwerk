@@ -1,0 +1,9 @@
+{
+  "name": "smartgoal",
+  "version": "0.1.0",
+  "description": "A goal worked by a creative problem-solving workflow, with a guard against turns that take no action",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Anja Evermoor"
+  }
+}
