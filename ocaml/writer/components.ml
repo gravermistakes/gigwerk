@@ -212,6 +212,13 @@ let all : t list = [
     (bin (fun n f -> let n = int n in
            if n < 0 || n > 10_000 then raise Undefined
            else Value.List (List.init n (fun i -> apply f (Value.Int i)))));
+  (* the integers from a up to b, b excluded: one line of Stdlib, the range a
+     divisor or a multiple is looked for in *)
+  mk "__range" (arrows [ t_int; t_int ] (t_list t_int))
+    (bin (fun a b -> let a = int a and b = int b in
+           if b - a > 10_000 then raise Undefined
+           else Value.List (List.init (max 0 (b - a)) (fun i -> Value.Int (a + i)))))
+    (function [ a; b ] -> Printf.sprintf "(List.init (max 0 (%s - %s)) (fun gw_i -> %s + gw_i))" b a a | _ -> assert false);
   mk "List.sort" (arrow (t_list a) (t_list a))
     (un (fun l -> Value.List (List.stable_sort Value.compare (lst l))))
     (function [ l ] -> "(List.sort compare " ^ l ^ ")" | _ -> assert false);

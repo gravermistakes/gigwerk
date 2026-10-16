@@ -47,6 +47,7 @@ let prelude = {|:- use_module(library(yall)).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
 gw_bool(G, R) :- ( call(G) -> R = true ; R = false ).
+gw_range(A, B, R) :- ( B > A -> B1 is B - 1, numlist(A, B1, R) ; R = [] ).
 gw_cmp(Op, A, B, R) :- ( compare(O, A, B), gw_op(Op, O) -> R = true ; R = false ).
 gw_op(=, =). gw_op(<>, <). gw_op(<>, >). gw_op(<, <). gw_op(>, >).
 gw_op(=<, <). gw_op(=<, =). gw_op(>=, >). gw_op(>=, =).
@@ -200,6 +201,7 @@ let call_goal name args r =
   | "List.mem", [ x; l ] -> Printf.sprintf "gw_mem(%s, %s, %s)" x l r
   | "List.concat", [ l ] -> Printf.sprintf "gw_concat(%s, %s)" l r
   | "List.init", [ n; f ] -> Printf.sprintf "gw_init(%s, %s, %s)" n f r
+  | "__range", [ a; b ] -> Printf.sprintf "gw_range(%s, %s, %s)" a b r
   | "List.sort", [ l ] -> Printf.sprintf "gw_sort(%s, %s)" l r
   | "List.sort_uniq", [ l ] -> Printf.sprintf "gw_sort_uniq(%s, %s)" l r
   | "List.assoc_opt", [ k; l ] -> Printf.sprintf "gw_assoc_opt(%s, %s, %s)" k l r

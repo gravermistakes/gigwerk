@@ -523,12 +523,14 @@ and quantified st ctx b g cs bools : sols =
         Some (t_char, "String", fun j -> match c.vec.(j) with
           | Some (Value.String s) -> Some (Components.explode s) | _ -> None)
     | _ -> None in
-  (* a collection the part was given (or one taken from it), or a constant
-     of the vocabulary: List.init x (fun _ -> z) quantifies over nothing the
-     part holds, and only restates a comparison *)
+  (* a collection the part was given (or one taken from it), a range of
+     integers, or a constant of the vocabulary: List.init x (fun _ -> z)
+     quantifies over nothing the part holds, and only restates a
+     comparison *)
   let collection_vars = List.filter_map (fun (x, t) -> match repr t with
       | TCon (("list" | "string" | "array"), _) -> Some x | _ -> None) ctx.vars in
-  let natural c = closed c.expr || List.exists (fun x -> Expr.mentions x c.expr) collection_vars in
+  let natural c = closed c.expr || List.exists (fun x -> Expr.mentions x c.expr) collection_vars
+                  || (match c.expr with Expr.Call ("__range", _) -> true | _ -> false) in
   let seqs = List.filter_map (fun c ->
       match elements_of c with
       | Some (te, m, els) when natural c && List.for_all (fun j -> els j <> None) cs

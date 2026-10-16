@@ -170,4 +170,21 @@ let () =
           let f = Filename.concat out (Filename.remove_extension item ^ ".verdict") in
           if Sys.file_exists f then output_string tsv (Iface.read_file f)) items;
       close_out tsv
-  | _ -> prerr_endline "writer probe|solve <exercise-dir> | org <exercise.md> | batch exercism|org <src-dir> <out-dir> [slug...]"; exit 2
+  | _ :: "results" :: title :: logs ->
+      (* a batch's verdict lines as a table, counted, nothing carried over *)
+      let rows = List.concat_map (fun f ->
+          let ic = open_in f in
+          let rec go acc = match input_line ic with
+            | l -> (match String.split_on_char '\t' l with
+                | slug :: verdict :: secs :: rest -> go ((slug, verdict, secs, String.concat " " rest) :: acc)
+                | _ -> go acc)
+            | exception End_of_file -> close_in ic; List.rev acc in
+          go []) logs |> List.sort compare in
+      let words = [ "verified"; "overfit"; "unconfirmed"; "own-check-failed"; "declined"; "error" ] in
+      Printf.printf "### %s\n\n%d parts: %s.\n\n| part | outcome | time | evidence |\n|---|---|---|---|\n" title (List.length rows)
+        (String.concat ", " (List.filter_map (fun w ->
+             match List.length (List.filter (fun (_, v, _, _) -> v = w) rows) with
+             | 0 -> None | n -> Some (Printf.sprintf "%d %s" n w)) words));
+      let cell s = String.concat "\\|" (String.split_on_char '|' (if String.length s > 160 then String.sub s 0 157 ^ "..." else s)) in
+      List.iter (fun (slug, v, secs, d) -> Printf.printf "| %s | %s | %s | %s |\n" slug v secs (cell d)) rows
+  | _ -> prerr_endline "writer probe|solve <exercise-dir> | org <exercise.md> | batch exercism|org <src-dir> <out-dir> [slug...] | results <title> <batch.log>..."; exit 2
