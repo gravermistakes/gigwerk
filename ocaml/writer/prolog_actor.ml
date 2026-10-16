@@ -21,6 +21,26 @@ let driver (calls : (string * Value.t list * Value.t) list) =
   ^ Printf.sprintf "\nmain :- forall(between(0, %d, I), gw_test(I)).\n:- initialization(main, main).\n"
     (List.length calls - 1)
 
+(* A Prolog program from anywhere (Popper's, for one), run on the same
+   calls. *)
+let run_source ~source ~calls =
+  if calls = [] then Error "nothing to check it against"
+  else
+    let program = Lower_prolog.prelude ^ "\n" ^ source ^ "\n" ^ driver calls in
+    let f = Filename.temp_file "gw_prolog" ".pl" in
+    Probe.write f program;
+    let o = Gigwerk.Proc.run ~root:(Filename.dirname f) ~timeout_s:300. [| "swipl"; "-q"; f |] in
+    (try Sys.remove f with _ -> ());
+    let lines = String.split_on_char '\n' o.Gigwerk.Proc.stdout in
+    let ok i = List.mem (Printf.sprintf "%d ok" i) lines in
+    let failures = List.concat (List.mapi (fun i (name, args, out) ->
+        if ok i then []
+        else [ Printf.sprintf "%s(%s) should give %s" (Lower_prolog.predicate_name name)
+                 (String.concat ", " (List.map Lower_prolog.term args)) (Lower_prolog.term out) ]) calls) in
+    let errors = String.trim o.Gigwerk.Proc.stderr in
+    Ok { passed = List.length calls - List.length failures; total = List.length calls;
+         failures = (if errors <> "" && failures <> [] then [ errors ] else []) @ failures; source }
+
 let check ~(definitions : (string * string list * Expr.t) list) ~calls =
   match List.map (fun (name, params, body) -> Lower_prolog.definition ~name ~params body) definitions with
   | exception Lower_prolog.Unsupported why -> Error ("cannot be written as Prolog: " ^ why)

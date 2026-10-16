@@ -170,6 +170,42 @@ let () =
           let f = Filename.concat out (Filename.remove_extension item ^ ".verdict") in
           if Sys.file_exists f then output_string tsv (Iface.read_file f)) items;
       close_out tsv
+  | _ :: "smyth" :: kind :: path :: _ ->
+      (* Smyth booked for the part; acceptance as for any writer *)
+      let sc = scratch () in
+      (try Unix.mkdir sc 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+      let timeout_s = match Option.bind (Sys.getenv_opt "GW_SMYTH_TIMEOUT") float_of_string_opt with
+        | Some t -> t | None -> 60. in
+      let r = if kind = "org" then Smyth_talent.solve_org ~path ~timeout_s ~scratch:sc ()
+        else Smyth_talent.solve ~env:(env ()) ~scratch:sc ~exercise_dir:path ~slug:(Filename.basename path) ~timeout_s () in
+      List.iter (function
+          | Smyth_talent.Derived { name; _ } -> prerr_endline ("  derived  " ^ name)
+          | Smyth_talent.Declined { name; why } -> prerr_endline ("  declined " ^ name ^ ": " ^ why)) r.Smyth_talent.outcomes;
+      Option.iter print_endline r.Smyth_talent.source;
+      let declined = List.filter_map (function
+          | Smyth_talent.Declined { name; why } -> Some (name ^ ": " ^ why) | _ -> None) r.Smyth_talent.outcomes in
+      let verdict, detail = classify ~suite:r.Smyth_talent.tests ~diff:r.Smyth_talent.differential ~declined () in
+      Printf.printf "VERDICT\t%s\t%s\t%s\n" r.Smyth_talent.slug verdict detail
+  | _ :: "popper" :: kind :: path :: _ ->
+      (* Popper booked to write the part in Prolog; SWI-Prolog accepts it *)
+      let sc = scratch () in
+      (try Unix.mkdir sc 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+      let timeout_s = match Option.bind (Sys.getenv_opt "GW_POPPER_TIMEOUT") float_of_string_opt with
+        | Some t -> t | None -> 120. in
+      let slug = Filename.remove_extension (Filename.basename path) in
+      let outcomes = if kind = "org" then Popper_talent.solve_org ~path ~timeout_s ~scratch:sc ()
+        else Popper_talent.solve ~env:(env ()) ~scratch:sc ~exercise_dir:path ~slug ~timeout_s () in
+      let verdicts = List.map (function
+          | Popper_talent.Declined { name; why } -> (name, "declined", why)
+          | Popper_talent.Learned { name; program; calls } ->
+              print_endline program;
+              let v, d = Popper_talent.accept ~program ~calls in (name, v, d)) outcomes in
+      let verdict, detail =
+        if verdicts = [] then ("declined", "the statement shows no example of a function to write")
+        else match List.find_opt (fun (_, v, _) -> v <> "verified") verdicts with
+          | None -> ("verified", String.concat " | " (List.map (fun (n, _, d) -> n ^ ": " ^ d) verdicts))
+          | Some (n, v, d) -> (v, n ^ ": " ^ d) in
+      Printf.printf "PROLOG\t%s\t%s\t%s\n" slug verdict detail
   | _ :: "results" :: title :: logs ->
       (* a batch's verdict lines as a table, counted, nothing carried over *)
       let rows = List.concat_map (fun f ->

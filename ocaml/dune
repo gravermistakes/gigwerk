@@ -1,0 +1,3 @@
+; talents/ holds adapters for booked tools, each its own dune project, built
+; only where that tool is installed.
+(dirs :standard \ talents dbg)
